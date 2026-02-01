@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError
 from django.core.exceptions import PermissionDenied
 from .models import User
-from .serializers import UserSerializer
+from .serializers import UserSerializer, RegisterSerializer, CustomTokenObtainPairSerializer, AdminUserCreateSerializer
 from .permissions import IsAdminUser
 
 logger = logging.getLogger(__name__)
@@ -41,6 +41,21 @@ class UserListView(generics.ListAPIView):
         except Exception as e:
             logger.error(f"Error listing users: {str(e)}")
             return Response({'detail': 'Failed to retrieve users list'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def post(self, request, *args, **kwargs):
+        # Admin creation of a new user with a specific role
+        serializer = AdminUserCreateSerializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+            user = serializer.save()
+            return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+        except ValidationError as e:
+            logger.warning(f"Admin user creation failed: {str(e)}")
+            error_detail = e.detail if hasattr(e, 'detail') else {'detail': str(e)}
+            return Response(error_detail, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error creating user via admin: {str(e)}")
+            return Response({'detail': 'Failed to create user'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @extend_schema_view(

@@ -1,0 +1,111 @@
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
+from .models import Project, ProjectMember
+from .serializers import ProjectSerializer, ProjectCreateSerializer, ProjectMemberSerializer
+from apps.users.permissions import IsManagerOrAdmin
+from apps.users.models import User
+
+
+class ProjectViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return ProjectCreateSerializer
+        return ProjectSerializer
+    
+    def get_queryset(self):
+        user = self.request.user
+        
+        # Admin sees all projects
+        if user.role == 'admin':
+            return Project.objects.all()
+        
+        # Manager sees projects they created and are members of
+        if user.role == 'manager':
+            return Project.objects.filter(
+                models.Q(created_by=user) | models.Q(members=user)
+            ).distinct()
+        
+        # Employee sees only projects they are members of
+        return Project.objects.filter(members=user)
+    
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAuthenticated(), IsManagerOrAdmin()]
+        return [IsAuthenticated()]
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsManagerOrAdmin])
+    def add_member(self, request, pk=None):
+        project = self.get_object()
+        user_id = request.data.get('user_id')
+        
+        if not user_id:
+            return Response(
+                {'error': 'user_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if ProjectMember.objects.filter(project=project, user=user).exists():
+            return Response(
+                {'error': 'User is already a member of this project'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        member = ProjectMember.objects.create(project=project, user=user)
+        serializer = ProjectMemberSerializer(member)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsManagerOrAdmin])
+    def remove_member(self, request, pk=None):
+        project = self.get_object()
+        user_id = request.data.get('user_id')
+        
+        if not user_id:
+            return Response(
+                {'error': 'user_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            member = ProjectMember.objects.get(project=project, user_id=user_id)
+        except ProjectMember.DoesNotExist:
+            return Response(
+                {'error': 'User is not a member of this project'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Prevent removing the project creator
+        if member.user == project.created_by:
+            return Response(
+                {'error': 'Cannot remove the project creator'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        member.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    @action(detail=False, methods=['get'])
+    def my_projects(self, request):
+        user = request.user
+        projects = Project.objects.filter(members=user)
+        serializer = self.get_serializer(projects, many=True)
+        return Response(serializer.data)
+
+
+# Import models at the end to avoid circular imports
+from django.db import models

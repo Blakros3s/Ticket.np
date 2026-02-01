@@ -67,10 +67,18 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 class UserProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
-
+    
     def get_object(self):
         return self.request.user
 
+
+class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = UserSerializer
+    queryset = User.objects.all()
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+
+    def get_object(self):
+        return User.objects.get(id=self.kwargs.get('pk'))
     def get(self, request, *args, **kwargs):
         try:
             logger.info(f"Profile request for user: {request.user.username}")

@@ -77,3 +77,29 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['user'] = UserSerializer(self.user).data
 
         return data
+
+class AdminUserCreateSerializer(serializers.ModelSerializer):
+    """Serializer to allow admins to create a user with a specific role and password."""
+    password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    confirm_password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'password', 'confirm_password', 'is_active']
+        read_only_fields = ['id', 'is_active']
+
+    def validate(self, attrs):
+        if attrs.get('password') != attrs.get('confirm_password'):
+            raise serializers.ValidationError({'password': 'Password fields didn\'t match.'})
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.pop('confirm_password')
+        password = validated_data.pop('password')
+        # role may be provided; default to 'employee' if not
+        role = validated_data.get('role', 'employee')
+        user = User.objects.create(**validated_data)
+        user.role = role
+        user.set_password(password)
+        user.save()
+        return user

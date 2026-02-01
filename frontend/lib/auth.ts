@@ -73,4 +73,37 @@ export const authApi = {
   deactivateUser: async (userId: number): Promise<void> => {
     await api.post(`/auth/users/${userId}/deactivate/`);
   },
+  deleteUser: async (userId: number): Promise<void> => {
+    await api.delete(`/auth/users/${userId}/`);
+  },
+
+  // Admin: create a new user
+  createUser: async (data: {
+    username: string;
+    email: string;
+    first_name?: string;
+    last_name?: string;
+    role?: 'admin' | 'employee' | 'manager';
+    password: string;
+    confirm_password?: string;
+  }): Promise<AuthResponse> => {
+    const response = await api.post<AuthResponse>('/auth/users/', data);
+    return response.data;
+  },
+
+  // Admin: update an existing user
+  updateUser: async (
+    userId: number,
+    data: Partial<{
+      username: string;
+      email: string;
+      first_name: string;
+      last_name: string;
+      role: 'admin' | 'employee' | 'manager';
+      is_active: boolean;
+    }>
+  ): Promise<any> => {
+    const response = await api.patch(`/auth/users/${userId}/`, data);
+    return response.data;
+  },
 };
