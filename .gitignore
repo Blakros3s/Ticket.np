@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+*.log
+.DS_Store
+.env
+.env.local
+__pycache__/
+*.pyc
+.venv/
+venv/
+backend/staticfiles/
+backend/media/
+db.sqlite3
+PRD.md
+steps.md
+README.md
