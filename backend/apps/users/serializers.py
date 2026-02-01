@@ -44,6 +44,36 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
     
     def validate(self, attrs):
-        data = super().validate(attrs)
+        from django.contrib.auth import authenticate
+        
+        authenticate_kwargs = {
+            self.username_field: attrs[self.username_field],
+            'password': attrs['password'],
+        }
+        try:
+            authenticate_kwargs['request'] = self.context['request']
+        except KeyError:
+            pass
+
+        self.user = authenticate(**authenticate_kwargs)
+
+        if not self.user:
+            raise serializers.ValidationError(
+                {'detail': 'Invalid username or password. Please check your credentials and try again.'},
+                code='authorization'
+            )
+        
+        if not self.user.is_active:
+            raise serializers.ValidationError(
+                {'detail': 'Your account is inactive. Please contact your administrator.'},
+                code='authorization'
+            )
+
+        data = {}
+        refresh = self.get_token(self.user)
+
+        data['refresh'] = str(refresh)
+        data['access'] = str(refresh.access_token)
         data['user'] = UserSerializer(self.user).data
+
         return data

@@ -18,6 +18,7 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
+    console.error('API request error:', error);
     return Promise.reject(error);
   }
 );
