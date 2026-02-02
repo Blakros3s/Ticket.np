@@ -8,6 +8,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.1-alpine
+        env:
+          POSTGRES_DB: tickethub
+          POSTGRES_USER: tickethub
+          POSTGRES_PASSWORD: tickethub_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -22,6 +36,12 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Backend Tests
+        env:
+          POSTGRES_DB: tickethub
+          POSTGRES_USER: tickethub
+          POSTGRES_PASSWORD: tickethub_password
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
         run: |
           cd backend
           python manage.py test
