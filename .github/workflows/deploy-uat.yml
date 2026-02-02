@@ -1,0 +1,71 @@
+name: Deploy to UAT (VPS)
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Backend Dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Run Backend Tests
+        run: |
+          cd backend
+          python manage.py test
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Run Frontend Lint
+        run: |
+          cd frontend
+          npm run lint
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            # Navigate to project directory (Change this to your actual path)
+            cd ~/projects/ticket || (mkdir -p ~/projects/ticket && cd ~/projects/ticket)
+            
+            # Check if git is initialized, if not clone (Update repo URL)
+            if [ ! -d ".git" ]; then
+              git clone -b develop https://github.com/${{ github.repository }} .
+            else
+              git checkout develop
+              git pull origin develop
+            fi
+            
+            # Restart services with UAT override
+            docker compose -f docker/docker-compose.base.yml -f docker/docker-compose.uat.yml up -d --build
+            
+            # Clean up dangling images
+            docker image prune -f

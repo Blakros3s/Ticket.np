@@ -11,10 +11,6 @@ services:
     env_file:
       - ../backend/.env.prod
 
-  pgadmin:
-    env_file:
-      - ../backend/.env.prod
-
   # ============================================================================
   # Django Backend - Production overrides
   # ============================================================================

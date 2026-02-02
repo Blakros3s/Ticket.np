@@ -7,7 +7,7 @@ import { useParams } from 'next/navigation';
 import { ticketsApi, Ticket, TicketStatus, TicketType, TicketPriority } from '@/lib/tickets';
 import { projectsApi, Project } from '@/lib/projects';
 import { authApi, User } from '@/lib/auth';
-import { timelogsApi, WorkLog, TotalTime } from '@/lib/timelogs';
+import { timelogsApi, WorkLog, TotalTime, ActiveSession } from '@/lib/timelogs';
 import { commentsApi, Comment } from '@/lib/comments';
 import { activityApi, ActivityLog } from '@/lib/activity';
 
@@ -77,7 +77,7 @@ export default function TicketDetailPage() {
   // Time tracking state
   const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
   const [totalTime, setTotalTime] = useState<TotalTime | null>(null);
-  const [activeSession, setActiveSession] = useState<{ active: boolean; workLog?: WorkLog; elapsedMinutes?: number } | null>(null);
+  const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isTracking, setIsTracking] = useState(false);
   const [activeWorkLogUserId, setActiveWorkLogUserId] = useState<number | null>(null);
@@ -227,14 +227,14 @@ export default function TicketDetailPage() {
       const session = await timelogsApi.getActiveSession();
       setActiveSession(session);
       
-      if (session.active && session.workLog?.ticket === ticketId) {
+      if (session.active && session.work_log?.ticket === ticketId) {
         setIsTracking(true);
-        setActiveWorkLogUserId(session.workLog.user);
+        setActiveWorkLogUserId(session.work_log.user);
         // Only show timer if current user is the one who started work
-        if (session.workLog.user === currentUserId) {
+        if (session.work_log.user === currentUserId) {
           setElapsedSeconds((session.elapsed_minutes || 0) * 60);
         }
-      } else if (session.active && session.workLog?.ticket !== ticketId) {
+      } else if (session.active && session.work_log?.ticket !== ticketId) {
         // Active session on different ticket
         setIsTracking(false);
         setElapsedSeconds(0);
@@ -268,8 +268,8 @@ export default function TicketDetailPage() {
       setElapsedSeconds(0); // Start from 0 seconds
       setActiveSession({
         active: true,
-        workLog: workLog,
-        elapsedMinutes: 0
+        work_log: workLog,
+        elapsed_minutes: 0
       });
       
       if (isManager) {
@@ -281,9 +281,9 @@ export default function TicketDetailPage() {
   };
 
   const stopTracking = async () => {
-    if (!activeSession?.workLog?.id) return;
+    if (!activeSession?.work_log?.id) return;
     try {
-      await timelogsApi.stopWork(activeSession.workLog.id);
+      await timelogsApi.stopWork(activeSession.work_log.id);
       showToastMessage('Time tracking stopped', 'success');
       setIsTracking(false);
       setElapsedSeconds(0);
