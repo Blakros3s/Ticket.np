@@ -43,7 +43,7 @@ services:
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-tickethub}
       - DB_USER=${DB_USER:-tickethub}
-      - DB_PASSWORD=${DB_PASSWORD:-tickethub
+      - DB_PASSWORD=${DB_PASSWORD:-tickethub}
     # No code bind-mounts here (dev-only). No static/media mounts here either.
     expose:
       - "8000"
