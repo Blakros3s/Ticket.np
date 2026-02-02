@@ -72,11 +72,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='tickethub'),
-        'USER': config('DB_USER', default='tickethub'),
-        'PASSWORD': config('DB_PASSWORD', default='tickethub_password'),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
+        'NAME': config('POSTGRES_DB', default='tickethub'),
+        'USER': config('POSTGRES_USER', default='tickethub'),
+        'PASSWORD': config('POSTGRES_PASSWORD', default='tickethub_password'),
+        'HOST': config('POSTGRES_HOST', default='localhost'),
+        'PORT': config('POSTGRES_PORT', default='5432'),
     }
 }
 
