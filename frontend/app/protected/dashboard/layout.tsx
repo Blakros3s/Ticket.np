@@ -53,8 +53,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 Dashboard
               </Link>
               <Link 
-                href="#" 
-                className="text-slate-400 hover:text-white transition-colors nav-link"
+                href="/protected/dashboard/tickets" 
+                className={`transition-colors nav-link ${isActive('/protected/dashboard/tickets') ? 'text-white' : 'text-slate-400 hover:text-white'}`}
               >
                 Tickets
               </Link>
