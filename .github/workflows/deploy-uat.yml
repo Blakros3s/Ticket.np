@@ -92,19 +92,15 @@ jobs:
             echo "🚀 STARTING DEPLOYMENT"
             echo "-------------------------------------------------------"
             
-            PROJECT_DIR="~/projects/ticket"
+            PROJECT_DIR="/srv/ticketnp"
             
             echo "📂 Navigating to project directory..."
             mkdir -p $PROJECT_DIR && cd $PROJECT_DIR
             
-            if [ ! -d ".git" ]; then
-              echo "🧬 Cloning repository..."
-              git clone -b develop https://github.com/${{ github.repository }} .
-            else
-              echo "🔄 Pulling latest changes from develop..."
-              git checkout -f develop
-              git pull origin develop
-            fi
+
+            echo "🔄 Pulling latest changes from develop..."
+            git checkout -f develop
+            git pull origin develop
             
             echo "🐳 Restarting Docker containers (UAT Mode)..."
             docker compose -f docker/docker-compose.base.yml -f docker/docker-compose.uat.yml up -d --build
