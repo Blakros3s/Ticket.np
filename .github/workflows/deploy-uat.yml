@@ -1,4 +1,4 @@
-name: Deploy to UAT (VPS)
+name: 🚀 Deploy to UAT (VPS)
 
 on:
   push:
@@ -7,10 +7,11 @@ on:
 
 jobs:
   test:
+    name: 🧪 Run Quality Tests
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18.1-alpine
+        image: postgres:15-alpine
         env:
           POSTGRES_DB: tickethub
           POSTGRES_USER: tickethub
@@ -23,19 +24,23 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
-      - name: Install Backend Dependencies
+      - name: 📦 Install Backend Dependencies
         run: |
+          echo "::group::Installing dependencies"
           cd backend
           pip install -r requirements.txt
+          echo "::endgroup::"
 
-      - name: Run Backend Tests
+      - name: 🛡️ Run Backend Tests
         env:
           POSTGRES_DB: tickethub
           POSTGRES_USER: tickethub
@@ -43,29 +48,38 @@ jobs:
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5432
         run: |
+          echo "::group::Django Tests"
           cd backend
           python manage.py test
+          echo "::endgroup::"
 
-      - name: Set up Node.js
+      - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Frontend Dependencies
+      - name: 📦 Install Frontend Dependencies
         run: |
+          echo "::group::NPM Install"
           cd frontend
           npm install
+          echo "::endgroup::"
 
-      - name: Run Frontend Lint
+      - name: 🔍 Run Frontend Lint
         run: |
+          echo "::group::Next.js Lint"
           cd frontend
           npm run lint
+          echo "::endgroup::"
 
   deploy:
+    name: 🚢 Deploy to VPS
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to VPS via SSH
+      - name: 🚚 Execute Remote Deployment
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -73,19 +87,31 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
-            # Navigate to project directory (Change this to your actual path)
-            cd ~/projects/ticket || (mkdir -p ~/projects/ticket && cd ~/projects/ticket)
+            set -e
+            echo "-------------------------------------------------------"
+            echo "🚀 STARTING DEPLOYMENT"
+            echo "-------------------------------------------------------"
             
-            # Check if git is initialized, if not clone (Update repo URL)
+            PROJECT_DIR="~/projects/ticket"
+            
+            echo "📂 Navigating to project directory..."
+            mkdir -p $PROJECT_DIR && cd $PROJECT_DIR
+            
             if [ ! -d ".git" ]; then
+              echo "🧬 Cloning repository..."
               git clone -b develop https://github.com/${{ github.repository }} .
             else
-              git checkout develop
+              echo "🔄 Pulling latest changes from develop..."
+              git checkout -f develop
               git pull origin develop
             fi
             
-            # Restart services with UAT override
+            echo "🐳 Restarting Docker containers (UAT Mode)..."
             docker compose -f docker/docker-compose.base.yml -f docker/docker-compose.uat.yml up -d --build
             
-            # Clean up dangling images
+            echo "🧹 Cleaning up system..."
             docker image prune -f
+            
+            echo "✅ DEPLOYMENT COMPLETE!"
+            echo "-------------------------------------------------------"
+
