@@ -47,6 +47,9 @@ COPY frontend/ .
 RUN --mount=type=cache,target=/app/.next/cache \
     npm run build
 
+# Ensure public directory exists (even if empty) for the runner stage
+RUN mkdir -p public
+
 # ----------------------
 # Production runner stage
 # ----------------------
