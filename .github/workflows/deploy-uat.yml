@@ -83,8 +83,8 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
+          username: blak_ros3s
+          key: ${{ secrets.SSH_KEY_DEPLOY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             set -e
@@ -97,7 +97,6 @@ jobs:
             echo "📂 Navigating to project directory..."
             mkdir -p $PROJECT_DIR && cd $PROJECT_DIR
             
-
             echo "🔄 Pulling latest changes from develop..."
             git checkout -f develop
             git pull origin develop
@@ -110,4 +109,3 @@ jobs:
             
             echo "✅ DEPLOYMENT COMPLETE!"
             echo "-------------------------------------------------------"
-
