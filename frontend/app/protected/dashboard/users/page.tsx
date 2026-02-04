@@ -21,21 +21,6 @@ export default function UsersManagementPage() {
   const { user: currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
 
-  // Admin guard
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-white mb-4">Access Denied</h1>
-          <p className="text-slate-400 mb-6">You don't have permission to access this page.</p>
-          <Link href="/protected/dashboard" className="btn-primary">
-            Back to Dashboard
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,6 +60,21 @@ export default function UsersManagementPage() {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  // Admin guard - must be after all hooks
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-white mb-4">Access Denied</h1>
+          <p className="text-slate-400 mb-6">You don&apos;t have permission to access this page.</p>
+          <Link href="/protected/dashboard" className="btn-primary">
+            Back to Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();

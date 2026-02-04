@@ -12,4 +12,6 @@ urlpatterns = [
     path('api/timelogs/', include('apps.timelogs.urls')),
     path('api/comments/', include('apps.comments.urls')),
     path('api/activity/', include('apps.activity.urls')),
+    path('api/dashboard/', include('apps.dashboard.urls')),
+    path('api/', include('apps.core.urls')),
 ]
