@@ -36,6 +36,8 @@ INSTALLED_APPS = [
     'apps.comments',
     'apps.activity',
     'apps.dashboard',
+    'apps.calendar',
+    'apps.todos',
     'apps.core',
 ]
 
@@ -50,7 +52,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'csp.middleware.CSPMiddleware',
+    # 'csp.middleware.CSPMiddleware',  # Uncomment when django-csp is installed
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -76,10 +78,10 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('POSTGRES_DB', default='tickethub'),
-        'USER': config('POSTGRES_USER', default='tickethub'),
-        'PASSWORD': config('POSTGRES_PASSWORD', default='tickethub_password'),
-        'HOST': config('POSTGRES_HOST', default='localhost'),
+        'NAME': config('POSTGRES_DB'),
+        'USER': config('POSTGRES_USER'),
+        'PASSWORD': config('POSTGRES_PASSWORD'),
+        'HOST': config('POSTGRES_HOST', default='db'),
         'PORT': config('POSTGRES_PORT', default='5432'),
     }
 }

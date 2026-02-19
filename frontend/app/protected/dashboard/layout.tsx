@@ -3,7 +3,7 @@
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -12,7 +12,8 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
-  const canManage = user?.role === 'admin' || user?.role === 'manager';
+  const canManage = user?.role === 'admin';
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const isActive = (path: string) => {
     if (path === '/protected/dashboard' && pathname === '/protected/dashboard') {
@@ -24,99 +25,215 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     return false;
   };
 
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
+
   return (
-    <div className="min-h-screen grid-bg relative">
+    <div className="min-h-screen grid-bg relative flex">
       {/* Background Effects */}
       <div className="orb orb-1 pulse-animation"></div>
       <div className="orb orb-2 pulse-animation" style={{ animationDelay: '2s' }}></div>
 
-      {/* Permanent Header/Navbar */}
-      <nav className="relative z-50 border-b border-slate-700/50 backdrop-blur-md bg-slate-900/80 sticky top-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                </svg>
-              </div>
-              <span className="text-xl font-bold gradient-text">TicketHub</span>
+      {/* Sidebar */}
+      <aside className={`fixed left-0 top-0 z-50 h-screen bg-slate-900/95 backdrop-blur-xl border-r border-slate-700/50 flex flex-col transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-20'}`}>
+        {/* Logo */}
+        <div className="flex items-center justify-between h-16 px-4 border-b border-slate-700/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center flex-shrink-0">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+              </svg>
             </div>
-
-            {/* Navigation Links */}
-            <div className="hidden md:flex items-center gap-6">
-              <Link 
-                href="/protected/dashboard" 
-                className={`transition-colors nav-link ${isActive('/protected/dashboard') ? 'text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                Dashboard
-              </Link>
-              <Link 
-                href="/protected/dashboard/tickets" 
-                className={`transition-colors nav-link ${isActive('/protected/dashboard/tickets') ? 'text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                Tickets
-              </Link>
-              <Link 
-                href="/protected/dashboard/projects" 
-                className={`transition-colors nav-link ${isActive('/protected/dashboard/projects') ? 'text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                Projects
-              </Link>
-              <Link 
-                href="#" 
-                className="text-slate-400 hover:text-white transition-colors nav-link"
-              >
-                Reports
-              </Link>
-              {canManage && (
-                <Link 
-                  href="/protected/dashboard/users" 
-                  className={`transition-colors nav-link ${isActive('/protected/dashboard/users') ? 'text-white' : 'text-slate-400 hover:text-white'}`}
-                >
-                  Users
-                </Link>
+            {sidebarOpen && (
+              <span className="text-xl font-bold gradient-text whitespace-nowrap">TicketHub</span>
+            )}
+          </div>
+          <button
+            onClick={toggleSidebar}
+            className="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {sidebarOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
               )}
-            </div>
+            </svg>
+          </button>
+        </div>
 
-            {/* User Profile & Logout */}
-            <div className="flex items-center gap-3">
-              <button className="relative p-2 text-slate-400 hover:text-white transition-colors">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                <span className="absolute top-1 right-1 w-2 h-2 bg-sky-400 rounded-full"></span>
-              </button>
+        {/* Navigation Groups */}
+        <nav className="flex-1 overflow-y-auto py-4 px-3">
+          {/* Dashboard */}
+          <div className="mb-6">
+            {sidebarOpen && (
+              <h3 className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Overview
+              </h3>
+            )}
+            <Link
+              href="/protected/dashboard"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                isActive('/protected/dashboard') 
+                  ? 'bg-gradient-to-r from-sky-500/20 to-violet-500/20 text-white border-l-2 border-sky-400' 
+                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+              </svg>
+              {sidebarOpen && <span className="whitespace-nowrap">Dashboard</span>}
+            </Link>
+          </div>
 
-              <div className="h-8 w-px bg-slate-700"></div>
-
-              <div className="flex items-center gap-3">
-                <div className="text-right hidden sm:block">
-                  <p className="text-sm font-medium text-white">{user?.first_name} {user?.last_name}</p>
-                  <p className="text-xs text-slate-400 capitalize">{user?.role}</p>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center text-white font-semibold">
-                  {user?.first_name?.[0]}{user?.last_name?.[0]}
-                </div>
-              </div>
-
-              <button
-                onClick={logout}
-                className="p-2 text-slate-400 hover:text-red-400 transition-colors"
-                title="Logout"
+          {/* Ticket Projects Group */}
+          <div className="mb-6">
+            {sidebarOpen && (
+              <h3 className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Ticket Projects
+              </h3>
+            )}
+            <div className="space-y-1">
+              <Link
+                href="/protected/dashboard/tickets"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                  isActive('/protected/dashboard/tickets') 
+                    ? 'bg-gradient-to-r from-sky-500/20 to-violet-500/20 text-white border-l-2 border-sky-400' 
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                }`}
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
                 </svg>
-              </button>
+                {sidebarOpen && <span className="whitespace-nowrap">Tickets</span>}
+              </Link>
+              <Link
+                href="/protected/dashboard/projects"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                  isActive('/protected/dashboard/projects') 
+                    ? 'bg-gradient-to-r from-sky-500/20 to-violet-500/20 text-white border-l-2 border-sky-400' 
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                {sidebarOpen && <span className="whitespace-nowrap">Projects</span>}
+              </Link>
             </div>
           </div>
+
+          {/* Todo Task Group */}
+          <div className="mb-6">
+            {sidebarOpen && (
+              <h3 className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Todo Task
+              </h3>
+            )}
+            <div className="space-y-1">
+              <Link
+                href="/protected/dashboard/calendar"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                  isActive('/protected/dashboard/calendar') 
+                    ? 'bg-gradient-to-r from-sky-500/20 to-violet-500/20 text-white border-l-2 border-sky-400' 
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                {sidebarOpen && <span className="whitespace-nowrap">Calendar</span>}
+              </Link>
+              <Link
+                href="/protected/dashboard/todos"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                  isActive('/protected/dashboard/todos') 
+                    ? 'bg-gradient-to-r from-sky-500/20 to-violet-500/20 text-white border-l-2 border-sky-400' 
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                {sidebarOpen && <span className="whitespace-nowrap">Todo Task</span>}
+              </Link>
+            </div>
+          </div>
+
+          {/* User Management Group */}
+          {canManage && (
+            <div className="mb-6">
+              {sidebarOpen && (
+                <h3 className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  User Management
+                </h3>
+              )}
+              <div className="space-y-1">
+                <Link
+                  href="/protected/dashboard/users"
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                    isActive('/protected/dashboard/users') 
+                      ? 'bg-gradient-to-r from-sky-500/20 to-violet-500/20 text-white border-l-2 border-sky-400' 
+                      : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                  }`}
+                >
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                  {sidebarOpen && <span className="whitespace-nowrap">Users</span>}
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* Reports */}
+          <div>
+            {sidebarOpen && (
+              <h3 className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Analytics
+              </h3>
+            )}
+            <Link
+              href="#"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-all"
+            >
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              {sidebarOpen && <span className="whitespace-nowrap">Reports</span>}
+            </Link>
+          </div>
+        </nav>
+
+        {/* User Profile & Logout */}
+        <div className="border-t border-slate-700/50 p-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center text-white font-semibold flex-shrink-0">
+              {user?.first_name?.[0]}{user?.last_name?.[0]}
+            </div>
+            {sidebarOpen && (
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-white truncate">{user?.first_name} {user?.last_name}</p>
+                <p className="text-xs text-slate-400 capitalize">{user?.role}</p>
+              </div>
+            )}
+          </div>
+          
+          <button
+            onClick={logout}
+            className="flex items-center gap-3 w-full px-3 py-2.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+          >
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            {sidebarOpen && <span className="whitespace-nowrap">Logout</span>}
+          </button>
         </div>
-      </nav>
+      </aside>
 
       {/* Main Content */}
-      <main className="relative z-10">
+      <main className={`relative z-10 flex-1 overflow-y-auto min-h-screen transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-20'}`}>
         {children}
       </main>
     </div>

@@ -68,13 +68,12 @@ export default function CreateTicketPage() {
       const ticket = await ticketsApi.createTicket(formData);
       showToastMessage('Ticket created successfully', 'success');
       
-      // Redirect to the new ticket
+      // Redirect to the new ticket after short delay
       setTimeout(() => {
-        router.push(`/protected/dashboard/tickets/${ticket.id}`);
-      }, 1000);
+        window.location.href = `/protected/dashboard/tickets/${ticket.id}`;
+      }, 500);
     } catch (error: any) {
       showToastMessage(error.response?.data?.detail || 'Failed to create ticket', 'error');
-    } finally {
       setLoading(false);
     }
   };
@@ -121,12 +120,15 @@ export default function CreateTicketPage() {
         <span className="text-white">New Ticket</span>
       </div>
 
-      <h1 className="text-3xl font-bold text-white mb-8">Create New Ticket</h1>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-white mb-2">Create New Ticket</h1>
+        <p className="text-slate-400">Fill in the details below to create a new ticket</p>
+      </div>
 
-      <form onSubmit={handleSubmit} className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 space-y-6">
+      <form onSubmit={handleSubmit} className="form-card p-8 space-y-6">
         {/* Project Selection */}
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-slate-200">
             Project <span className="text-red-400">*</span>
           </label>
           <select
@@ -142,45 +144,48 @@ export default function CreateTicketPage() {
               </option>
             ))}
           </select>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-slate-500">
             You can only create tickets in projects you are a member of
           </p>
         </div>
 
         {/* Title */}
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-slate-200">
             Title <span className="text-red-400">*</span>
           </label>
           <input
             type="text"
             required
             className="input-field w-full"
-            placeholder="Enter ticket title"
+            placeholder="Enter a clear, descriptive title"
             value={formData.title}
             onChange={(e) => setFormData({ ...formData, title: e.target.value })}
           />
         </div>
 
         {/* Description */}
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-slate-200">
             Description <span className="text-red-400">*</span>
           </label>
           <textarea
-            rows={5}
+            rows={6}
             required
             className="input-field w-full resize-none"
-            placeholder="Describe the issue or task..."
+            placeholder="Describe the issue or task in detail. Markdown is supported."
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
           />
+          <p className="text-xs text-slate-500">
+            Supports Markdown: **bold**, *italic*, `code`, [links](url), and more
+          </p>
         </div>
 
         {/* Type and Priority */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-200">
               Type <span className="text-red-400">*</span>
             </label>
             <select
@@ -195,8 +200,8 @@ export default function CreateTicketPage() {
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-200">
               Priority <span className="text-red-400">*</span>
             </label>
             <select
@@ -214,9 +219,9 @@ export default function CreateTicketPage() {
         </div>
 
         {/* Assignee */}
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
-            Assignee (Optional)
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-slate-200">
+            Assignee
           </label>
           <select
             className="input-field w-full"
@@ -230,23 +235,29 @@ export default function CreateTicketPage() {
               </option>
             ))}
           </select>
+          <p className="text-xs text-slate-500">
+            Leave empty to allow team members to self-assign
+          </p>
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-4 pt-4">
-          <Link
-            href="/protected/dashboard/tickets"
-            className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-center"
-          >
-            Cancel
-          </Link>
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex-1 btn-primary px-4 py-2 rounded-lg disabled:opacity-50"
-          >
-            {loading ? 'Creating...' : 'Create Ticket'}
-          </button>
+        {/* Divider */}
+        <div className="border-t border-slate-700/50 pt-6">
+          {/* Actions */}
+          <div className="flex gap-4">
+            <Link
+              href="/protected/dashboard/tickets"
+              className="flex-1 px-4 py-3 bg-slate-700/50 hover:bg-slate-700 text-white rounded-lg transition-all text-center font-medium border border-slate-600/50 hover:border-slate-600"
+            >
+              Cancel
+            </Link>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 btn-primary px-4 py-3 rounded-lg disabled:opacity-50 font-medium relative overflow-hidden"
+            >
+              <span className="relative z-10">{loading ? 'Creating...' : 'Create Ticket'}</span>
+            </button>
+          </div>
         </div>
       </form>
     </div>

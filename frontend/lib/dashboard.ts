@@ -21,6 +21,7 @@ export interface EmployeeDashboard {
   }>;
   total_time_logged_hours: number;
   active_session: {
+    id: number;
     ticket_id: string;
     ticket_title: string;
     start_time: string;

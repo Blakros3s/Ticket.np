@@ -163,7 +163,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <Link 
-                    href={`/protected/dashboard/tickets/${employeeData.active_session.ticket_id}`}
+                    href={`/protected/dashboard/tickets/${employeeData.active_session.id}`}
                     className="text-amber-400 hover:text-amber-300 text-sm font-medium"
                   >
                     View Ticket →

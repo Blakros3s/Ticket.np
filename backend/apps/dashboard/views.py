@@ -85,6 +85,7 @@ def employee_dashboard(request):
         ],
         'total_time_logged_hours': round(total_time / 60, 2),
         'active_session': {
+            'id': active_session.ticket.id,
             'ticket_id': active_session.ticket.ticket_id,
             'ticket_title': active_session.ticket.title,
             'start_time': active_session.start_time,

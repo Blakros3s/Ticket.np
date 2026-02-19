@@ -1,5 +1,12 @@
 import api from './api';
 
+export interface UserRole {
+  id: number;
+  name: string;
+  display_name: string;
+  color: string;
+}
+
 export interface User {
   id: number;
   username: string;
@@ -7,6 +14,7 @@ export interface User {
   first_name: string;
   last_name: string;
   role: 'admin' | 'employee' | 'manager';
+  department_roles: UserRole[];
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -84,6 +92,7 @@ export const authApi = {
     first_name?: string;
     last_name?: string;
     role?: 'admin' | 'employee' | 'manager';
+    department_role_ids?: number[];
     password: string;
     confirm_password?: string;
   }): Promise<AuthResponse> => {
@@ -100,10 +109,52 @@ export const authApi = {
       first_name: string;
       last_name: string;
       role: 'admin' | 'employee' | 'manager';
+      department_role_ids: number[];
       is_active: boolean;
     }>
   ): Promise<any> => {
     const response = await api.patch(`/auth/users/${userId}/`, data);
     return response.data;
+  },
+
+  // Get all department roles
+  getDepartmentRoles: async (): Promise<UserRole[]> => {
+    const response = await api.get<UserRole[] | { results: UserRole[] }>('/auth/department-roles/');
+    console.log('API response for department roles:', response.data);
+    // Handle both direct array and wrapped response
+    if (Array.isArray(response.data)) {
+      return response.data;
+    } else if (response.data && Array.isArray(response.data.results)) {
+      return response.data.results;
+    }
+    return [];
+  },
+
+  // Admin: create a new department role
+  createDepartmentRole: async (data: {
+    name: string;
+    display_name: string;
+    color: string;
+  }): Promise<UserRole> => {
+    const response = await api.post<UserRole>('/auth/department-roles/', data);
+    return response.data;
+  },
+
+  // Admin: update a department role
+  updateDepartmentRole: async (
+    roleId: number,
+    data: Partial<{
+      name: string;
+      display_name: string;
+      color: string;
+    }>
+  ): Promise<UserRole> => {
+    const response = await api.patch<UserRole>(`/auth/department-roles/${roleId}/`, data);
+    return response.data;
+  },
+
+  // Admin: delete a department role
+  deleteDepartmentRole: async (roleId: number): Promise<void> => {
+    await api.delete(`/auth/department-roles/${roleId}/`);
   },
 };

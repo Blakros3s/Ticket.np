@@ -32,7 +32,7 @@ python manage.py migrate --noinput
 # Start the application server
 # Using gunicorn for production
 log "Starting Gunicorn server..."
-python -m gunicorn --bind 0.0.0.0:8000 --workers 3 servicecenter.wsgi:application
+python -m gunicorn --bind 0.0.0.0:8000 --workers 3 config.wsgi:application
 
 #log "Starting Uvicorn server..."
 #exec uvicorn backend.asgi:application \

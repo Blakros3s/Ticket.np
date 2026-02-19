@@ -120,4 +120,9 @@ export const ticketsApi = {
     }
     return [];
   },
+
+  selfAssign: async (id: number): Promise<Ticket> => {
+    const response = await api.post<Ticket>(`/tickets/tickets/${id}/self_assign/`);
+    return response.data;
+  },
 };

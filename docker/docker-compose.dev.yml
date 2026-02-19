@@ -1,29 +1,28 @@
 # ==============================================================================
-# UAT Environment Overlay
-# Use with: docker compose -f docker-compose.base.yml -f docker-compose.uat.yml
+# Development Environment Overlay
+# Use with: docker compose -f docker-compose.base.yml -f docker-compose.dev.yml
 # ==============================================================================
 
 services:
   # ============================================================================
-  # PostgreSQL Database - UAT overrides
+  # PostgreSQL Database - Dev overrides
   # ============================================================================
   db:
     env_file:
-      - ../backend/.env.uat
+      - ../backend/.env
 
   # ============================================================================
-  # Django Backend - UAT overrides
+  # Django Backend - Dev overrides
   # ============================================================================
   backend:
     build:
-      dockerfile: docker/backend/Dockerfile.uat
+      dockerfile: docker/backend/Dockerfile.dev
     env_file:
-      - ../backend/.env.uat
+      - ../backend/.env
     ports:
-      - "127.0.0.1:${BACKEND_PORT:-8012}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     volumes:
-      - ../backend/staticfiles:/app/staticfiles
-      - ../backend/media:/app/media
+      - ../backend:/app
     deploy:
       resources:
         limits:
@@ -31,7 +30,7 @@ services:
           memory: 1G
 
   # ============================================================================
-  # Next.js Frontend - UAT overrides
+  # Next.js Frontend - Dev overrides
   # ============================================================================
   frontend:
     build:
@@ -39,9 +38,9 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     env_file:
-      - ../frontend/.env.production
+      - ../frontend/.env.local
     ports:
-      - "127.0.0.1:${FRONTEND_PORT:-3012}:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     deploy:
       resources:
         limits:

@@ -1,7 +1,14 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
-from .models import User
+from .models import User, UserRole
+
+
+@admin.register(UserRole)
+class UserRoleAdmin(admin.ModelAdmin):
+    list_display = ['name', 'display_name', 'color']
+    list_filter = ['name']
+    search_fields = ['name', 'display_name']
 
 
 class CustomUserAdmin(BaseUserAdmin):
@@ -28,7 +35,7 @@ class CustomUserAdmin(BaseUserAdmin):
             'fields': ('last_login', 'date_joined')
         }),
         (_('Role'), {
-            'fields': ('role',)
+            'fields': ('role', 'department_roles')
         }),
     )
 
@@ -41,9 +48,10 @@ class CustomUserAdmin(BaseUserAdmin):
     )
 
     list_display = ['username', 'email', 'role', 'is_active', 'date_joined']
-    list_filter = ['role', 'is_active', 'date_joined']
+    list_filter = ['role', 'is_active', 'department_roles', 'date_joined']
     search_fields = ['username', 'email']
     ordering = ['-date_joined']
+    filter_horizontal = ['department_roles']
 
     # Ensure the admin explicitly handles the role field in a user-friendly way
     def get_readonly_fields(self, request, obj=None):

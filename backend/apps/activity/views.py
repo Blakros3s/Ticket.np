@@ -30,33 +30,20 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(user_id=user_id)
         
         # Filter by action type
-        action = self.request.query_params.get('action')
-        if action:
-            queryset = queryset.filter(action=action)
+        action_type = self.request.query_params.get('action')
+        if action_type:
+            queryset = queryset.filter(action=action_type)
         
-        # Users can only see activities on tickets they have access to
-        if user.role == 'admin':
+        # Admin and Manager see all activities
+        if user.role in ['admin', 'manager']:
             return queryset.select_related('user', 'content_type')
         
-        if user.role == 'manager':
-            # Managers see activities for tickets in their projects
-            return queryset.filter(
-                Q(content_type__model='ticket',
-                  object_id__in=user.project_memberships.values_list('tickets__id', flat=True)) |
-                Q(content_type__model='comment',
-                  object_id__in=user.comments.values_list('ticket_id', flat=True))
-            ).distinct().select_related('user', 'content_type')
-        
-        # Employee: only their own activities and activities on their tickets
-        return queryset.filter(
-            Q(user=user) |
-            Q(content_type__model='ticket',
-              object_id__in=user.assigned_tickets.values_list('id', flat=True))
-        ).distinct().select_related('user', 'content_type')
+        # Regular users only see their own activities
+        return queryset.filter(user=user).select_related('user', 'content_type')
     
     @action(detail=False, methods=['get'])
     def by_ticket(self, request):
-        """Get activity logs filtered by ticket"""
+        """Get activity logs filtered by ticket - respects user role"""
         ticket_id = request.query_params.get('ticket_id')
         if not ticket_id:
             return Response(
@@ -64,10 +51,22 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        logs = self.get_queryset().filter(
+        user = request.user
+        
+        # Base query for the ticket
+        logs = ActivityLog.objects.filter(
             content_type__model='ticket',
             object_id=ticket_id
         )
+        
+        # Admin and Manager see all activities for the ticket
+        if user.role in ['admin', 'manager']:
+            pass  # No additional filtering
+        else:
+            # Regular users only see their own activities on this ticket
+            logs = logs.filter(user=user)
+        
+        logs = logs.select_related('user', 'content_type')
         serializer = self.get_serializer(logs, many=True)
         return Response(serializer.data)
     

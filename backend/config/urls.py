@@ -13,5 +13,7 @@ urlpatterns = [
     path('api/comments/', include('apps.comments.urls')),
     path('api/activity/', include('apps.activity.urls')),
     path('api/dashboard/', include('apps.dashboard.urls')),
+    path('api/calendar/', include('apps.calendar.urls')),
+    path('api/todos/', include('apps.todos.urls')),
     path('api/', include('apps.core.urls')),
 ]

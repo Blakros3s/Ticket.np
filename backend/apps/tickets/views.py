@@ -167,7 +167,7 @@ class TicketViewSet(viewsets.ModelViewSet):
             'in_progress': ['qa'],
             'qa': ['closed'],
             'closed': ['reopened'],
-            'reopened': ['new', 'in_progress'],
+            'reopened': ['in_progress'],
         }
         return transitions.get(current_status, [])
     
@@ -184,6 +184,13 @@ class TicketViewSet(viewsets.ModelViewSet):
             if active_log:
                 active_log.end_time = timezone.now()
                 active_log.save()
+                
+                log_activity(
+                    action='work_log',
+                    user=active_log.user,
+                    instance=ticket,
+                    description=f"Work session ended (ticket closed) - {active_log.duration_minutes} minutes logged"
+                )
         
         # Start a new work log when ticket becomes in_progress
         elif new_status == 'in_progress' and old_status in ['new', 'reopened']:
@@ -194,19 +201,31 @@ class TicketViewSet(viewsets.ModelViewSet):
             ).first()
             
             if not existing_active:
-                WorkLog.objects.create(
+                work_log = WorkLog.objects.create(
                     ticket=ticket,
                     user=user,
                     start_time=timezone.now()
                 )
+                
+                log_activity(
+                    action='work_log',
+                    user=user,
+                    instance=ticket,
+                    description=f"Work session started"
+                )
         
-        # Start a new work log when ticket is reopened
+        # Handle reopened status - reset assignee and DON'T start a new work log
+        # The new assignee will start the work log when they move it to in_progress
         elif new_status == 'reopened' and old_status == 'closed':
-            # Create a new work log session for the reopened ticket
-            WorkLog.objects.create(
-                ticket=ticket,
+            # Reset the assignee so anyone can pick it up
+            ticket.assignee = None
+            ticket.save()
+            
+            log_activity(
+                action='status_change',
                 user=user,
-                start_time=timezone.now()
+                instance=ticket,
+                description=f"Ticket reopened - assignee reset, ready for new assignment"
             )
     
     @action(detail=False, methods=['get'])
@@ -229,3 +248,37 @@ class TicketViewSet(viewsets.ModelViewSet):
         tickets = self.get_queryset().filter(project_id=project_id)
         serializer = self.get_serializer(tickets, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def self_assign(self, request, pk=None):
+        """Allow project member to self-assign an unassigned ticket"""
+        ticket = self.get_object()
+        user = request.user
+        
+        # Check if ticket is already assigned
+        if ticket.assignee is not None:
+            return Response(
+                {'error': 'This ticket is already assigned. Only managers can reassign.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if user is a member of the project
+        is_member = ticket.project.members.filter(id=user.id).exists() or user.role in ['admin', 'manager']
+        if not is_member:
+            return Response(
+                {'error': 'You must be a member of this project to self-assign tickets.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Assign the ticket
+        ticket.assignee = user
+        ticket.save()
+        
+        log_activity(
+            action='update',
+            user=user,
+            instance=ticket,
+            description=f"Self-assigned ticket {ticket.ticket_id}"
+        )
+        
+        return Response(TicketSerializer(ticket).data)

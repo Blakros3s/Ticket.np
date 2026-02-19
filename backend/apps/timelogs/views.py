@@ -33,8 +33,8 @@ class WorkLogViewSet(viewsets.ModelViewSet):
         if user_id:
             queryset = queryset.filter(user_id=user_id)
         
-        # Non-admin users can only see their own work logs
-        if user.role != 'admin':
+        # Non-admin and non-manager users can only see their own work logs
+        if user.role not in ['admin', 'manager']:
             queryset = queryset.filter(user=user)
         
         return queryset.select_related('user', 'ticket')

@@ -10,6 +10,7 @@ import { authApi, User } from '@/lib/auth';
 import { timelogsApi, WorkLog, TotalTime, ActiveSession } from '@/lib/timelogs';
 import { commentsApi, Comment } from '@/lib/comments';
 import { activityApi, ActivityLog } from '@/lib/activity';
+import Markdown from '@/components/Markdown';
 
 const statusColors: Record<TicketStatus, string> = {
   new: 'bg-blue-500/20 text-blue-400 border-blue-500/50',
@@ -19,13 +20,13 @@ const statusColors: Record<TicketStatus, string> = {
   reopened: 'bg-red-500/20 text-red-400 border-red-500/50',
 };
 
-// Fixed linear workflow: new → in_progress → qa → closed → reopened
+// Fixed linear workflow: new → in_progress → qa → closed → reopened → in_progress
 const statusFlow: Record<TicketStatus, TicketStatus[]> = {
   new: ['in_progress'],
   in_progress: ['qa'],
   qa: ['closed'],
   closed: ['reopened'],
-  reopened: ['new', 'in_progress'],
+  reopened: ['in_progress'],
 };
 
 // Helper function to format elapsed time
@@ -159,12 +160,14 @@ export default function TicketDetailPage() {
       await ticketsApi.updateStatus(ticketId, newStatus);
       showToastMessage(`Status updated to ${newStatus.replace('_', ' ')}`, 'success');
       setShowStatusModal(false);
-      fetchTicket();
-      // Refresh work logs and activity logs after status change
+      
+      // Refresh all data after status change
+      await fetchTicket();
       fetchActivityLogs();
+      fetchActiveSession();
+      
       if (isManager) {
         fetchWorkLogs();
-        fetchActiveSession();
       }
     } catch (error: any) {
       showToastMessage(error.response?.data?.error || 'Failed to update status', 'error');
@@ -179,6 +182,16 @@ export default function TicketDetailPage() {
       fetchTicket();
     } catch (error) {
       showToastMessage('Failed to assign ticket', 'error');
+    }
+  };
+
+  const handleSelfAssign = async () => {
+    try {
+      await ticketsApi.selfAssign(ticketId);
+      showToastMessage('Ticket assigned to you', 'success');
+      fetchTicket();
+    } catch (error: any) {
+      showToastMessage(error.response?.data?.error || 'Failed to self-assign ticket', 'error');
     }
   };
 
@@ -207,7 +220,7 @@ export default function TicketDetailPage() {
     }
   };
 
-  // Time tracking functions - only for managers
+  // Time tracking functions - for managers and admins
   const fetchWorkLogs = async () => {
     if (!isManager) return;
     try {
@@ -468,77 +481,45 @@ export default function TicketDetailPage() {
             Change Status
           </button>
           
-          {/* Start/Stop Time Tracking Button Logic */}
-          {/* Case 1: Currently tracking (shows Work Started for everyone) */}
-          {isTracking ? (
+          {/* Work Timer Display - Shows when ticket is in_progress */}
+          {ticket.status === 'in_progress' && isTracking && (
             <div className="flex items-center gap-2">
-              {/* Running Timer Display - Show to assignee and the person working */}
-              {(isCurrentUserWorking || ticket?.assignee === user?.id || isManager) && (
-                <div className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-green-400 font-mono font-semibold">
-                    {formatActiveTime(elapsedSeconds)}
-                  </span>
-                </div>
-              )}
-              {/* Work Started Button - Disabled, shows for everyone when work is active */}
-              <button
-                disabled
-                className="bg-amber-600/50 text-white flex items-center gap-2 px-4 py-2 rounded-lg cursor-not-allowed"
-              >
+              <div className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-green-400 font-mono font-semibold">
+                  {formatActiveTime(elapsedSeconds)}
+                </span>
+              </div>
+              <div className="bg-green-600/20 text-green-400 flex items-center gap-2 px-4 py-2 rounded-lg border border-green-600/30">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Work Started
-              </button>
+                Work Timer
+              </div>
             </div>
-          ) : /* Case 2: Not tracking and assigned to current user */ 
-          !isTracking && ticket.assignee === user?.id ? (
-            <button
-              onClick={startTracking}
-              className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 px-4 py-2 rounded-lg transition-colors"
-            >
+          )}
+          
+          {/* Status indicator when not in progress */}
+          {ticket.status !== 'in_progress' && (
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+              ticket.status === 'new' || ticket.status === 'reopened' 
+                ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30' 
+                : ticket.status === 'qa'
+                ? 'bg-purple-600/20 text-purple-400 border border-purple-600/30'
+                : 'bg-green-600/20 text-green-400 border border-green-600/30'
+            }`}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                {ticket.status === 'closed' ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                )}
               </svg>
-              Start Work
-            </button>
-          ) : /* Case 3: Not tracking and assigned to someone else (not manager) */ 
-          !isTracking && ticket.assignee && ticket.assignee !== user?.id && !isManager ? (
-            <button
-              disabled
-              className="bg-slate-600/50 text-slate-300 flex items-center gap-2 px-4 py-2 rounded-lg cursor-not-allowed"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              Assigned
-            </button>
-          ) : /* Case 4: Unassigned - anyone can start work (auto-assigns) */ 
-          !isTracking && !ticket.assignee ? (
-            <button
-              onClick={startTracking}
-              className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 px-4 py-2 rounded-lg transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Start Work
-            </button>
-          ) : /* Case 5: Manager override - can work on anything */ 
-          isManager && (
-            <button
-              onClick={startTracking}
-              className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 px-4 py-2 rounded-lg transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Start Work
-            </button>
+              {ticket.status === 'new' && 'Ready to Start'}
+              {ticket.status === 'reopened' && 'Reopened'}
+              {ticket.status === 'qa' && 'In QA Review'}
+              {ticket.status === 'closed' && 'Completed'}
+            </div>
           )}
           
           {/* Only creator or manager/admin can edit/delete */}
@@ -573,7 +554,13 @@ export default function TicketDetailPage() {
           {/* Description */}
           <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
             <h2 className="text-lg font-semibold text-white mb-4">Description</h2>
-            <p className="text-slate-300 whitespace-pre-wrap">{ticket.description || 'No description provided.'}</p>
+            <div className="text-slate-300">
+              {ticket.description ? (
+                <Markdown content={ticket.description} />
+              ) : (
+                <p className="text-slate-500 italic">No description provided.</p>
+              )}
+            </div>
           </div>
 
           {/* Work Logs Section - Only visible to managers */}
@@ -720,7 +707,7 @@ export default function TicketDetailPage() {
                                 </button>
                               )}
                             </div>
-                            <p className="text-slate-300 mt-2 whitespace-pre-wrap">{comment.content}</p>
+                            <p className="text-slate-300 mt-2"><Markdown content={comment.content} /></p>
                           </div>
                         </div>
                       </div>
@@ -841,7 +828,7 @@ export default function TicketDetailPage() {
           <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-white">Assignee</h3>
-              {(isManager || !ticket.assignee) && (
+              {isManager && (
                 <button
                   onClick={() => setShowAssignModal(true)}
                   className="text-sky-400 hover:text-sky-300 text-sm"
@@ -861,15 +848,27 @@ export default function TicketDetailPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Unassigned</p>
+                  </div>
+                </div>
+                {/* Self-assign button for project members */}
+                <button
+                  onClick={handleSelfAssign}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 rounded-lg transition-colors border border-sky-500/30 hover:border-sky-500/50"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                   </svg>
-                </div>
-                <div>
-                  <p className="text-slate-400">Unassigned</p>
-                </div>
+                  Assign to Me
+                </button>
               </div>
             )}
           </div>
@@ -993,23 +992,23 @@ export default function TicketDetailPage() {
       {/* Edit Modal */}
       {showEditModal && ticket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-lg">
-            <div className="p-6 border-b border-slate-700">
+          <div className="form-card w-full max-w-lg">
+            <div className="p-6 border-b border-slate-700/50">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-white">Edit Ticket</h2>
                 <button
                   onClick={() => setShowEditModal(false)}
-                  className="text-slate-400 hover:text-white"
+                  className="text-slate-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-700/50"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
             </div>
-            <form onSubmit={handleUpdateTicket} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Title</label>
+            <form onSubmit={handleUpdateTicket} className="p-6 space-y-5">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-200">Title</label>
                 <input
                   type="text"
                   required
@@ -1018,18 +1017,20 @@ export default function TicketDetailPage() {
                   onChange={(e) => setEditData({ ...editData, title: e.target.value })}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Description</label>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-200">Description</label>
                 <textarea
-                  rows={4}
+                  rows={5}
                   className="input-field w-full resize-none"
+                  placeholder="Supports Markdown formatting"
                   value={editData.description}
                   onChange={(e) => setEditData({ ...editData, description: e.target.value })}
                 />
+                <p className="text-xs text-slate-500">Markdown supported: **bold**, *italic*, `code`, etc.</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Type</label>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-200">Type</label>
                   <select
                     className="input-field w-full"
                     value={editData.type}
@@ -1040,8 +1041,8 @@ export default function TicketDetailPage() {
                     <option value="feature">Feature</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Priority</label>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-200">Priority</label>
                   <select
                     className="input-field w-full"
                     value={editData.priority}
@@ -1054,19 +1055,19 @@ export default function TicketDetailPage() {
                   </select>
                 </div>
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-4 border-t border-slate-700/50">
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                  className="flex-1 px-4 py-2.5 bg-slate-700/50 hover:bg-slate-700 text-white rounded-lg transition-all font-medium border border-slate-600/50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 btn-primary px-4 py-2 rounded-lg"
+                  className="flex-1 btn-primary px-4 py-2.5 rounded-lg font-medium relative overflow-hidden"
                 >
-                  Save Changes
+                  <span className="relative z-10">Save Changes</span>
                 </button>
               </div>
             </form>

@@ -1,13 +1,38 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import User
+from .models import User, UserRole
+
+
+class UserRoleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserRole
+        fields = ['id', 'name', 'display_name', 'color']
 
 
 class UserSerializer(serializers.ModelSerializer):
+    department_roles = UserRoleSerializer(many=True, read_only=True)
+    department_role_ids = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=UserRole.objects.all(), source='department_roles', write_only=True, required=False
+    )
+    
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'is_active', 'created_at', 'updated_at']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'is_active', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def update(self, instance, validated_data):
+        department_roles = validated_data.pop('department_roles', None)
+        
+        # Update other fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update department roles if provided
+        if department_roles is not None:
+            instance.department_roles.set(department_roles)
+        
+        return instance
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -82,10 +107,14 @@ class AdminUserCreateSerializer(serializers.ModelSerializer):
     """Serializer to allow admins to create a user with a specific role and password."""
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
     confirm_password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    department_role_ids = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=UserRole.objects.all(), source='department_roles', write_only=True, required=False
+    )
+    department_roles = UserRoleSerializer(many=True, read_only=True)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'password', 'confirm_password', 'is_active']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'password', 'confirm_password', 'is_active']
         read_only_fields = ['id', 'is_active']
 
     def validate(self, attrs):
@@ -96,10 +125,14 @@ class AdminUserCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('confirm_password')
         password = validated_data.pop('password')
+        department_roles = validated_data.pop('department_roles', [])
         # role may be provided; default to 'employee' if not
         role = validated_data.get('role', 'employee')
         user = User.objects.create(**validated_data)
         user.role = role
         user.set_password(password)
         user.save()
+        # Add department roles
+        if department_roles:
+            user.department_roles.set(department_roles)
         return user
