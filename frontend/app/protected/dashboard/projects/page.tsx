@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
@@ -18,6 +18,7 @@ export default function ProjectsPage() {
   const [newProject, setNewProject] = useState({
     name: '',
     description: '',
+    github_repo: '',
     status: 'active' as 'active' | 'archived',
   });
 
@@ -54,6 +55,7 @@ export default function ProjectsPage() {
     if (isManager) {
       fetchUsers();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -62,7 +64,7 @@ export default function ProjectsPage() {
       await projectsApi.createProject(newProject);
       showToastMessage('Project created successfully', 'success');
       setShowAddModal(false);
-      setNewProject({ name: '', description: '', status: 'active' });
+      setNewProject({ name: '', description: '', github_repo: '', status: 'active' });
       fetchProjects();
     } catch (error) {
       showToastMessage('Failed to create project', 'error');
@@ -201,9 +203,8 @@ export default function ProjectsPage() {
                 <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center">
                   <span className="text-white font-bold text-lg">{project.name.charAt(0).toUpperCase()}</span>
                 </div>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                  project.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
-                }`}>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${project.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
+                  }`}>
                   {project.status === 'active' ? 'Active' : 'Archived'}
                 </span>
               </div>
@@ -212,11 +213,19 @@ export default function ProjectsPage() {
               </h3>
               <p className="text-slate-400 text-sm mb-4 line-clamp-2">{project.description || 'No description'}</p>
               <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2 text-slate-400">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  {project.member_count} members
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5 text-slate-400">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    {project.member_count}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-400">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                    </svg>
+                    {project.ticket_count || 0}
+                  </div>
                 </div>
                 <span className="text-slate-500">
                   {new Date(project.created_at).toLocaleDateString()}
@@ -264,6 +273,16 @@ export default function ProjectsPage() {
                   value={newProject.description}
                   onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
                   placeholder="Enter project description"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">GitHub Repository</label>
+                <input
+                  type="url"
+                  className="input-field w-full"
+                  value={newProject.github_repo}
+                  onChange={(e) => setNewProject({ ...newProject, github_repo: e.target.value })}
+                  placeholder="https://github.com/username/repo"
                 />
               </div>
               <div>

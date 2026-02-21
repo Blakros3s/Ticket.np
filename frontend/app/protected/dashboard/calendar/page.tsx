@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
@@ -7,7 +7,7 @@ import { calendarApi, CalendarEvent, CalendarEventInput, CalendarCategory } from
 export default function CalendarPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [categories, setCategories] = useState<CalendarCategory[]>([]);
@@ -16,7 +16,8 @@ export default function CalendarPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  
+  const [showEventDetail, setShowEventDetail] = useState<CalendarEvent | null>(null);
+
   // Form state
   const [formData, setFormData] = useState<CalendarEventInput>({
     title: '',
@@ -32,6 +33,7 @@ export default function CalendarPage() {
   useEffect(() => {
     fetchEvents();
     fetchCategories();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate]);
 
   const fetchEvents = async () => {
@@ -74,24 +76,24 @@ export default function CalendarPage() {
   const getCalendarDays = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    
+
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startingDay = firstDay.getDay(); // 0 = Sunday
-    
+
     const days: (Date | null)[] = [];
-    
+
     // Add empty cells for days before the first day of the month
     for (let i = 0; i < startingDay; i++) {
       days.push(null);
     }
-    
+
     // Add all days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       days.push(new Date(year, month, day));
     }
-    
+
     return days;
   };
 
@@ -115,7 +117,7 @@ export default function CalendarPage() {
   // Modal handlers
   const openAddModal = (date?: Date) => {
     if (!isAdmin) return;
-    
+
     const selected = date || new Date();
     setSelectedDate(selected);
     setFormData({
@@ -134,7 +136,7 @@ export default function CalendarPage() {
 
   const openEditModal = (event: CalendarEvent) => {
     if (!isAdmin) return;
-    
+
     setSelectedEvent(event);
     setFormData({
       title: event.title,
@@ -168,14 +170,14 @@ export default function CalendarPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       if (isEditing && selectedEvent) {
         await calendarApi.updateEvent(selectedEvent.id, formData);
       } else {
         await calendarApi.createEvent(formData);
       }
-      
+
       closeModal();
       fetchEvents();
     } catch (error) {
@@ -186,7 +188,7 @@ export default function CalendarPage() {
 
   const handleDelete = async () => {
     if (!isEditing || !selectedEvent) return;
-    
+
     if (confirm('Are you sure you want to delete this event?')) {
       try {
         await calendarApi.deleteEvent(selectedEvent.id);
@@ -216,7 +218,7 @@ export default function CalendarPage() {
             <h1 className="text-3xl font-bold text-white mb-2">Calendar</h1>
             <p className="text-slate-400">View company events, holidays, and important dates</p>
           </div>
-          
+
           <div className="flex items-center gap-3">
             {isAdmin && (
               <button
@@ -269,8 +271,8 @@ export default function CalendarPage() {
         <div className="flex flex-wrap gap-3 mb-6">
           {categories.map(cat => (
             <div key={cat.value} className="flex items-center gap-2">
-              <div 
-                className="w-3 h-3 rounded-full" 
+              <div
+                className="w-3 h-3 rounded-full"
                 style={{ backgroundColor: cat.color }}
               />
               <span className="text-sm text-slate-300">{cat.label}</span>
@@ -288,7 +290,7 @@ export default function CalendarPage() {
               </div>
             ))}
           </div>
-          
+
           {/* Calendar Days */}
           {loading ? (
             <div className="p-12 text-center text-slate-400">Loading calendar...</div>
@@ -300,45 +302,55 @@ export default function CalendarPage() {
                     <div key={`empty-${index}`} className="min-h-[120px] border-b border-r border-slate-700/30 bg-slate-800/20" />
                   );
                 }
-                
+
                 const dayEvents = getEventsForDate(date);
                 const today = isToday(date);
                 const saturday = isSaturday(date);
-                
+                const primaryEvent = dayEvents.length > 0 ? dayEvents[0] : null;
+
+                let cellStyle: React.CSSProperties = {};
+                if (primaryEvent) {
+                  cellStyle = { backgroundColor: `${primaryEvent.color}15` };
+                }
+
                 return (
                   <div
                     key={date.toISOString()}
-                    onClick={() => isAdmin && openAddModal(date)}
-                    className={`min-h-[120px] border-b border-r border-slate-700/30 p-2 cursor-pointer transition-colors hover:bg-slate-800/50 ${
-                      today ? 'bg-sky-500/10' : ''
-                    } ${saturday ? 'bg-red-500/5' : ''}`}
+                    onClick={() => {
+                      if (primaryEvent) {
+                        setShowEventDetail(primaryEvent);
+                      } else if (isAdmin) {
+                        openAddModal(date);
+                      }
+                    }}
+                    className={`min-h-[120px] border-b border-r border-slate-700/30 flex flex-col p-3 cursor-pointer transition-colors hover:opacity-80 ${today && !primaryEvent ? 'bg-sky-500/10' : ''
+                      } ${saturday && !primaryEvent ? 'bg-red-500/5' : ''}`}
+                    style={cellStyle}
                   >
-                    <div className={`text-sm font-medium mb-1 ${
-                      today ? 'text-sky-400' : saturday ? 'text-red-400' : 'text-slate-300'
-                    }`}>
+                    <div className={`text-sm font-medium mb-1 ${today ? 'text-sky-400' : saturday ? 'text-red-400' : 'text-slate-300'
+                      }`}>
                       {date.getDate()}
-                      {saturday && <span className="ml-1 text-xs text-red-500/70">(Holiday)</span>}
+                      {saturday && !primaryEvent && <span className="ml-1 text-xs text-red-500/70">(Holiday)</span>}
                     </div>
-                    <div className="space-y-1">
+                    <div className="flex-1 flex flex-col gap-3 mt-1">
                       {dayEvents.map(event => (
-                        <button
+                        <div
                           key={event.id}
+                          className="w-full text-left"
+                          style={{ color: event.color }}
+                          title={event.title}
                           onClick={(e) => {
-                            e.stopPropagation();
-                            if (isAdmin) {
-                              openEditModal(event);
+                            if (dayEvents.length > 1) {
+                              e.stopPropagation();
+                              setShowEventDetail(event);
                             }
                           }}
-                          className="w-full text-left text-xs px-2 py-1 rounded truncate transition-opacity hover:opacity-80"
-                          style={{ 
-                            backgroundColor: `${event.color}30`,
-                            color: event.color,
-                            borderLeft: `3px solid ${event.color}`
-                          }}
-                          title={event.title}
                         >
-                          {event.title}
-                        </button>
+                          <div className="font-bold text-[15px] leading-tight break-words">{event.title}</div>
+                          {!event.is_full_day && event.start_time && (
+                            <div className="font-semibold text-xs opacity-90 mt-1">{event.start_time.substring(0, 5)}</div>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -482,7 +494,7 @@ export default function CalendarPage() {
                   >
                     {isEditing ? 'Update Event' : 'Add Event'}
                   </button>
-                  
+
                   {isEditing && (
                     <button
                       type="button"
@@ -492,7 +504,7 @@ export default function CalendarPage() {
                       Delete
                     </button>
                   )}
-                  
+
                   <button
                     type="button"
                     onClick={closeModal}
@@ -502,6 +514,93 @@ export default function CalendarPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Event Detail View Modal */}
+      {showEventDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="glass-card rounded-2xl w-full max-w-lg overflow-hidden border-t-4 shadow-2xl" style={{ borderTopColor: showEventDetail.color }}>
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-white mb-1">{showEventDetail.title}</h2>
+                  <div
+                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wide"
+                    style={{ backgroundColor: `${showEventDetail.color}20`, color: showEventDetail.color }}
+                  >
+                    {categories.find(c => c.value === showEventDetail.category)?.label || showEventDetail.category}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowEventDetail(null)}
+                  className="text-slate-400 hover:text-white transition-colors p-1 bg-slate-800/50 rounded-full hover:bg-slate-700"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4 mb-8">
+                <div className="flex items-center gap-3 text-slate-300">
+                  <div className="p-2 bg-slate-800 rounded-lg text-sky-400">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-white">{new Date(showEventDetail.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                    <div className="text-xs text-slate-400">
+                      {showEventDetail.is_full_day ? 'All Day Event' : `${showEventDetail.start_time?.substring(0, 5) || ''} - ${showEventDetail.end_time?.substring(0, 5) || ''}`.replace(/ - $/, '')}
+                    </div>
+                  </div>
+                </div>
+
+                {showEventDetail.description && (
+                  <div className="text-sm text-slate-300 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                    {showEventDetail.description}
+                  </div>
+                )}
+              </div>
+
+              {isAdmin && (
+                <div className="flex gap-3 pt-4 border-t border-slate-700/50">
+                  <button
+                    onClick={() => {
+                      setShowEventDetail(null);
+                      openEditModal(showEventDetail);
+                    }}
+                    className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Edit Event
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm('Are you sure you want to delete this event?')) {
+                        calendarApi.deleteEvent(showEventDetail.id).then(() => {
+                          setShowEventDetail(null);
+                          fetchEvents();
+                        }).catch(err => {
+                          console.error('Error deleting event:', err);
+                          alert('Failed to delete event');
+                        });
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete Event
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

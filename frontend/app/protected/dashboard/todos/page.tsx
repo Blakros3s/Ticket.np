@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { todosApi, TodoItem, TodoItemInput, TodoPriority, TodoStatus, TodoStats } from '@/lib/todos';
@@ -14,7 +14,16 @@ export default function TodosPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [selectedTodo, setSelectedTodo] = useState<TodoItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  
+
+  const [deleteTarget, setDeleteTarget] = useState<'single' | 'bulk' | null>(null);
+  const [todoToDelete, setTodoToDelete] = useState<number | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToastMessage = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   // Form state
   const [formData, setFormData] = useState<TodoItemInput>({
     title: '',
@@ -29,6 +38,7 @@ export default function TodosPage() {
     fetchPriorities();
     fetchStatuses();
     fetchStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
   const fetchTodos = async () => {
@@ -37,7 +47,7 @@ export default function TodosPage() {
       const filters: any = {};
       if (filter.status) filters.status = filter.status;
       if (filter.priority) filters.priority = filter.priority;
-      
+
       const data = await todosApi.getTodos(filters);
       setTodos(data);
     } catch (error) {
@@ -115,14 +125,14 @@ export default function TodosPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       if (isEditing && selectedTodo) {
         await todosApi.updateTodo(selectedTodo.id, formData);
       } else {
         await todosApi.createTodo(formData);
       }
-      
+
       closeModal();
       fetchTodos();
       fetchStats();
@@ -132,17 +142,41 @@ export default function TodosPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (confirm('Are you sure you want to delete this todo?')) {
+  const promptDelete = (id: number) => {
+    setTodoToDelete(id);
+    setDeleteTarget('single');
+  };
+
+  const promptBulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    setDeleteTarget('bulk');
+  };
+
+  const confirmDelete = async () => {
+    if (deleteTarget === 'single' && todoToDelete !== null) {
       try {
-        await todosApi.deleteTodo(id);
+        await todosApi.deleteTodo(todoToDelete);
+        showToastMessage('Task deleted successfully', 'success');
         fetchTodos();
         fetchStats();
       } catch (error) {
         console.error('Error deleting todo:', error);
-        alert('Error deleting todo. Please try again.');
+        showToastMessage('Failed to delete task', 'error');
+      }
+    } else if (deleteTarget === 'bulk') {
+      try {
+        await todosApi.bulkDelete(selectedIds);
+        showToastMessage(`${selectedIds.length} tasks deleted`, 'success');
+        setSelectedIds([]);
+        fetchTodos();
+        fetchStats();
+      } catch (error) {
+        console.error('Error bulk deleting:', error);
+        showToastMessage('Failed to delete tasks', 'error');
       }
     }
+    setDeleteTarget(null);
+    setTodoToDelete(null);
   };
 
   const handleComplete = async (id: number) => {
@@ -167,7 +201,7 @@ export default function TodosPage() {
 
   const handleBulkComplete = async () => {
     if (selectedIds.length === 0) return;
-    
+
     try {
       await todosApi.bulkComplete(selectedIds);
       setSelectedIds([]);
@@ -178,24 +212,11 @@ export default function TodosPage() {
     }
   };
 
-  const handleBulkDelete = async () => {
-    if (selectedIds.length === 0) return;
-    
-    if (confirm(`Are you sure you want to delete ${selectedIds.length} todos?`)) {
-      try {
-        await todosApi.bulkDelete(selectedIds);
-        setSelectedIds([]);
-        fetchTodos();
-        fetchStats();
-      } catch (error) {
-        console.error('Error bulk deleting:', error);
-      }
-    }
-  };
+
 
   const toggleSelection = (id: number) => {
-    setSelectedIds(prev => 
-      prev.includes(id) 
+    setSelectedIds(prev =>
+      prev.includes(id)
         ? prev.filter(i => i !== id)
         : [...prev, id]
     );
@@ -210,7 +231,12 @@ export default function TodosPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900/50 py-8">
+    <div className="min-h-screen bg-slate-900/50 py-8 relative">
+      {toast && (
+        <div className={`fixed top-20 right-4 z-50 px-6 py-3 rounded-lg shadow-lg ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white transition-all`}>
+          {toast.message}
+        </div>
+      )}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
@@ -218,7 +244,7 @@ export default function TodosPage() {
             <h1 className="text-3xl font-bold text-white mb-2">Todo Task</h1>
             <p className="text-slate-400">Manage your personal tasks and reminders</p>
           </div>
-          
+
           <button
             onClick={openAddModal}
             className="px-4 py-2 bg-gradient-to-r from-sky-400 to-violet-500 text-white rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2"
@@ -268,7 +294,7 @@ export default function TodosPage() {
                 ))}
               </select>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <label className="text-sm text-slate-400">Priority:</label>
               <select
@@ -293,7 +319,7 @@ export default function TodosPage() {
                   Complete
                 </button>
                 <button
-                  onClick={handleBulkDelete}
+                  onClick={promptBulkDelete}
                   className="px-3 py-1.5 text-sm bg-red-500/20 text-red-400 border border-red-500/50 rounded-lg hover:bg-red-500/30 transition-colors"
                 >
                   Delete
@@ -342,9 +368,8 @@ export default function TodosPage() {
               {todos.map(todo => (
                 <div
                   key={todo.id}
-                  className={`px-6 py-4 flex items-center gap-4 hover:bg-slate-800/30 transition-colors ${
-                    todo.is_completed ? 'opacity-60' : ''
-                  }`}
+                  className={`px-6 py-4 flex items-center gap-4 hover:bg-slate-800/30 transition-colors ${todo.is_completed ? 'opacity-60' : ''
+                    }`}
                 >
                   <input
                     type="checkbox"
@@ -352,7 +377,7 @@ export default function TodosPage() {
                     onChange={() => toggleSelection(todo.id)}
                     className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
                   />
-                  
+
                   <div className="flex-1">
                     <div className={`font-medium ${todo.is_completed ? 'line-through text-slate-500' : 'text-white'}`}>
                       {todo.title}
@@ -378,12 +403,11 @@ export default function TodosPage() {
                   </div>
 
                   <div className="w-24">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      todo.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' :
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${todo.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' :
                       todo.status === 'in_progress' ? 'bg-sky-500/20 text-sky-400' :
-                      todo.status === 'cancelled' ? 'bg-slate-500/20 text-slate-400' :
-                      'bg-amber-500/20 text-amber-400'
-                    }`}>
+                        todo.status === 'cancelled' ? 'bg-slate-500/20 text-slate-400' :
+                          'bg-amber-500/20 text-amber-400'
+                      }`}>
                       {todo.status_display}
                     </span>
                   </div>
@@ -418,7 +442,7 @@ export default function TodosPage() {
                         </svg>
                       </button>
                     )}
-                    
+
                     <button
                       onClick={() => openEditModal(todo)}
                       className="p-1.5 text-slate-400 hover:text-sky-400 transition-colors"
@@ -428,9 +452,9 @@ export default function TodosPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                     </button>
-                    
+
                     <button
-                      onClick={() => handleDelete(todo.id)}
+                      onClick={() => promptDelete(todo.id)}
                       className="p-1.5 text-slate-400 hover:text-red-400 transition-colors"
                       title="Delete"
                     >
@@ -555,7 +579,7 @@ export default function TodosPage() {
                   >
                     {isEditing ? 'Update Task' : 'Add Task'}
                   </button>
-                  
+
                   <button
                     type="button"
                     onClick={closeModal}
@@ -565,6 +589,37 @@ export default function TodosPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-md">
+            <div className="p-6">
+              <h2 className="text-xl font-semibold text-white mb-4">Confirm Deletion</h2>
+              <p className="text-slate-400 mb-6">
+                Are you sure you want to delete {deleteTarget === 'bulk' ? `${selectedIds.length} selected tasks` : 'this task'}? This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setDeleteTarget(null);
+                    setTodoToDelete(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                >
+                  Confirm Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>

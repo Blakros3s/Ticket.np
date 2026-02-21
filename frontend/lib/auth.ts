@@ -1,4 +1,4 @@
-import api from './api';
+﻿import api from './api';
 
 export interface UserRole {
   id: number;
@@ -74,8 +74,15 @@ export const authApi = {
   },
 
   getUsers: async (): Promise<User[]> => {
-    const response = await api.get<{ results: User[] }>('/auth/users/');
-    return response.data.results;
+    const response = await api.get<User[] | { results: User[] }>('/auth/users/');
+    const data = response.data;
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (data && typeof data === 'object' && 'results' in data) {
+      return data.results;
+    }
+    return [];
   },
 
   deactivateUser: async (userId: number): Promise<void> => {

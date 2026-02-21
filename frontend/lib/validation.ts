@@ -1,4 +1,4 @@
-// Form validation utilities
+﻿// Form validation utilities
 
 export interface ValidationError {
   field: string;

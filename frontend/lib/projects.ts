@@ -1,9 +1,11 @@
-import api from './api';
+﻿import api from './api';
+import { UserRole } from './auth';
 
 export interface Project {
   id: number;
   name: string;
   description: string;
+  github_repo: string | null;
   status: 'active' | 'archived';
   created_by: {
     id: number;
@@ -14,8 +16,25 @@ export interface Project {
   };
   members: ProjectMember[];
   member_count: number;
+  ticket_count: number;
+  document_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectDocument {
+  id: number;
+  title: string;
+  file: string;
+  file_type: string;
+  file_size: number;
+  uploaded_by: {
+    id: number;
+    username: string;
+    first_name: string;
+    last_name: string;
+  };
+  created_at: string;
 }
 
 export interface ProjectMember {
@@ -27,6 +46,7 @@ export interface ProjectMember {
     first_name: string;
     last_name: string;
     role: string;
+    department_roles?: UserRole[];
   };
   joined_at: string;
 }
@@ -34,6 +54,7 @@ export interface ProjectMember {
 export interface CreateProjectData {
   name: string;
   description: string;
+  github_repo?: string;
   status?: 'active' | 'archived';
 }
 
@@ -84,7 +105,39 @@ export const projectsApi = {
   },
 
   getMyProjects: async (): Promise<Project[]> => {
-    const response = await api.get<Project[]>('/projects/projects/my_projects/');
+    const response = await api.get<Project[] | { results: Project[] }>('/projects/projects/my_projects/');
+    const data = response.data;
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (data && typeof data === 'object' && 'results' in data) {
+      return data.results;
+    }
+    return [];
+  },
+
+  getDocuments: async (projectId: number): Promise<ProjectDocument[]> => {
+    const response = await api.get<ProjectDocument[] | { results: ProjectDocument[] }>(`/projects/projects/${projectId}/documents/`);
+    const data = response.data;
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (data && typeof data === 'object' && 'results' in data) {
+      return data.results;
+    }
+    return [];
+  },
+
+  uploadDocument: async (projectId: number, formData: FormData): Promise<ProjectDocument> => {
+    const response = await api.post<ProjectDocument>(
+      `/projects/projects/${projectId}/documents/`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
     return response.data;
+  },
+
+  deleteDocument: async (projectId: number, documentId: number): Promise<void> => {
+    await api.delete(`/projects/projects/${projectId}/documents/${documentId}/`);
   },
 };

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
@@ -27,7 +27,7 @@ export default function TicketsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TicketStatus | ''>('');
@@ -66,6 +66,7 @@ export default function TicketsPage() {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, priorityFilter, typeFilter, projectFilter]);
 
   // Debounced search
@@ -74,6 +75,7 @@ export default function TicketsPage() {
       fetchData();
     }, 500);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
 
   const clearFilters = () => {
@@ -148,7 +150,7 @@ export default function TicketsPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             {searchQuery && (
-              <button 
+              <button
                 onClick={() => setSearchQuery('')}
                 className="pr-4 text-slate-400 hover:text-white"
               >
@@ -158,7 +160,7 @@ export default function TicketsPage() {
               </button>
             )}
           </div>
-          
+
           <div className="flex flex-wrap items-center gap-3">
             <select
               className="input-field min-w-[130px]"

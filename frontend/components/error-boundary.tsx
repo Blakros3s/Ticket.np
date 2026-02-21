@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { Component, ReactNode, ErrorInfo } from 'react';
 import Link from 'next/link';

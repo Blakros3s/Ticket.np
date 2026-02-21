@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 
@@ -22,11 +22,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const addToast = useCallback((message: string, type: Toast['type'], duration = 5000) => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, message, type, duration }]);
-    
+
     // Auto-remove toast after duration
     setTimeout(() => {
       removeToast(id);
     }, duration);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const removeToast = useCallback((id: string) => {

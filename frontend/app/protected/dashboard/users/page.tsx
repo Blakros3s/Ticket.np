@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
@@ -31,7 +31,7 @@ export default function UsersManagementPage() {
 
   const [users, setUsers] = useState<User[]>([]);
   const [departmentRoles, setDepartmentRoles] = useState<UserRole[]>([]);
-  
+
   // Ensure departmentRoles is always an array
   useEffect(() => {
     if (!Array.isArray(departmentRoles)) {
@@ -129,10 +129,10 @@ export default function UsersManagementPage() {
     } catch (error: any) {
       console.error('Error creating department role:', error);
       console.error('Error response:', error.response);
-      const errorMessage = error.response?.data?.detail || 
-                          error.response?.data?.name?.[0] ||
-                          error.response?.data?.non_field_errors?.[0] ||
-                          'Failed to create department role';
+      const errorMessage = error.response?.data?.detail ||
+        error.response?.data?.name?.[0] ||
+        error.response?.data?.non_field_errors?.[0] ||
+        'Failed to create department role';
       showToastMessage(errorMessage, 'error');
     }
   };
@@ -153,9 +153,9 @@ export default function UsersManagementPage() {
       setSelectedRole(null);
       fetchDepartmentRoles();
     } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || 
-                          error.response?.data?.name?.[0] ||
-                          'Failed to update department role';
+      const errorMessage = error.response?.data?.detail ||
+        error.response?.data?.name?.[0] ||
+        'Failed to update department role';
       showToastMessage(errorMessage, 'error');
     }
   };
@@ -179,8 +179,8 @@ export default function UsersManagementPage() {
         fetchUsers();
       }
     } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || 
-                          `Failed to delete ${deleteTarget.type}`;
+      const errorMessage = error.response?.data?.detail ||
+        `Failed to delete ${deleteTarget.type}`;
       showToastMessage(errorMessage, 'error');
     } finally {
       setShowDeleteConfirm(false);
@@ -204,6 +204,7 @@ export default function UsersManagementPage() {
   useEffect(() => {
     fetchUsers();
     fetchDepartmentRoles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Wait for auth to load
@@ -256,11 +257,11 @@ export default function UsersManagementPage() {
       });
       fetchUsers();
     } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || 
-                          error.response?.data?.password?.[0] ||
-                          error.response?.data?.username?.[0] ||
-                          error.response?.data?.email?.[0] ||
-                          'Failed to create user';
+      const errorMessage = error.response?.data?.detail ||
+        error.response?.data?.password?.[0] ||
+        error.response?.data?.username?.[0] ||
+        error.response?.data?.email?.[0] ||
+        'Failed to create user';
       showToastMessage(errorMessage, 'error');
     }
   };
@@ -283,10 +284,10 @@ export default function UsersManagementPage() {
       setShowEditModal(false);
       fetchUsers();
     } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || 
-                          error.response?.data?.username?.[0] ||
-                          error.response?.data?.email?.[0] ||
-                          'Failed to update user';
+      const errorMessage = error.response?.data?.detail ||
+        error.response?.data?.username?.[0] ||
+        error.response?.data?.email?.[0] ||
+        'Failed to update user';
       showToastMessage(errorMessage, 'error');
     }
   };
@@ -311,7 +312,7 @@ export default function UsersManagementPage() {
         if (!prev) return prev;
         const currentRoles = prev.department_roles || [];
         const roleExists = currentRoles.some(r => r.id === roleId);
-        
+
         if (roleExists) {
           return { ...prev, department_roles: currentRoles.filter(r => r.id !== roleId) };
         } else {
@@ -593,11 +594,10 @@ export default function UsersManagementPage() {
                       <div className="text-sm text-slate-300">{user.email}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.role === 'admin' ? 'bg-red-500/20 text-red-400' :
+                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${user.role === 'admin' ? 'bg-red-500/20 text-red-400' :
                         user.role === 'manager' ? 'bg-amber-500/20 text-amber-400' :
-                        'bg-green-500/20 text-green-400'
-                      }`}>
+                          'bg-green-500/20 text-green-400'
+                        }`}>
                         {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
                       </span>
                     </td>
@@ -623,9 +623,8 @@ export default function UsersManagementPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                      }`}>
+                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${user.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                        }`}>
                         {user.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
@@ -777,11 +776,10 @@ export default function UsersManagementPage() {
                           e.preventDefault();
                           toggleDepartmentRole(role.id, true);
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                          newUser.department_role_ids.includes(role.id)
-                            ? 'ring-2 ring-offset-2 ring-offset-slate-800 shadow-lg'
-                            : 'opacity-50 hover:opacity-80'
-                        }`}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${newUser.department_role_ids.includes(role.id)
+                          ? 'ring-2 ring-offset-2 ring-offset-slate-800 shadow-lg'
+                          : 'opacity-50 hover:opacity-80'
+                          }`}
                         style={{
                           backgroundColor: newUser.department_role_ids.includes(role.id) ? `${role.color}40` : `${role.color}15`,
                           color: newUser.department_role_ids.includes(role.id) ? role.color : `${role.color}cc`,
@@ -789,8 +787,8 @@ export default function UsersManagementPage() {
                         }}
                       >
                         <span className="flex items-center gap-1.5">
-                          <span 
-                            className="w-2 h-2 rounded-full" 
+                          <span
+                            className="w-2 h-2 rounded-full"
                             style={{ backgroundColor: role.color }}
                           />
                           {role.display_name}
@@ -946,11 +944,10 @@ export default function UsersManagementPage() {
                             e.preventDefault();
                             toggleDepartmentRole(role.id, false);
                           }}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                            isSelected
-                              ? 'ring-2 ring-offset-2 ring-offset-slate-800 shadow-lg'
-                              : 'opacity-50 hover:opacity-80'
-                          }`}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${isSelected
+                            ? 'ring-2 ring-offset-2 ring-offset-slate-800 shadow-lg'
+                            : 'opacity-50 hover:opacity-80'
+                            }`}
                           style={{
                             backgroundColor: isSelected ? `${role.color}40` : `${role.color}15`,
                             color: isSelected ? role.color : `${role.color}cc`,
@@ -958,8 +955,8 @@ export default function UsersManagementPage() {
                           }}
                         >
                           <span className="flex items-center gap-1.5">
-                            <span 
-                              className="w-2 h-2 rounded-full" 
+                            <span
+                              className="w-2 h-2 rounded-full"
                               style={{ backgroundColor: role.color }}
                             />
                             {role.display_name}
@@ -1042,11 +1039,10 @@ export default function UsersManagementPage() {
                 </div>
                 <div className="flex justify-between py-2 border-b border-slate-700">
                   <span className="text-slate-400">System Role</span>
-                  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    selectedUser.role === 'admin' ? 'bg-red-500/20 text-red-400' :
+                  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedUser.role === 'admin' ? 'bg-red-500/20 text-red-400' :
                     selectedUser.role === 'manager' ? 'bg-amber-500/20 text-amber-400' :
-                    'bg-green-500/20 text-green-400'
-                  }`}>
+                      'bg-green-500/20 text-green-400'
+                    }`}>
                     {selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)}
                   </span>
                 </div>
@@ -1074,9 +1070,8 @@ export default function UsersManagementPage() {
                 </div>
                 <div className="flex justify-between py-2 border-b border-slate-700">
                   <span className="text-slate-400">Status</span>
-                  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    selectedUser.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                  }`}>
+                  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedUser.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                    }`}>
                     {selectedUser.is_active ? 'Active' : 'Inactive'}
                   </span>
                 </div>
@@ -1122,7 +1117,7 @@ export default function UsersManagementPage() {
                   disabled={isEditingRole}
                   className="input-field w-full disabled:opacity-50 disabled:cursor-not-allowed"
                   value={isEditingRole ? selectedRole?.name : newRole.name}
-                  onChange={(e) => isEditingRole 
+                  onChange={(e) => isEditingRole
                     ? setSelectedRole(prev => prev ? { ...prev, name: e.target.value } : null)
                     : setNewRole({ ...newRole, name: e.target.value })
                   }
@@ -1137,7 +1132,7 @@ export default function UsersManagementPage() {
                   required
                   className="input-field w-full"
                   value={isEditingRole ? selectedRole?.display_name : newRole.display_name}
-                  onChange={(e) => isEditingRole 
+                  onChange={(e) => isEditingRole
                     ? setSelectedRole(prev => prev ? { ...prev, display_name: e.target.value } : null)
                     : setNewRole({ ...newRole, display_name: e.target.value })
                   }
@@ -1152,7 +1147,7 @@ export default function UsersManagementPage() {
                     required
                     className="w-12 h-10 rounded cursor-pointer bg-transparent border-0"
                     value={isEditingRole ? selectedRole?.color : newRole.color}
-                    onChange={(e) => isEditingRole 
+                    onChange={(e) => isEditingRole
                       ? setSelectedRole(prev => prev ? { ...prev, color: e.target.value } : null)
                       : setNewRole({ ...newRole, color: e.target.value })
                     }
@@ -1162,7 +1157,7 @@ export default function UsersManagementPage() {
                     required
                     className="input-field flex-1"
                     value={isEditingRole ? selectedRole?.color : newRole.color}
-                    onChange={(e) => isEditingRole 
+                    onChange={(e) => isEditingRole
                       ? setSelectedRole(prev => prev ? { ...prev, color: e.target.value } : null)
                       : setNewRole({ ...newRole, color: e.target.value })
                     }
@@ -1210,12 +1205,12 @@ export default function UsersManagementPage() {
                   </p>
                 </div>
               </div>
-              
+
               <div className="bg-slate-900/50 rounded-lg p-4 mb-6 border border-slate-700">
                 <p className="text-slate-300">
-                  {deleteTarget.type === 'role' 
-                    ? <>Are you sure you want to delete the role <span className="text-white font-semibold">"{deleteTarget.name}"</span>? This will remove it from all users.</>
-                    : <>Are you sure you want to delete user <span className="text-white font-semibold">"{deleteTarget.name}"</span>?</>
+                  {deleteTarget.type === 'role'
+                    ? <>Are you sure you want to delete the role <span className="text-white font-semibold">&quot;{deleteTarget.name}&quot;</span>? This will remove it from all users.</>
+                    : <>Are you sure you want to delete user <span className="text-white font-semibold">&quot;{deleteTarget.name}&quot;</span>?</>
                   }
                 </p>
               </div>

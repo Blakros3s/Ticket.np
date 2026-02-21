@@ -1,4 +1,4 @@
-// Loading skeleton components for better UX
+﻿// Loading skeleton components for better UX
 
 interface SkeletonProps {
   className?: string;
