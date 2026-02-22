@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { projectsApi, Project, ProjectDocument } from '@/lib/projects';
@@ -37,9 +38,9 @@ export default function ProjectDetailPage() {
   const [viewingContent, setViewingContent] = useState<string | null>(null);
   const [isViewingLoading, setIsViewingLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [showRemoveMember, setShowRemoveMember] = useState(false);
-  const [memberToRemove, setMemberToRemove] = useState<{id: number; name: string} | null>(null);
+  const [memberToRemove, setMemberToRemove] = useState<{ id: number; name: string } | null>(null);
   const [isRemovingMember, setIsRemovingMember] = useState(false);
 
   const isManager = user?.role === 'manager' || user?.role === 'admin';
@@ -972,7 +973,9 @@ export default function ProjectDetailPage() {
                       if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) {
                         return (
                           <div className="flex items-center justify-center p-4">
-                            <img src={viewingDoc.file} alt={viewingDoc.title} className="max-h-full max-w-full rounded-lg shadow-2xl" />
+                            <div className="relative max-h-full max-w-full aspect-auto">
+                              <Image src={viewingDoc.file} alt={viewingDoc.title} width={1200} height={800} className="rounded-lg shadow-2xl object-contain h-auto w-auto" />
+                            </div>
                           </div>
                         );
                       }

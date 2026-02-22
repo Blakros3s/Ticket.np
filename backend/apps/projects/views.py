@@ -34,8 +34,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 models.Q(created_by=user) | models.Q(members=user)
             ).distinct()
         
-        # Employee sees only projects they are members of
-        return Project.objects.filter(members=user)
+        # Employee sees projects they are members of or created
+        return Project.objects.filter(
+            models.Q(created_by=user) | models.Q(members=user)
+        ).distinct()
     
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy', 'add_member', 'remove_member']:

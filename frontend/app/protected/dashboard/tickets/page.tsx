@@ -294,7 +294,19 @@ export default function TicketsPage() {
                     </td>
                     <td className="px-6 py-4">
                       {ticket.assignee_name ? (
-                        <span className="text-sm text-slate-300">{ticket.assignee_name}</span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-sky-500/20 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-medium text-sky-400">
+                              {ticket.assignee_name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-sm text-white truncate">{ticket.assignee_name}</span>
+                            {ticket.assignee_username && (
+                              <span className="text-xs text-slate-500">@{ticket.assignee_username}</span>
+                            )}
+                          </div>
+                        </div>
                       ) : (
                         <span className="text-sm text-slate-500 italic">Unassigned</span>
                       )}

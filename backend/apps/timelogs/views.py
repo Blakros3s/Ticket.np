@@ -152,6 +152,59 @@ class WorkLogViewSet(viewsets.ModelViewSet):
         })
     
     @action(detail=False, methods=['get'])
+    def ticket_active_session(self, request):
+        """Get the active work session for a specific ticket (for stopwatch display)"""
+        ticket_id = request.query_params.get('ticket_id')
+        
+        if not ticket_id:
+            return Response(
+                {'error': 'ticket_id parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        user = request.user
+        
+        # Get active work log for this ticket
+        active_log = WorkLog.objects.filter(
+            ticket_id=ticket_id,
+            end_time__isnull=True
+        ).first()
+        
+        # Check if user can view this - admin/manager or the assignee
+        from apps.tickets.models import Ticket
+        try:
+            ticket = Ticket.objects.get(id=ticket_id)
+        except Ticket.DoesNotExist:
+            return Response({'active': False, 'error': 'Ticket not found'})
+        
+        can_view = user.role in ['admin', 'manager'] or ticket.assignee_id == user.id
+        
+        if not can_view:
+            return Response({'active': False, 'error': 'Permission denied'})
+        
+        if not active_log:
+            return Response({'active': False})
+        
+        # Calculate elapsed time
+        elapsed_seconds = int((timezone.now() - active_log.start_time).total_seconds())
+        
+        return Response({
+            'active': True,
+            'work_log': WorkLogSerializer(active_log).data,
+            'elapsed_seconds': elapsed_seconds,
+            'elapsed_formatted': self._format_duration(elapsed_seconds),
+            'user_id': active_log.user_id,
+            'user_name': active_log.user.username
+        })
+    
+    def _format_duration(self, seconds):
+        """Format seconds to HH:MM:SS"""
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    
+    @action(detail=False, methods=['get'])
     def total_time(self, request):
         """Get total time spent on a ticket"""
         ticket_id = request.query_params.get('ticket_id')

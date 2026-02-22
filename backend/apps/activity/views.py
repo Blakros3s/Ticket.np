@@ -23,6 +23,16 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
                 content_type__model='ticket',
                 object_id=ticket_id
             )
+            
+            # Check if user is the assignee of this ticket
+            from apps.tickets.models import Ticket
+            try:
+                ticket = Ticket.objects.get(id=ticket_id)
+                is_assignee = ticket.assignee_id == user.id
+            except Ticket.DoesNotExist:
+                is_assignee = False
+        else:
+            is_assignee = False
         
         # Filter by user if provided
         user_id = self.request.query_params.get('user_id')
@@ -38,8 +48,12 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
         if user.role in ['admin', 'manager']:
             return queryset.select_related('user', 'content_type')
         
-        # Regular users only see their own activities
-        return queryset.filter(user=user).select_related('user', 'content_type')
+        # Ticket assignee sees all activities on their ticket
+        if is_assignee:
+            return queryset.select_related('user', 'content_type')
+        
+        # Employees cannot see activity logs
+        return queryset.none()
     
     @action(detail=False, methods=['get'])
     def by_ticket(self, request):
@@ -53,6 +67,16 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
         
         user = request.user
         
+        # Get the ticket to check assignee
+        from apps.tickets.models import Ticket
+        try:
+            ticket = Ticket.objects.get(id=ticket_id)
+        except Ticket.DoesNotExist:
+            return Response(
+                {'error': 'Ticket not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
         # Base query for the ticket
         logs = ActivityLog.objects.filter(
             content_type__model='ticket',
@@ -61,10 +85,13 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
         
         # Admin and Manager see all activities for the ticket
         if user.role in ['admin', 'manager']:
-            pass  # No additional filtering
+            pass
+        # Ticket assignee sees all activities on their ticket
+        elif ticket.assignee_id == user.id:
+            pass
+        # Employees cannot see activity logs
         else:
-            # Regular users only see their own activities on this ticket
-            logs = logs.filter(user=user)
+            logs = logs.none()
         
         logs = logs.select_related('user', 'content_type')
         serializer = self.get_serializer(logs, many=True)

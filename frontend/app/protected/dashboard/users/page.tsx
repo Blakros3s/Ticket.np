@@ -72,6 +72,15 @@ export default function UsersManagementPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'role' | 'user'; id: number; name: string } | null>(null);
 
+  // Password Reset Modal State
+  const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
+  const [passwordResetData, setPasswordResetData] = useState({
+    new_password: '',
+    confirm_password: ''
+  });
+  const [resetPasswordErrors, setResetPasswordErrors] = useState<string[]>([]);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+
   const showToastMessage = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -295,6 +304,48 @@ export default function UsersManagementPage() {
   const handleDeleteUser = async (userId: number, username: string) => {
     setDeleteTarget({ type: 'user', id: userId, name: username });
     setShowDeleteConfirm(true);
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    
+    setResetPasswordErrors([]);
+    
+    if (passwordResetData.new_password !== passwordResetData.confirm_password) {
+      setResetPasswordErrors(['Passwords do not match']);
+      return;
+    }
+    
+    if (passwordResetData.new_password.length < 8) {
+      setResetPasswordErrors(['Password must be at least 8 characters']);
+      return;
+    }
+    
+    setIsResettingPassword(true);
+    try {
+      await authApi.adminResetPassword(selectedUser.id, {
+        new_password: passwordResetData.new_password,
+        confirm_password: passwordResetData.confirm_password
+      });
+      showToastMessage(`Password reset successfully for ${selectedUser.username}`, 'success');
+      setShowPasswordResetModal(false);
+      setPasswordResetData({ new_password: '', confirm_password: '' });
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 
+        error.response?.data?.detail ||
+        'Failed to reset password';
+      setResetPasswordErrors([errorMessage]);
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
+  const openPasswordResetModal = (user: User) => {
+    setSelectedUser(user);
+    setPasswordResetData({ new_password: '', confirm_password: '' });
+    setResetPasswordErrors([]);
+    setShowPasswordResetModal(true);
   };
 
   const toggleDepartmentRole = (roleId: number, isNewUser: boolean = false) => {
@@ -661,6 +712,20 @@ export default function UsersManagementPage() {
                         >
                           <svg className="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openPasswordResetModal(user);
+                          }}
+                          className="p-2 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-all cursor-pointer"
+                          title="Reset Password"
+                        >
+                          <svg className="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                           </svg>
                         </button>
                         <button
@@ -1238,6 +1303,87 @@ export default function UsersManagementPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Password Reset Modal */}
+      {showPasswordResetModal && selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-md">
+            <div className="p-6 border-b border-slate-700">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-white">Reset Password</h2>
+                  <p className="text-sm text-slate-400 mt-1">Reset password for {selectedUser.username}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordResetModal(false);
+                    setPasswordResetData({ new_password: '', confirm_password: '' });
+                    setResetPasswordErrors([]);
+                  }}
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <form onSubmit={handleResetPassword} className="p-6 space-y-4">
+              {resetPasswordErrors.length > 0 && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  {resetPasswordErrors.map((err, idx) => (
+                    <p key={idx} className="text-red-400 text-sm">{err}</p>
+                  ))}
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">New Password</label>
+                <input
+                  type="password"
+                  required
+                  className="input-field w-full"
+                  value={passwordResetData.new_password}
+                  onChange={(e) => setPasswordResetData({ ...passwordResetData, new_password: e.target.value })}
+                  placeholder="Enter new password"
+                />
+                <p className="text-xs text-slate-500 mt-1">Minimum 8 characters</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Confirm Password</label>
+                <input
+                  type="password"
+                  required
+                  className="input-field w-full"
+                  value={passwordResetData.confirm_password}
+                  onChange={(e) => setPasswordResetData({ ...passwordResetData, confirm_password: e.target.value })}
+                  placeholder="Confirm new password"
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordResetModal(false);
+                    setPasswordResetData({ new_password: '', confirm_password: '' });
+                    setResetPasswordErrors([]);
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResettingPassword}
+                  className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors font-medium cursor-pointer disabled:opacity-50"
+                >
+                  {isResettingPassword ? 'Resetting...' : 'Reset Password'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

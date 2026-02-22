@@ -19,6 +19,16 @@ export interface ActiveSession {
   elapsed_minutes?: number;
 }
 
+export interface TicketActiveSession {
+  active: boolean;
+  work_log?: WorkLog;
+  elapsed_seconds?: number;
+  elapsed_formatted?: string;
+  user_id?: number;
+  user_name?: string;
+  error?: string;
+}
+
 export interface TotalTime {
   ticket_id: string;
   total_minutes: number;
@@ -62,6 +72,11 @@ export const timelogsApi = {
 
   getActiveSession: async (): Promise<ActiveSession> => {
     const response = await api.get<ActiveSession>('/timelogs/worklogs/active_session/');
+    return response.data;
+  },
+
+  getTicketActiveSession: async (ticketId: number): Promise<TicketActiveSession> => {
+    const response = await api.get<TicketActiveSession>(`/timelogs/worklogs/ticket_active_session/?ticket_id=${ticketId}`);
     return response.data;
   },
 

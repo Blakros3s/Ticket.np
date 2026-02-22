@@ -51,7 +51,9 @@ class ProjectCreateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         validated_data['created_by'] = self.context['request'].user
-        return super().create(validated_data)
+        project = super().create(validated_data)
+        ProjectMember.objects.create(project=project, user=validated_data['created_by'])
+        return project
 
 
 class ProjectDocumentSerializer(serializers.ModelSerializer):

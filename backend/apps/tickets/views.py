@@ -41,6 +41,7 @@ class TicketViewSet(viewsets.ModelViewSet):
     search_fields = ['ticket_id', 'title', 'description']
     ordering_fields = ['created_at', 'updated_at', 'priority']
     ordering = ['-created_at']
+    lookup_field = 'id'
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -125,7 +126,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         instance.delete()
     
     @action(detail=True, methods=['patch'])
-    def update_status(self, request, pk=None):
+    def update_status(self, request, id=None):
         ticket = self.get_object()
         serializer = TicketStatusSerializer(ticket, data=request.data, partial=True)
         
@@ -139,6 +140,13 @@ class TicketViewSet(viewsets.ModelViewSet):
             if new_status not in valid_transitions:
                 return Response(
                     {'error': f'Cannot transition from {old_status} to {new_status}. Valid transitions: {valid_transitions}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Require assignee to move to in_progress
+            if new_status == 'in_progress' and ticket.assignee is None:
+                return Response(
+                    {'error': 'Cannot move to In Progress without an assignee. Please assign the ticket first.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
@@ -250,19 +258,87 @@ class TicketViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
-    def self_assign(self, request, pk=None):
+    def assign_ticket(self, request, id=None):
+        """
+        Assign ticket to a user.
+        - Manager/Admin: can assign to anyone
+        - Ticket creator: can assign to anyone
+        - Regular user: can only self-assign (use self_assign endpoint)
+        """
+        ticket = self.get_object()
+        user = request.user
+        target_user_id = request.data.get('user_id')
+        
+        if not target_user_id:
+            return Response(
+                {'error': 'user_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            target_user_id = int(target_user_id)
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'user_id must be a valid integer'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from apps.users.models import User
+        try:
+            target_user = User.objects.get(id=target_user_id)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        is_manager_or_admin = user.role in ['admin', 'manager']
+        is_creator = ticket.created_by_id == user.id
+        is_project_member = ticket.project.members.filter(id=user.id).exists()
+        
+        # Allow if manager/admin, creator, or project member
+        if not is_manager_or_admin and not is_creator and not is_project_member:
+            return Response(
+                {'error': 'Only project members, managers, admins, or ticket creators can assign tickets.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        is_member = ticket.project.members.filter(id=target_user.id).exists() or target_user.role in ['admin', 'manager']
+        if not is_member:
+            return Response(
+                {'error': 'The selected user must be a member of this project.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        old_assignee = ticket.assignee.username if ticket.assignee else "Unassigned"
+        ticket.assignee = target_user
+        ticket.save()
+        
+        log_activity(
+            action='update',
+            user=user,
+            instance=ticket,
+            description=f"Assigned ticket {ticket.ticket_id} from '{old_assignee}' to '{target_user.username}'"
+        )
+        
+        return Response(TicketSerializer(ticket).data)
+
+    @action(detail=True, methods=['post'])
+    def self_assign(self, request, id=None):
         """Allow project member to self-assign an unassigned ticket"""
         ticket = self.get_object()
         user = request.user
         
-        # Check if ticket is already assigned
         if ticket.assignee is not None:
-            return Response(
-                {'error': 'This ticket is already assigned. Only managers can reassign.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            is_manager_or_admin = user.role in ['admin', 'manager']
+            is_creator = ticket.created_by_id == user.id
+            
+            if not is_manager_or_admin and not is_creator:
+                return Response(
+                    {'error': 'This ticket is already assigned. Only managers or ticket creators can reassign.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
-        # Check if user is a member of the project
         is_member = ticket.project.members.filter(id=user.id).exists() or user.role in ['admin', 'manager']
         if not is_member:
             return Response(
@@ -270,7 +346,6 @@ class TicketViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # Assign the ticket
         ticket.assignee = user
         ticket.save()
         
@@ -282,3 +357,83 @@ class TicketViewSet(viewsets.ModelViewSet):
         )
         
         return Response(TicketSerializer(ticket).data)
+    
+    @action(detail=True, methods=['post'], url_path='media')
+    def upload_media(self, request, id=None):
+        """Upload media file to a ticket - any project member can upload"""
+        try:
+            ticket = self.get_object()
+        except Exception as e:
+            return Response(
+                {'error': f'Ticket not found: {str(e)}'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        user = request.user
+        
+        is_member = ticket.project.members.filter(id=user.id).exists() or user.role in ['admin', 'manager']
+        if not is_member:
+            return Response(
+                {'error': 'You must be a member of this project to upload files.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        file = request.FILES.get('file')
+        if not file:
+            return Response(
+                {'error': 'No file provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from .models import TicketMedia
+        media = TicketMedia.objects.create(
+            ticket=ticket,
+            file=file,
+            file_name=file.name,
+            file_size=file.size,
+            uploaded_by=user
+        )
+        
+        log_activity(
+            action='update',
+            user=user,
+            instance=ticket,
+            description=f"Uploaded attachment: {file.name}"
+        )
+        
+        from .serializers import TicketMediaSerializer
+        return Response(TicketMediaSerializer(media).data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['delete'], url_path='media/(?P<media_id>\d+)')
+    def delete_media(self, request, id=None, media_id=None):
+        """Delete a media file from a ticket - only creator, manager, admin can delete"""
+        ticket = self.get_object()
+        user = request.user
+        
+        from .models import TicketMedia
+        try:
+            media = TicketMedia.objects.get(id=media_id, ticket=ticket)
+        except TicketMedia.DoesNotExist:
+            return Response(
+                {'error': 'Media not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        can_delete = user.role in ['admin', 'manager'] or ticket.created_by_id == user.id
+        if not can_delete:
+            return Response(
+                {'error': 'Only managers, admins, or ticket creators can delete attachments.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        file_name = media.file_name
+        media.delete()
+        
+        log_activity(
+            action='update',
+            user=user,
+            instance=ticket,
+            description=f"Deleted attachment: {file_name}"
+        )
+        
+        return Response(status=status.HTTP_204_NO_CONTENT)

@@ -248,8 +248,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               </h3>
             )}
             <Link
-              href="#"
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-all"
+              href="/protected/dashboard/reports"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                isActive('/protected/dashboard/reports') 
+                  ? 'bg-gradient-to-r from-sky-500/20 to-violet-500/20 text-white border-l-2 border-sky-400' 
+                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+              }`}
             >
               <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -261,7 +265,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
         {/* User Profile & Logout */}
         <div className="border-t border-slate-700/50 p-4">
-          <div className="flex items-center gap-3 mb-4">
+          <Link
+            href="/protected/dashboard/profile"
+            className="flex items-center gap-3 mb-4 hover:bg-slate-800/50 p-2 -m-2 rounded-lg transition-colors"
+          >
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center text-white font-semibold flex-shrink-0">
               {user?.first_name?.[0]}{user?.last_name?.[0]}
             </div>
@@ -271,7 +278,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <p className="text-xs text-slate-400 capitalize">{user?.role}</p>
               </div>
             )}
-          </div>
+          </Link>
           
           <button
             onClick={logout}

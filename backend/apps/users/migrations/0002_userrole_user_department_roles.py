@@ -8,9 +8,9 @@ def create_default_roles(apps, schema_editor):
     UserRole = apps.get_model('users', 'UserRole')
     
     roles = [
-        ('frontend', 'Frontend', '#3b82f6'),      # blue-500
-        ('backend', 'Backend', '#10b981'),        # emerald-500
-        ('devops', 'DevOps', '#f59e0b'),          # amber-500
+        ('frontend', 'Frontend Developer', '#3b82f6'),      # blue-500
+        ('backend', 'Backend Developer', '#10b981'),        # emerald-500
+        ('devops', 'DevOps Engineer', '#f59e0b'),          # amber-500
         ('qa', 'QA Engineer', '#8b5cf6'),         # violet-500
         ('ui_ux', 'UI/UX Designer', '#ec4899'),   # pink-500
         ('product', 'Product Manager', '#ef4444'), # red-500

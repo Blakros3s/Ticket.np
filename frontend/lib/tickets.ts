@@ -4,6 +4,27 @@ export type TicketType = 'bug' | 'task' | 'feature';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
 export type TicketStatus = 'new' | 'in_progress' | 'qa' | 'closed' | 'reopened';
 
+export interface TicketMedia {
+  id: number;
+  file: string;
+  file_name: string;
+  file_type: 'image' | 'video' | 'document' | 'other';
+  file_size: number;
+  uploaded_by: number;
+  uploaded_by_username: string;
+  created_at: string;
+}
+
+export interface TicketComment {
+  id: number;
+  author: number;
+  user_name: string;
+  user_username: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Ticket {
   id: number;
   ticket_id: string;
@@ -16,9 +37,15 @@ export interface Ticket {
   project_name: string;
   assignee: number | null;
   assignee_name: string | null;
+  assignee_username: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
+  media_files: TicketMedia[];
+  comments: TicketComment[];
+  in_progress_at: string | null;
+  qa_at: string | null;
+  closed_at: string | null;
 }
 
 export interface CreateTicketData {
@@ -28,6 +55,7 @@ export interface CreateTicketData {
   priority: TicketPriority;
   project: number;
   assignee?: number | null;
+  media_files?: File[];
 }
 
 export interface UpdateTicketData {
@@ -77,6 +105,26 @@ export const ticketsApi = {
   },
 
   createTicket: async (data: CreateTicketData): Promise<Ticket> => {
+    if (data.media_files && data.media_files.length > 0) {
+      const formData = new FormData();
+      formData.append('title', data.title);
+      formData.append('description', data.description);
+      formData.append('type', data.type);
+      formData.append('priority', data.priority);
+      formData.append('project', data.project.toString());
+      if (data.assignee) {
+        formData.append('assignee', data.assignee.toString());
+      }
+      data.media_files.forEach((file) => {
+        formData.append('media_files', file);
+      });
+      
+      const response = await api.post<Ticket>('/tickets/tickets/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return response.data;
+    }
+    
     const response = await api.post<Ticket>('/tickets/tickets/', data);
     return response.data;
   },
@@ -123,6 +171,36 @@ export const ticketsApi = {
 
   selfAssign: async (id: number): Promise<Ticket> => {
     const response = await api.post<Ticket>(`/tickets/tickets/${id}/self_assign/`);
+    return response.data;
+  },
+
+  assignTicket: async (id: number, userId: number): Promise<Ticket> => {
+    const response = await api.post<Ticket>(`/tickets/tickets/${id}/assign_ticket/`, { user_id: userId });
+    return response.data;
+  },
+
+  uploadMedia: async (ticketId: number, file: File): Promise<TicketMedia> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post<TicketMedia>(
+      `/tickets/tickets/${ticketId}/media/`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data;
+  },
+
+  deleteMedia: async (ticketId: number, mediaId: number): Promise<void> => {
+    await api.delete(`/tickets/tickets/${ticketId}/media/${mediaId}/`);
+  },
+
+  getComments: async (ticketId: number): Promise<TicketComment[]> => {
+    const response = await api.get<TicketComment[]>(`/tickets/tickets/${ticketId}/comments/`);
+    return response.data;
+  },
+
+  addComment: async (ticketId: number, content: string): Promise<TicketComment> => {
+    const response = await api.post<TicketComment>(`/tickets/tickets/${ticketId}/comments/`, { content });
     return response.data;
   },
 };

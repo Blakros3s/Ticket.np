@@ -164,4 +164,23 @@ export const authApi = {
   deleteDepartmentRole: async (roleId: number): Promise<void> => {
     await api.delete(`/auth/department-roles/${roleId}/`);
   },
+
+  // User: change own password
+  changePassword: async (data: {
+    current_password: string;
+    new_password: string;
+    confirm_password: string;
+  }): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/profile/change-password/', data);
+    return response.data;
+  },
+
+  // Admin: reset any user's password
+  adminResetPassword: async (userId: number, data: {
+    new_password: string;
+    confirm_password: string;
+  }): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>(`/auth/users/${userId}/reset-password/`, data);
+    return response.data;
+  },
 };

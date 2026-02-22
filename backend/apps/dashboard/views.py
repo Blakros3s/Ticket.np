@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from django.db.models import Count, Q, Sum, Avg
 from django.utils import timezone
 from datetime import timedelta
+from collections import OrderedDict
 
 from apps.users.models import User
 from apps.projects.models import Project
@@ -284,3 +285,314 @@ def admin_dashboard(request):
 
 # Import Q at the end to avoid circular imports
 from django.db.models import Q
+from django.db.models.functions import TruncWeek, TruncDay
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def employee_reports(request):
+    """Employee Reports: Personal productivity and time analytics"""
+    user = request.user
+    
+    days = int(request.query_params.get('days', 30))
+    start_date = timezone.now() - timedelta(days=days)
+    
+    # Tickets over time (by week)
+    tickets_created = Ticket.objects.filter(
+        created_by=user,
+        created_at__gte=start_date
+    ).annotate(week=TruncWeek('created_at')).values('week').annotate(
+        count=Count('id')
+    ).order_by('week')
+    
+    tickets_completed = Ticket.objects.filter(
+        assignee=user,
+        status='closed',
+        closed_at__gte=start_date
+    ).annotate(week=TruncWeek('closed_at')).values('week').annotate(
+        count=Count('id')
+    ).order_by('week')
+    
+    # Time logged by project
+    time_by_project = WorkLog.objects.filter(
+        user=user,
+        end_time__isnull=False,
+        start_time__gte=start_date
+    ).values('ticket__project__name').annotate(
+        total_minutes=Sum('duration_minutes'),
+        session_count=Count('id')
+    ).order_by('-total_minutes')[:10]
+    
+    # Productivity metrics
+    total_assigned = Ticket.objects.filter(assignee=user).count()
+    total_completed = Ticket.objects.filter(assignee=user, status='closed').count()
+    
+    avg_resolution_time = WorkLog.objects.filter(
+        user=user,
+        end_time__isnull=False
+    ).aggregate(avg=Avg('duration_minutes'))['avg'] or 0
+    
+    # Time trend (daily for last 14 days)
+    time_trend = []
+    for i in range(14):
+        day = timezone.now().date() - timedelta(days=13-i)
+        day_start = timezone.make_aware(timezone.datetime.combine(day, timezone.datetime.min.time()))
+        day_end = day_start + timedelta(days=1)
+        
+        total_minutes = WorkLog.objects.filter(
+            user=user,
+            start_time__gte=day_start,
+            start_time__lt=day_end,
+            end_time__isnull=False
+        ).aggregate(total=Sum('duration_minutes'))['total'] or 0
+        
+        time_trend.append({
+            'date': day.isoformat(),
+            'hours': round(total_minutes / 60, 2)
+        })
+    
+    # Priority distribution of assigned tickets
+    priority_dist = Ticket.objects.filter(
+        assignee=user
+    ).values('priority').annotate(count=Count('id'))
+    
+    return Response({
+        'tickets_created_over_time': [
+            {'week': item['week'].strftime('%Y-%m-%d') if item['week'] else None, 'count': item['count']}
+            for item in tickets_created
+        ],
+        'tickets_completed_over_time': [
+            {'week': item['week'].strftime('%Y-%m-%d') if item['week'] else None, 'count': item['count']}
+            for item in tickets_completed
+        ],
+        'time_by_project': [
+            {
+                'project_name': item['ticket__project__name'] or 'No Project',
+                'total_hours': round((item['total_minutes'] or 0) / 60, 2),
+                'session_count': item['session_count']
+            }
+            for item in time_by_project
+        ],
+        'productivity': {
+            'total_assigned': total_assigned,
+            'total_completed': total_completed,
+            'completion_rate': round((total_completed / total_assigned * 100) if total_assigned > 0 else 0, 1),
+            'avg_resolution_hours': round(avg_resolution_time / 60, 2)
+        },
+        'time_trend': time_trend,
+        'priority_distribution': {item['priority']: item['count'] for item in priority_dist}
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def manager_reports(request):
+    """Manager Reports: Team performance and project analytics"""
+    user = request.user
+    
+    if user.role not in ['admin', 'manager']:
+        return Response({'error': 'Permission denied'}, status=403)
+    
+    days = int(request.query_params.get('days', 30))
+    start_date = timezone.now() - timedelta(days=days)
+    
+    # Projects managed
+    managed_projects = Project.objects.filter(
+        Q(created_by=user) | Q(members=user)
+    ).distinct()
+    
+    # Team performance
+    team_members = User.objects.filter(
+        Q(projectmember__project__in=managed_projects) | Q(role='admin')
+    ).distinct()
+    
+    team_performance = []
+    for member in team_members:
+        assigned = Ticket.objects.filter(assignee=member, project__in=managed_projects)
+        completed = assigned.filter(status='closed')
+        time_logged = WorkLog.objects.filter(
+            user=member,
+            ticket__project__in=managed_projects,
+            end_time__isnull=False
+        ).aggregate(total=Sum('duration_minutes'))['total'] or 0
+        
+        team_performance.append({
+            'user_id': member.id,
+            'user_name': f"{member.first_name} {member.last_name}".strip() or member.username,
+            'assigned': assigned.count(),
+            'completed': completed.count(),
+            'in_progress': assigned.filter(status='in_progress').count(),
+            'total_hours': round(time_logged / 60, 2)
+        })
+    
+    # Project progress
+    project_progress = []
+    for project in managed_projects.filter(status='active'):
+        tickets = Ticket.objects.filter(project=project)
+        total = tickets.count()
+        completed = tickets.filter(status='closed').count()
+        
+        project_progress.append({
+            'project_id': project.id,
+            'project_name': project.name,
+            'total_tickets': total,
+            'completed': completed,
+            'progress': round((completed / total * 100) if total > 0 else 0, 1)
+        })
+    
+    # Ticket trends (weekly)
+    ticket_trends = Ticket.objects.filter(
+        project__in=managed_projects,
+        created_at__gte=start_date
+    ).annotate(week=TruncWeek('created_at')).values('week', 'status').annotate(
+        count=Count('id')
+    ).order_by('week', 'status')
+    
+    # Organize trends
+    trends = OrderedDict()
+    for item in ticket_trends:
+        week = item['week'].strftime('%Y-%m-%d') if item['week'] else 'Unknown'
+        if week not in trends:
+            trends[week] = {}
+        trends[week][item['status']] = item['count']
+    
+    # Average resolution time by priority
+    resolution_by_priority = []
+    for priority in ['low', 'medium', 'high', 'critical']:
+        tickets_with_time = Ticket.objects.filter(
+            project__in=managed_projects,
+            priority=priority,
+            status='closed',
+            closed_at__isnull=False
+        )
+        
+        total_resolution_hours = 0
+        count = 0
+        for ticket in tickets_with_time:
+            if ticket.in_progress_at and ticket.closed_at:
+                delta = ticket.closed_at - ticket.in_progress_at
+                total_resolution_hours += delta.total_seconds() / 3600
+                count += 1
+        
+        resolution_by_priority.append({
+            'priority': priority,
+            'avg_hours': round(total_resolution_hours / count, 1) if count > 0 else 0,
+            'count': count
+        })
+    
+    return Response({
+        'team_performance': sorted(team_performance, key=lambda x: x['completed'], reverse=True),
+        'project_progress': project_progress,
+        'ticket_trends': [{'week': k, **v} for k, v in trends.items()],
+        'resolution_by_priority': resolution_by_priority,
+        'period_days': days
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_reports(request):
+    """Admin Reports: System-wide analytics"""
+    user = request.user
+    
+    if user.role != 'admin':
+        return Response({'error': 'Permission denied'}, status=403)
+    
+    days = int(request.query_params.get('days', 30))
+    start_date = timezone.now() - timedelta(days=days)
+    
+    # User activity trends (daily)
+    user_activity = ActivityLog.objects.filter(
+        created_at__gte=start_date
+    ).annotate(day=TruncDay('created_at')).values('day').annotate(
+        count=Count('id')
+    ).order_by('day')
+    
+    # Ticket volume trends (daily)
+    ticket_volume = Ticket.objects.filter(
+        created_at__gte=start_date
+    ).annotate(day=TruncDay('created_at')).values('day').annotate(
+        created=Count('id')
+    ).order_by('day')
+    
+    # Closed tickets trend
+    closed_volume = Ticket.objects.filter(
+        closed_at__gte=start_date,
+        status='closed'
+    ).annotate(day=TruncDay('closed_at')).values('day').annotate(
+        closed=Count('id')
+    ).order_by('day')
+    
+    # Merge created and closed
+    volume_trend = OrderedDict()
+    for item in ticket_volume:
+        day = item['day'].strftime('%Y-%m-%d') if item['day'] else 'Unknown'
+        volume_trend[day] = {'created': item['created'], 'closed': 0}
+    for item in closed_volume:
+        day = item['day'].strftime('%Y-%m-%d') if item['day'] else 'Unknown'
+        if day in volume_trend:
+            volume_trend[day]['closed'] = item['closed']
+        else:
+            volume_trend[day] = {'created': 0, 'closed': item['closed']}
+    
+    # Project health
+    projects = Project.objects.filter(status='active')
+    project_health = []
+    for project in projects:
+        tickets = Ticket.objects.filter(project=project)
+        total = tickets.count()
+        open_tickets = tickets.filter(status__in=['new', 'in_progress', 'qa', 'reopened']).count()
+        overdue = tickets.filter(
+            created_at__lte=timezone.now() - timedelta(days=14),
+            status__in=['new', 'in_progress', 'qa']
+        ).count()
+        
+        health_score = max(0, 100 - (overdue * 10) - (open_tickets * 2 if total > 0 else 0))
+        
+        project_health.append({
+            'project_id': project.id,
+            'project_name': project.name,
+            'total_tickets': total,
+            'open_tickets': open_tickets,
+            'overdue': overdue,
+            'health_score': health_score
+        })
+    
+    # Top performers
+    top_performers = User.objects.annotate(
+        tickets_closed=Count('assigned_tickets', filter=Q(assigned_tickets__status='closed')),
+        total_time=Sum('worklog__duration_minutes')
+    ).filter(tickets_closed__gt=0).order_by('-tickets_closed')[:10]
+    
+    # Activity by type
+    activity_breakdown = ActivityLog.objects.filter(
+        created_at__gte=start_date
+    ).values('action').annotate(count=Count('id')).order_by('-count')
+    
+    return Response({
+        'user_activity_trend': [
+            {'date': item['day'].strftime('%Y-%m-%d') if item['day'] else None, 'count': item['count']}
+            for item in user_activity
+        ],
+        'ticket_volume_trend': [
+            {'date': k, **v} for k, v in volume_trend.items()
+        ],
+        'project_health': sorted(project_health, key=lambda x: x['health_score'], reverse=True),
+        'top_performers': [
+            {
+                'user_id': u.id,
+                'user_name': f"{u.first_name} {u.last_name}".strip() or u.username,
+                'tickets_closed': u.tickets_closed,
+                'total_hours': round((u.total_time or 0) / 60, 2)
+            }
+            for u in top_performers
+        ],
+        'activity_breakdown': {item['action']: item['count'] for item in activity_breakdown},
+        'period_days': days,
+        'summary': {
+            'total_users': User.objects.count(),
+            'total_projects': Project.objects.count(),
+            'total_tickets': Ticket.objects.count(),
+            'total_hours_logged': round((WorkLog.objects.filter(end_time__isnull=False).aggregate(t=Sum('duration_minutes'))['t'] or 0) / 60, 2)
+        }
+    })
