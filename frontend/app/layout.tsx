@@ -7,8 +7,8 @@ import { ToastProvider } from '@/components/toast-provider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'TicketHub | IT Ticket Management',
-  description: 'Professional IT ticket management system for teams',
+  title: 'TechnestHub | IT Management',
+  description: 'Professional IT management system for teams',
 };
 
 export default function RootLayout({

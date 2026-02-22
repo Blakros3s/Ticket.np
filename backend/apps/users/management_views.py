@@ -4,9 +4,8 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError
-from django.core.exceptions import PermissionDenied
 from .models import User, UserRole
-from .serializers import UserSerializer, RegisterSerializer, CustomTokenObtainPairSerializer, AdminUserCreateSerializer, UserRoleSerializer
+from .serializers import UserSerializer, AdminUserCreateSerializer, UserRoleSerializer
 from .permissions import IsAdminUser
 
 logger = logging.getLogger(__name__)
@@ -56,19 +55,6 @@ class UserListView(generics.ListAPIView):
         except Exception as e:
             logger.error(f"Error creating user via admin: {str(e)}")
             return Response({'detail': 'Failed to create user'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@extend_schema_view(
-    get=extend_schema(summary="Get user profile"),
-    put=extend_schema(summary="Update user profile"),
-    patch=extend_schema(summary="Partially update user profile")
-)
-class UserProfileView(generics.RetrieveUpdateAPIView):
-    serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_object(self):
-        return self.request.user
 
 
 @extend_schema_view(

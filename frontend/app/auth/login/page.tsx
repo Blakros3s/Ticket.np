@@ -56,7 +56,7 @@ export default function LoginPage() {
     <div className="min-h-screen grid-bg relative overflow-hidden">
       <div className="orb orb-1 pulse-animation"></div>
       <div className="orb orb-2 pulse-animation" style={{ animationDelay: '1.5s' }}></div>
-      
+
       <div className="relative z-10 min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full">
           <div className="text-center mb-8">
@@ -66,7 +66,7 @@ export default function LoginPage() {
               </svg>
             </div>
             <h2 className="text-3xl font-bold text-white">
-              Welcome to <span className="gradient-text">TicketHub</span>
+              Welcome to <span className="gradient-text">TechnestHub</span>
             </h2>
             <p className="mt-2 text-slate-400">Sign in to access your dashboard</p>
           </div>
@@ -128,7 +128,7 @@ export default function LoginPage() {
                   />
                 </div>
               </div>
- 
+
               <button
                 type="submit"
                 disabled={isLoading}

@@ -11,6 +11,14 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import * as mammoth from 'mammoth';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+const getFileUrl = (url: string) => {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  return `${API_URL}${url}`;
+};
+
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -170,7 +178,7 @@ export default function ProjectDetailPage() {
 
   const handleDownload = async (doc: ProjectDocument) => {
     try {
-      const response = await fetch(doc.file);
+      const response = await fetch(getFileUrl(doc.file));
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -188,12 +196,12 @@ export default function ProjectDetailPage() {
 
   const handleViewDoc = async (doc: ProjectDocument) => {
     setViewingDoc(doc);
-    const ext = doc.file.split('.').pop()?.toLowerCase();
+    const ext = getFileUrl(doc.file).split('.').pop()?.toLowerCase();
 
     if (ext === 'md' || ext === 'txt') {
       setIsViewingLoading(true);
       try {
-        const response = await fetch(doc.file);
+        const response = await fetch(getFileUrl(doc.file));
         const text = await response.text();
         setViewingContent(text);
       } catch (error) {
@@ -205,7 +213,7 @@ export default function ProjectDetailPage() {
     } else if (ext === 'docx') {
       setIsViewingLoading(true);
       try {
-        const response = await fetch(doc.file);
+        const response = await fetch(getFileUrl(doc.file));
         const arrayBuffer = await response.arrayBuffer();
         const result = await mammoth.convertToHtml({ arrayBuffer });
         setViewingContent(result.value);
@@ -382,8 +390,10 @@ export default function ProjectDetailPage() {
                     className="group relative flex items-center gap-4 bg-slate-700/30 hover:bg-slate-700/60 border border-slate-600/30 hover:border-slate-500/50 rounded-2xl px-4 py-3 transition-all"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <p className="text-sm font-bold text-white truncate">{member.user.username}</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-sm font-bold text-white truncate">
+                          {member.user.first_name} {member.user.last_name}
+                        </p>
                         <div className="flex flex-wrap gap-1">
                           {member.user.department_roles && member.user.department_roles.length > 0 ? (
                             member.user.department_roles.map(role => (
@@ -399,7 +409,7 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                       <p className="text-xs text-slate-400 truncate">
-                        {member.user.first_name} {member.user.last_name}
+                        @{member.user.username}
                       </p>
                     </div>
                     {isManager && member.user.id !== project.created_by.id && (
@@ -974,14 +984,14 @@ export default function ProjectDetailPage() {
                         return (
                           <div className="flex items-center justify-center p-4">
                             <div className="relative max-h-full max-w-full aspect-auto">
-                              <Image src={viewingDoc.file} alt={viewingDoc.title} width={1200} height={800} className="rounded-lg shadow-2xl object-contain h-auto w-auto" />
+                              <Image src={getFileUrl(viewingDoc.file)} alt={viewingDoc.title} width={1200} height={800} className="rounded-lg shadow-2xl object-contain h-auto w-auto" unoptimized />
                             </div>
                           </div>
                         );
                       }
                       if (ext === 'pdf') {
                         return (
-                          <iframe src={`${viewingDoc.file}#toolbar=0`} className="w-full h-full rounded-lg border-none" title={viewingDoc.title} />
+                          <iframe src={`${getFileUrl(viewingDoc.file)}#toolbar=0`} className="w-full h-full rounded-lg border-none" title={viewingDoc.title} />
                         );
                       }
                       return (
