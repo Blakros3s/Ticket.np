@@ -100,7 +100,7 @@ export default function LoginPage() {
                     required
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="input-field w-full pl-10 pr-4 py-3 rounded-xl text-white placeholder-slate-500"
+                    className="input-field w-full pl-12 pr-4 py-3 rounded-xl text-white placeholder-slate-500"
                     placeholder="Enter your username"
                   />
                 </div>
@@ -123,7 +123,7 @@ export default function LoginPage() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="input-field w-full pl-10 pr-4 py-3 rounded-xl text-white placeholder-slate-500"
+                    className="input-field w-full pl-12 pr-4 py-3 rounded-xl text-white placeholder-slate-500"
                     placeholder="Enter your password"
                   />
                 </div>

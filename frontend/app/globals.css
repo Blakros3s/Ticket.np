@@ -2,7 +2,6 @@
 
 @tailwind base;
 @tailwind components;
-@tailwind utilities;
 
 :root {
   --primary: #0ea5e9;
@@ -35,7 +34,7 @@ body {
 }
 
 .grid-bg {
-  background-image: 
+  background-image:
     linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
   background-size: 50px 50px;
@@ -103,7 +102,11 @@ body {
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(99, 102, 241, 0.3);
   transition: all 0.3s ease;
-  padding: 0.625rem 0.875rem;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  padding-left: 0.875rem;
+  padding-right: 0.875rem;
+
   border-radius: 0.5rem;
   color: #e2e8f0;
   font-size: 0.875rem;
@@ -256,18 +259,24 @@ textarea.input-field {
 }
 
 @keyframes float {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0px);
   }
+
   50% {
     transform: translateY(-20px);
   }
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 0.3;
   }
+
   50% {
     opacity: 0.6;
   }
@@ -277,6 +286,7 @@ textarea.input-field {
   0% {
     background-position: -1000px 0;
   }
+
   100% {
     background-position: 1000px 0;
   }
@@ -295,3 +305,5 @@ textarea.input-field {
   background-size: 1000px 100%;
   animation: shimmer 3s infinite;
 }
+
+@tailwind utilities;
