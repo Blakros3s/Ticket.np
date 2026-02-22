@@ -1,0 +1,73 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy'
+        required: true
+        default: 'latest'
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure SSH
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        SSH_HOST: ${{ secrets.SSH_HOST }}
+        SSH_USER: ${{ secrets.SSH_USER }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        cat >> ~/.ssh/config << EOF
+        Host deploy
+          HostName $SSH_HOST
+          User $SSH_USER
+          IdentityFile ~/.ssh/deploy_key
+          StrictHostKeyChecking no
+        EOF
+
+    - name: Deploy to server
+      run: |
+        # Copy docker-compose and env files to server
+        ssh deploy "mkdir -p /opt/tickethub"
+        scp docker-compose.prod.yml deploy:/opt/tickethub/docker-compose.yml
+        scp .env.deploy deploy:/opt/tickethub/.env
+        
+        # Login to GitHub Container Registry on server
+        ssh deploy "echo ${{ secrets.GITHUB_TOKEN }} | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin"
+        
+        # Pull and deploy
+        ssh deploy "cd /opt/tickethub && docker-compose pull && docker-compose up -d"
+        
+        # Cleanup old images
+        ssh deploy "docker image prune -f"
+
+    - name: Verify deployment
+      run: |
+        sleep 10
+        ssh deploy "cd /opt/tickethub && docker-compose ps"
+        
+        # Health check
+        curl -f http://${{ secrets.SSH_HOST }}/api/health/ || exit 1
+
+    - name: Notify deployment
+      if: always()
+      uses: slackapi/slack-github-action@v1
+      with:
+        payload: |
+          {
+            "text": "Deployment ${{ job.status }}: ${{ github.event.inputs.version }}"
+          }
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

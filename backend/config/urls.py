@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 urlpatterns = [
@@ -12,4 +14,12 @@ urlpatterns = [
     path('api/timelogs/', include('apps.timelogs.urls')),
     path('api/comments/', include('apps.comments.urls')),
     path('api/activity/', include('apps.activity.urls')),
+    path('api/dashboard/', include('apps.dashboard.urls')),
+    path('api/calendar/', include('apps.calendar.urls')),
+    path('api/todos/', include('apps.todos.urls')),
+    path('api/attendance/', include('apps.attendance.urls')),
+    path('api/', include('apps.core.urls')),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

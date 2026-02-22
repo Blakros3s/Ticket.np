@@ -1,0 +1,91 @@
+# syntax=docker/dockerfile:1.4
+# ==============================================================================
+# Development Dockerfile
+#  - Optimized for local development with hot reload
+#  - Uses BuildKit cache mounts for faster rebuilds
+# ==============================================================================
+
+# Stage 1: Builder
+FROM python:3.11-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# Install build dependencies with apt cache mount
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    # libpq5 needed in runtime for psycopg2
+    libpq-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv (fast Python package installer)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Copy requirements and install Python dependencies with uv cache mount
+COPY backend/requirements.txt /app/
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --index-strategy unsafe-best-match -r requirements.txt
+
+# Stage 2: Runtime
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/home/appuser/.local/bin:${PATH}"
+
+WORKDIR /app
+
+# Install runtime dependencies with apt cache mount
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    libjpeg62-turbo \
+    zlib1g \
+    curl \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r appgroup && useradd -r -g appgroup -m -u 1000 appuser
+
+# Create necessary directories
+RUN mkdir -p /app/staticfiles /app/media /app/logs /app/media && \
+    chown -R appuser:appgroup /app && \
+    chmod -R 755 /app/media
+
+# Copy installed Python packages from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
+COPY --from=builder /usr/local/bin/ /usr/local/bin/
+
+# Copy application code (will be overridden by volume mount in compose for dev)
+# COPY --chown=appuser:appgroup backend/ /app/
+
+# Copy entrypoint script
+COPY docker/backend/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && \
+    chmod +x /usr/local/bin/entrypoint.sh
+
+
+# Switch to non-root user (Disabled for dev to avoid bind-mount permission issues)
+# USER appuser
+
+
+EXPOSE 8000
+
+# Health check (not needed for dev)
+# HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+#     CMD curl -f http://localhost:8000/health/ || exit 1
+
+# Use entrypoint script
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

@@ -1,6 +1,7 @@
-'use client';
+﻿'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { User } from './auth';
 import { authApi } from './auth';
 
@@ -26,6 +27,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     checkAuth();
@@ -46,10 +48,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = async (username: string, password: string) => {
-    const response = await authApi.login({ username, password });
-    localStorage.setItem('access_token', response.access);
-    localStorage.setItem('refresh_token', response.refresh);
-    setUser(response.user);
+    try {
+      const response = await authApi.login({ username, password });
+      localStorage.setItem('access_token', response.access);
+      localStorage.setItem('refresh_token', response.refresh);
+      setUser(response.user);
+    } catch (error: any) {
+      console.error('Login error:', error);
+      console.error('Error response:', error.response);
+      console.error('Error data:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      throw error;
+    }
   };
 
   const register = async (data: {
@@ -60,15 +70,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     password: string;
     confirm_password: string;
   }) => {
-    const response = await authApi.register(data);
-    localStorage.setItem('access_token', response.access);
-    localStorage.setItem('refresh_token', response.refresh);
-    setUser(response.user);
+    try {
+      const response = await authApi.register(data);
+      localStorage.setItem('access_token', response.access);
+      localStorage.setItem('refresh_token', response.refresh);
+      setUser(response.user);
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      console.error('Error response:', error.response);
+      console.error('Error data:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      throw error;
+    }
   };
 
   const logout = () => {
     authApi.logout();
     setUser(null);
+    router.push('/');
   };
 
   const refreshUser = async () => {

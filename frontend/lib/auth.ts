@@ -1,4 +1,11 @@
-import api from './api';
+﻿import api from './api';
+
+export interface UserRole {
+  id: number;
+  name: string;
+  display_name: string;
+  color: string;
+}
 
 export interface User {
   id: number;
@@ -7,6 +14,7 @@ export interface User {
   first_name: string;
   last_name: string;
   role: 'admin' | 'employee' | 'manager';
+  department_roles: UserRole[];
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -66,11 +74,113 @@ export const authApi = {
   },
 
   getUsers: async (): Promise<User[]> => {
-    const response = await api.get<{ results: User[] }>('/auth/users/');
-    return response.data.results;
+    const response = await api.get<User[] | { results: User[] }>('/auth/users/');
+    const data = response.data;
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (data && typeof data === 'object' && 'results' in data) {
+      return data.results;
+    }
+    return [];
   },
 
   deactivateUser: async (userId: number): Promise<void> => {
     await api.post(`/auth/users/${userId}/deactivate/`);
+  },
+  deleteUser: async (userId: number): Promise<void> => {
+    await api.delete(`/auth/users/${userId}/`);
+  },
+
+  // Admin: create a new user
+  createUser: async (data: {
+    username: string;
+    email: string;
+    first_name?: string;
+    last_name?: string;
+    role?: 'admin' | 'employee' | 'manager';
+    department_role_ids?: number[];
+    password: string;
+    confirm_password?: string;
+  }): Promise<AuthResponse> => {
+    const response = await api.post<AuthResponse>('/auth/users/', data);
+    return response.data;
+  },
+
+  // Admin: update an existing user
+  updateUser: async (
+    userId: number,
+    data: Partial<{
+      username: string;
+      email: string;
+      first_name: string;
+      last_name: string;
+      role: 'admin' | 'employee' | 'manager';
+      department_role_ids: number[];
+      is_active: boolean;
+    }>
+  ): Promise<any> => {
+    const response = await api.patch(`/auth/users/${userId}/`, data);
+    return response.data;
+  },
+
+  // Get all department roles
+  getDepartmentRoles: async (): Promise<UserRole[]> => {
+    const response = await api.get<UserRole[] | { results: UserRole[] }>('/auth/department-roles/');
+    console.log('API response for department roles:', response.data);
+    // Handle both direct array and wrapped response
+    if (Array.isArray(response.data)) {
+      return response.data;
+    } else if (response.data && Array.isArray(response.data.results)) {
+      return response.data.results;
+    }
+    return [];
+  },
+
+  // Admin: create a new department role
+  createDepartmentRole: async (data: {
+    name: string;
+    display_name: string;
+    color: string;
+  }): Promise<UserRole> => {
+    const response = await api.post<UserRole>('/auth/department-roles/', data);
+    return response.data;
+  },
+
+  // Admin: update a department role
+  updateDepartmentRole: async (
+    roleId: number,
+    data: Partial<{
+      name: string;
+      display_name: string;
+      color: string;
+    }>
+  ): Promise<UserRole> => {
+    const response = await api.patch<UserRole>(`/auth/department-roles/${roleId}/`, data);
+    return response.data;
+  },
+
+  // Admin: delete a department role
+  deleteDepartmentRole: async (roleId: number): Promise<void> => {
+    await api.delete(`/auth/department-roles/${roleId}/`);
+  },
+
+  // User: change own password
+  changePassword: async (data: {
+    current_password: string;
+    new_password: string;
+    confirm_password: string;
+  }): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/profile/change-password/', data);
+    return response.data;
+  },
+
+  // Admin: reset any user's password
+  adminResetPassword: async (userId: number, data: {
+    new_password: string;
+    confirm_password: string;
+  }): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>(`/auth/users/${userId}/reset-password/`, data);
+    return response.data;
   },
 };

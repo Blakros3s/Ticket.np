@@ -3,35 +3,60 @@
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
+import { ErrorModal, extractErrorMessage } from '@/components/error-modal';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [statusCode, setStatusCode] = useState<number | undefined>();
   const [isLoading, setIsLoading] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setStatusCode(undefined);
+    setShowErrorModal(false);
     setIsLoading(true);
 
     try {
       await login(username, password);
       router.push('/protected/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Login failed. Please try again.');
+      const { message, statusCode: code } = extractErrorMessage(err);
+      console.error('Login error:', err);
+      console.error('Error response:', err.response);
+      console.error('Error data:', err.response?.data);
+      setError(message);
+      setStatusCode(code);
+      setShowErrorModal(true);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCloseModal = () => {
+    setShowErrorModal(false);
+    setError('');
+    setStatusCode(undefined);
+  };
+
+  const handleRetry = () => {
+    setUsername('');
+    setPassword('');
+    setTimeout(() => {
+      document.getElementById('username')?.focus();
+    }, 100);
   };
 
   return (
     <div className="min-h-screen grid-bg relative overflow-hidden">
       <div className="orb orb-1 pulse-animation"></div>
       <div className="orb orb-2 pulse-animation" style={{ animationDelay: '1.5s' }}></div>
-      
+
       <div className="relative z-10 min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full">
           <div className="text-center mb-8">
@@ -41,18 +66,19 @@ export default function LoginPage() {
               </svg>
             </div>
             <h2 className="text-3xl font-bold text-white">
-              Welcome to <span className="gradient-text">TicketHub</span>
+              Welcome to <span className="gradient-text">TechnestHub</span>
             </h2>
             <p className="mt-2 text-slate-400">Sign in to access your dashboard</p>
           </div>
 
           <div className="card glow-border rounded-2xl p-8">
-            {error && (
-              <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2">
+            {/* Inline Error Message (shown when modal is not open) */}
+            {error && !showErrorModal && (
+              <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2 animate-pulse">
                 <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                {error}
+                <span className="font-medium">{error}</span>
               </div>
             )}
 
@@ -74,7 +100,7 @@ export default function LoginPage() {
                     required
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="input-field w-full pl-10 pr-4 py-3 rounded-xl text-white placeholder-slate-500"
+                    className="input-field w-full pl-12 pr-4 py-3 rounded-xl text-white placeholder-slate-500"
                     placeholder="Enter your username"
                   />
                 </div>
@@ -97,12 +123,12 @@ export default function LoginPage() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="input-field w-full pl-10 pr-4 py-3 rounded-xl text-white placeholder-slate-500"
+                    className="input-field w-full pl-12 pr-4 py-3 rounded-xl text-white placeholder-slate-500"
                     placeholder="Enter your password"
                   />
                 </div>
               </div>
- 
+
               <button
                 type="submit"
                 disabled={isLoading}
@@ -130,6 +156,17 @@ export default function LoginPage() {
 
         </div>
       </div>
+
+      {/* Error Modal Popup */}
+      <ErrorModal
+        isOpen={showErrorModal}
+        onClose={handleCloseModal}
+        title="Authentication Failed"
+        message={error}
+        statusCode={statusCode}
+        onRetry={handleRetry}
+        retryText="Try Again"
+      />
     </div>
   );
 }

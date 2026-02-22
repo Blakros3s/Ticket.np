@@ -5,7 +5,7 @@ export default function HomePage() {
     <div className="min-h-screen grid-bg relative overflow-hidden">
       <div className="orb orb-1 pulse-animation"></div>
       <div className="orb orb-2 pulse-animation" style={{ animationDelay: '1s' }}></div>
-      
+
       <nav className="relative z-10 border-b border-slate-700/50 backdrop-blur-md bg-slate-900/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
@@ -15,7 +15,7 @@ export default function HomePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                 </svg>
               </div>
-              <span className="text-xl font-bold gradient-text">TicketHub</span>
+              <span className="text-xl font-bold gradient-text">TechnestHub</span>
             </div>
             <div className="flex items-center">
               <Link
@@ -35,14 +35,14 @@ export default function HomePage() {
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
             <span className="text-sm text-sky-300 code-font">System Online</span>
           </div>
-          
+
           <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold mb-6">
             <span className="text-white">Modern </span>
             <span className="gradient-text glow-text">IT Ticket</span>
             <br />
             <span className="text-white">Management</span>
           </h1>
-          
+
           <p className="mt-6 text-lg sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
             Streamline your IT operations with a powerful ticket management system.
             Track incidents, manage requests, and resolve issues efficiently.
@@ -58,7 +58,7 @@ export default function HomePage() {
               <h3 className="text-white font-semibold mb-2">Lightning Fast</h3>
               <p className="text-sm text-slate-400">Quick ticket creation and real-time updates</p>
             </div>
-            
+
             <div className="card p-6 rounded-xl glow-border">
               <div className="w-12 h-12 rounded-lg bg-violet-500/20 flex items-center justify-center mb-4 mx-auto">
                 <svg className="w-6 h-6 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,7 +68,7 @@ export default function HomePage() {
               <h3 className="text-white font-semibold mb-2">Secure</h3>
               <p className="text-sm text-slate-400">Enterprise-grade security and access control</p>
             </div>
-            
+
             <div className="card p-6 rounded-xl glow-border">
               <div className="w-12 h-12 rounded-lg bg-amber-500/20 flex items-center justify-center mb-4 mx-auto">
                 <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -117,7 +117,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <p className="text-slate-400 text-sm">
-              © 2026 TicketHub. Built for modern IT teams.
+              © 2026 TechnestHub. Built for modern IT teams.
             </p>
             <div className="flex gap-6 text-sm text-slate-400">
               <a href="#" className="hover:text-sky-400 transition-colors">Privacy</a>

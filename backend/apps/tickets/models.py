@@ -10,6 +10,10 @@ def generate_ticket_id():
     return f"TKT-{timezone.now().strftime('%Y%m%d')}-{''.join(random.choices(string.digits, k=4))}"
 
 
+def ticket_media_upload_path(instance, filename):
+    return f'ticket_media/{instance.ticket.id}/{filename}'
+
+
 class Ticket(models.Model):
     TYPE_CHOICES = [
         ('bug', 'Bug'),
@@ -44,6 +48,10 @@ class Ticket(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    in_progress_at = models.DateTimeField(null=True, blank=True)
+    qa_at = models.DateTimeField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    
     class Meta:
         db_table = 'tickets'
         verbose_name = 'Ticket'
@@ -52,3 +60,29 @@ class Ticket(models.Model):
     
     def __str__(self):
         return f"{self.ticket_id} - {self.title}"
+
+
+class TicketMedia(models.Model):
+    MEDIA_TYPES = [
+        ('image', 'Image'),
+        ('video', 'Video'),
+        ('document', 'Document'),
+        ('other', 'Other'),
+    ]
+    
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='media_files')
+    file = models.FileField(upload_to=ticket_media_upload_path)
+    file_name = models.CharField(max_length=255)
+    file_type = models.CharField(max_length=20, choices=MEDIA_TYPES, default='other')
+    file_size = models.PositiveIntegerField(default=0)
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='uploaded_ticket_media')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'ticket_media'
+        verbose_name = 'Ticket Media'
+        verbose_name_plural = 'Ticket Media'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.file_name} - {self.ticket.ticket_id}"

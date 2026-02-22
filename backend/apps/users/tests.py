@@ -30,6 +30,7 @@ class AuthenticationTestCase(TestCase):
         )
     
     def test_user_registration(self):
+        self.client.force_authenticate(user=self.admin_user)
         data = {
             'username': 'newuser',
             'email': 'newuser@test.com',
@@ -46,6 +47,7 @@ class AuthenticationTestCase(TestCase):
         self.assertTrue(User.objects.filter(username='newuser').exists())
     
     def test_user_registration_password_mismatch(self):
+        self.client.force_authenticate(user=self.admin_user)
         data = {
             'username': 'newuser',
             'email': 'newuser@test.com',

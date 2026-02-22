@@ -1,0 +1,55 @@
+# ==============================================================================
+# Production Environment Overlay
+# Use with: docker compose -f docker-compose.base.yml -f docker-compose.prod.yml
+# ==============================================================================
+
+services:
+  # ============================================================================
+  # PostgreSQL Database - Production overrides
+  # ============================================================================
+  db:
+    env_file:
+      - ../backend/.env.prod
+
+  # ============================================================================
+  # Django Backend - Production overrides
+  # ============================================================================
+  backend:
+    build:
+      dockerfile: docker/backend/Dockerfile.prod
+    env_file:
+      - ../backend/.env.prod
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8009}:8000"
+    volumes:
+      - ../backend/staticfiles:/app/staticfiles
+      - ../backend/media:/app/media
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # ============================================================================
+  # Next.js Frontend - Production overrides
+  # ============================================================================
+  frontend:
+    build:
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    env_file:
+      - ../frontend/.env.production
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3009}:3000"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M

@@ -1,0 +1,48 @@
+# ==============================================================================
+# Development Environment Overlay
+# Use with: docker compose -f docker-compose.base.yml -f docker-compose.dev.yml
+# ==============================================================================
+
+services:
+  # ============================================================================
+  # PostgreSQL Database - Dev overrides
+  # ============================================================================
+  db:
+    env_file:
+      - ../backend/.env
+
+  # ============================================================================
+  # Django Backend - Dev overrides
+  # ============================================================================
+  backend:
+    build:
+      dockerfile: docker/backend/Dockerfile.dev
+    env_file:
+      - ../backend/.env
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ../backend:/app
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # ============================================================================
+  # Next.js Frontend - Dev overrides
+  # ============================================================================
+  frontend:
+    build:
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    env_file:
+      - ../frontend/.env.local
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
