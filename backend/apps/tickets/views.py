@@ -404,7 +404,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         from .serializers import TicketMediaSerializer
         return Response(TicketMediaSerializer(media).data, status=status.HTTP_201_CREATED)
     
-    @action(detail=True, methods=['delete'], url_path='media/(?P<media_id>\d+)')
+    @action(detail=True, methods=['delete'], url_path=r'media/(?P<media_id>\d+)')
     def delete_media(self, request, id=None, media_id=None):
         """Delete a media file from a ticket - only creator, manager, admin can delete"""
         ticket = self.get_object()
@@ -437,3 +437,41 @@ class TicketViewSet(viewsets.ModelViewSet):
         )
         
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['get', 'post'])
+    def comments(self, request, id=None):
+        """Get or create comments for a ticket"""
+        ticket = self.get_object()
+        
+        if request.method == 'GET':
+            from apps.comments.models import Comment
+            from .serializers import TicketCommentSerializer
+            comments = Comment.objects.filter(ticket=ticket).order_by('created_at')
+            serializer = TicketCommentSerializer(comments, many=True)
+            return Response(serializer.data)
+            
+        elif request.method == 'POST':
+            content = request.data.get('content')
+            if not content:
+                return Response(
+                    {'error': 'Content is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            from apps.comments.models import Comment
+            from .serializers import TicketCommentSerializer
+            
+            comment = Comment.objects.create(
+                ticket=ticket,
+                author=request.user,
+                content=content
+            )
+            
+            log_activity(
+                action='update',
+                user=request.user,
+                instance=ticket,
+                description="Added a comment"
+            )
+            
+            return Response(TicketCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
