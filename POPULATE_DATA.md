@@ -21,15 +21,18 @@ The `populate.py` script creates:
 
 ### Running the Populate Script
 
-Run the script from the `backend` directory:
-
 ```bash
-# Using Docker Compose (recommended)
-docker-compose exec backend python manage.py shell < populate.py
+# Add data (keeps existing data)
+python manage.py populate_db
 
-# Or if you're in the backend directory
-cd backend
-python manage.py shell < populate.py
+# Clear all data and repopulate (recommended for fresh start)
+python manage.py populate_db --clear
+
+# With Docker (replace container name with your backend container)
+docker exec -it ticketnp_backend python manage.py populate_db --clear
+
+# With Docker Compose
+docker compose -f docker/docker-compose.base.yml -f docker/docker-compose.dev.yml exec backend python manage.py populate_db --clear
 ```
 
 ### What Gets Created

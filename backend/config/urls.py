@@ -18,6 +18,7 @@ urlpatterns = [
     path('api/calendar/', include('apps.calendar.urls')),
     path('api/todos/', include('apps.todos.urls')),
     path('api/attendance/', include('apps.attendance.urls')),
+    path('api/', include('apps.notifications.urls')),
     path('api/', include('apps.core.urls')),
 ]
 

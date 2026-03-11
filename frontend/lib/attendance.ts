@@ -201,10 +201,13 @@ export const attendanceApi = {
     return response.data;
   },
 
-  // Team Availability
+  // Team Availability (returns [] on non-working days)
   getTeamAttendance: async (): Promise<TeamAttendance[]> => {
-    const response = await api.get<TeamAttendance[]>('/attendance/attendance/team/');
-    return Array.isArray(response.data) ? response.data : [];
+    const response = await api.get<TeamAttendance[] | { records: TeamAttendance[]; is_working_day?: boolean }>('/attendance/attendance/team/');
+    const data = response.data;
+    if (Array.isArray(data)) return data;
+    if (data && typeof data === 'object' && 'records' in data) return data.records ?? [];
+    return [];
   },
 
   // Attendance Stats

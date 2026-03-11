@@ -53,9 +53,9 @@ class TicketAPITestCase(TestCase):
             priority='high',
             status='new',
             project=self.project,
-            created_by=self.employee_user,
-            assignee=self.assignee_user
+            created_by=self.employee_user
         )
+        self.ticket.assignees.add(self.assignee_user)
         
         self.ticket2 = Ticket.objects.create(
             title='Another Ticket',
@@ -64,9 +64,9 @@ class TicketAPITestCase(TestCase):
             priority='medium',
             status='in_progress',
             project=self.project,
-            created_by=self.manager_user,
-            assignee=self.employee_user
+            created_by=self.manager_user
         )
+        self.ticket2.assignees.add(self.employee_user)
     
     def test_create_ticket(self):
         """Test creating a new ticket"""
@@ -77,7 +77,7 @@ class TicketAPITestCase(TestCase):
             'type': 'feature',
             'priority': 'critical',
             'project': self.project.id,
-            'assignee': self.assignee_user.id
+            'assignees': [self.assignee_user.id]
         }
         response = self.client.post('/api/tickets/', data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -115,7 +115,7 @@ class TicketAPITestCase(TestCase):
         response = self.client.get(f'/api/tickets/?assignee={self.assignee_user.id}')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['assignee'], self.assignee_user.id)
+        self.assertIn(self.assignee_user.id, response.data['results'][0]['assignees'])
     
     def test_update_ticket_status(self):
         """Test updating ticket status"""
@@ -160,7 +160,7 @@ class TicketAPITestCase(TestCase):
         self.assertEqual(response.data['title'], 'Test Ticket')
         self.assertEqual(response.data['ticket_id'], self.ticket.ticket_id)
         self.assertIn('project', response.data)
-        self.assertIn('assignee', response.data)
+        self.assertIn('assignees', response.data)
         self.assertIn('created_by', response.data)
     
     def test_delete_ticket(self):
@@ -209,9 +209,9 @@ class TicketStatusFlowTestCase(TestCase):
             priority='medium',
             status='new',
             project=self.project,
-            created_by=self.manager_user,
-            assignee=self.employee_user
+            created_by=self.manager_user
         )
+        self.ticket.assignees.add(self.employee_user)
     
     def test_status_transition_new_to_in_progress(self):
         """Test transitioning from New to In Progress"""

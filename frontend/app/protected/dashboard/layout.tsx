@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/lib/auth-context';
+import { NotificationsProvider, useNotifications } from '@/lib/notifications-context';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ReactNode, useState } from 'react';
@@ -10,7 +11,16 @@ interface DashboardLayoutProps {
 }
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
+  return (
+    <NotificationsProvider>
+      <DashboardLayoutInner>{children}</DashboardLayoutInner>
+    </NotificationsProvider>
+  );
+}
+
+function DashboardLayoutInner({ children }: DashboardLayoutProps) {
   const { user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
   const pathname = usePathname();
   const canManage = user?.role === 'admin';
   const isEmployee = user?.role === 'employee';
@@ -109,6 +119,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
               {sidebarOpen && <span className="whitespace-nowrap">Leave</span>}
+            </Link>
+            <Link
+              href="/protected/dashboard/notifications"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${isActive('/protected/dashboard/notifications')
+                ? 'bg-gradient-to-r from-sky-500/20 to-violet-500/20 text-white border-l-2 border-sky-400'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                }`}
+            >
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              {sidebarOpen && <span className="whitespace-nowrap">Notifications</span>}
             </Link>
           </div>
 
@@ -267,8 +289,25 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </nav>
 
-        {/* User Profile & Logout */}
+        {/* Notifications & User Profile */}
         <div className="border-t border-slate-700/50 p-4">
+          <Link
+            href="/protected/dashboard/notifications"
+            aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-colors mb-4"
+          >
+            <div className="relative">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center font-bold">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </div>
+            {sidebarOpen && <span className="whitespace-nowrap">Notifications</span>}
+          </Link>
           <Link
             href="/protected/dashboard/profile"
             className="flex items-center gap-3 mb-4 hover:bg-slate-800/50 p-2 -m-2 rounded-lg transition-colors"
@@ -331,7 +370,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-sky-400 mt-1">•</span>
-                    <span><strong>Self-assign tickets</strong> - If a ticket has no assignee, click &quot;Self-assign&quot; to work on it</span>
+                    <span><strong>Self-assign tickets</strong> - Project members can add themselves to unassigned tickets or join others already assigned</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-sky-400 mt-1">•</span>

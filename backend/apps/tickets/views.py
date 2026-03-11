@@ -3,9 +3,18 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
+from django_filters import FilterSet, NumberFilter, CharFilter
 from django.db.models import Q
 from django.utils import timezone
 from .models import Ticket
+
+
+class TicketFilter(FilterSet):
+    assignee = NumberFilter(field_name='assignees', lookup_expr='exact')
+
+    class Meta:
+        model = Ticket
+        fields = ['status', 'priority', 'type', 'project']
 from .serializers import (
     TicketSerializer, 
     TicketCreateSerializer, 
@@ -37,7 +46,7 @@ class IsCreatorOrManagerOrAdmin(IsAuthenticated):
 class TicketViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'priority', 'type', 'project']
+    filterset_class = TicketFilter
     search_fields = ['ticket_id', 'title', 'description']
     ordering_fields = ['created_at', 'updated_at', 'priority']
     ordering = ['-created_at']
@@ -69,13 +78,13 @@ class TicketViewSet(viewsets.ModelViewSet):
             return Ticket.objects.filter(
                 Q(project__created_by=user) | 
                 Q(project__members=user) |
-                Q(assignee=user) |
+                Q(assignees=user) |
                 Q(created_by=user)
             ).distinct()
         
         # Employee sees tickets assigned to them or in projects they are members of
         return Ticket.objects.filter(
-            Q(assignee=user) |
+            Q(assignees=user) |
             Q(project__members=user) |
             Q(created_by=user)
         ).distinct()
@@ -104,10 +113,12 @@ class TicketViewSet(viewsets.ModelViewSet):
             changes.append(f"status from '{old_data.status}' to '{ticket.status}'")
         if old_data.priority != ticket.priority:
             changes.append(f"priority from '{old_data.priority}' to '{ticket.priority}'")
-        if old_data.assignee != ticket.assignee:
-            old_assignee = old_data.assignee.username if old_data.assignee else "Unassigned"
-            new_assignee = ticket.assignee.username if ticket.assignee else "Unassigned"
-            changes.append(f"assignee from '{old_assignee}' to '{new_assignee}'")
+        old_assignee_ids = set(old_data.assignees.values_list('id', flat=True))
+        new_assignee_ids = set(ticket.assignees.values_list('id', flat=True))
+        if old_assignee_ids != new_assignee_ids:
+            old_names = ', '.join(u.username for u in old_data.assignees.all()) or 'Unassigned'
+            new_names = ', '.join(u.username for u in ticket.assignees.all()) or 'Unassigned'
+            changes.append(f"assignees from '{old_names}' to '{new_names}'")
         
         if changes:
             log_activity(
@@ -143,8 +154,8 @@ class TicketViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Require assignee to move to in_progress
-            if new_status == 'in_progress' and ticket.assignee is None:
+            # Require at least one assignee to move to in_progress
+            if new_status == 'in_progress' and not ticket.assignees.exists():
                 return Response(
                     {'error': 'Cannot move to In Progress without an assignee. Please assign the ticket first.'},
                     status=status.HTTP_400_BAD_REQUEST
@@ -222,24 +233,22 @@ class TicketViewSet(viewsets.ModelViewSet):
                     description=f"Work session started"
                 )
         
-        # Handle reopened status - reset assignee and DON'T start a new work log
-        # The new assignee will start the work log when they move it to in_progress
+        # Handle reopened status - clear assignees so anyone can pick it up
         elif new_status == 'reopened' and old_status == 'closed':
-            # Reset the assignee so anyone can pick it up
-            ticket.assignee = None
+            ticket.assignees.clear()
             ticket.save()
             
             log_activity(
                 action='status_change',
                 user=user,
                 instance=ticket,
-                description=f"Ticket reopened - assignee reset, ready for new assignment"
+                description=f"Ticket reopened - assignees cleared, ready for new assignment"
             )
     
     @action(detail=False, methods=['get'])
     def my_tickets(self, request):
         """Get tickets assigned to the current user"""
-        tickets = Ticket.objects.filter(assignee=request.user)
+        tickets = Ticket.objects.filter(assignees=request.user)
         serializer = self.get_serializer(tickets, many=True)
         return Response(serializer.data)
     
@@ -260,10 +269,10 @@ class TicketViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def assign_ticket(self, request, id=None):
         """
-        Assign ticket to a user.
-        - Manager/Admin: can assign to anyone
-        - Ticket creator: can assign to anyone
-        - Regular user: can only self-assign (use self_assign endpoint)
+        Add a user to ticket assignees. Only project members can be assigned.
+        - Manager/Admin: can assign anyone (project members only)
+        - Ticket creator: can assign anyone (project members only)
+        - Project member: can assign other project members
         """
         ticket = self.get_object()
         user = request.user
@@ -296,58 +305,105 @@ class TicketViewSet(viewsets.ModelViewSet):
         is_creator = ticket.created_by_id == user.id
         is_project_member = ticket.project.members.filter(id=user.id).exists()
         
-        # Allow if manager/admin, creator, or project member
         if not is_manager_or_admin and not is_creator and not is_project_member:
             return Response(
                 {'error': 'Only project members, managers, admins, or ticket creators can assign tickets.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        is_member = ticket.project.members.filter(id=target_user.id).exists() or target_user.role in ['admin', 'manager']
-        if not is_member:
+        # Only project members can be assigned
+        target_is_member = ticket.project.members.filter(id=target_user.id).exists() or target_user.role in ['admin', 'manager']
+        if not target_is_member:
             return Response(
-                {'error': 'The selected user must be a member of this project.'},
+                {'error': 'Only project members can be assigned to tickets.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        old_assignee = ticket.assignee.username if ticket.assignee else "Unassigned"
-        ticket.assignee = target_user
-        ticket.save()
+        # Add user to assignees (idempotent - add() ignores if already present)
+        ticket.assignees.add(target_user)
         
         log_activity(
             action='update',
             user=user,
             instance=ticket,
-            description=f"Assigned ticket {ticket.ticket_id} from '{old_assignee}' to '{target_user.username}'"
+            description=f"Assigned ticket {ticket.ticket_id} to {target_user.username}"
+        )
+        
+        # Notify the assigned user (when assigned by someone else)
+        if target_user.id != user.id:
+            from apps.notifications.models import Notification
+            Notification.objects.create(
+                user=target_user,
+                message=f"You were assigned to ticket {ticket.ticket_id} by {user.username}",
+                ticket_id=ticket.id,
+                ticket_title=ticket.title[:255],
+            )
+        
+        return Response(TicketSerializer(ticket).data)
+    
+    @action(detail=True, methods=['post'])
+    def unassign(self, request, id=None):
+        """Remove a user from ticket assignees. user_id in body, or omit to remove self."""
+        ticket = self.get_object()
+        user = request.user
+        target_user_id = request.data.get('user_id')
+        
+        if target_user_id is not None:
+            try:
+                target_user_id = int(target_user_id)
+            except (ValueError, TypeError):
+                return Response(
+                    {'error': 'user_id must be a valid integer'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            from apps.users.models import User
+            try:
+                target_user = User.objects.get(id=target_user_id)
+            except User.DoesNotExist:
+                return Response(
+                    {'error': 'User not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            target_user = user  # Remove self
+        
+        is_manager_or_admin = user.role in ['admin', 'manager']
+        is_creator = ticket.created_by_id == user.id
+        is_project_member = ticket.project.members.filter(id=user.id).exists()
+        
+        # Can only unassign self unless manager/creator
+        if target_user.id != user.id and not is_manager_or_admin and not is_creator:
+            return Response(
+                {'error': 'Only managers or ticket creators can remove other assignees.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        ticket.assignees.remove(target_user)
+        
+        log_activity(
+            action='update',
+            user=user,
+            instance=ticket,
+            description=f"Removed {target_user.username} from ticket {ticket.ticket_id}"
         )
         
         return Response(TicketSerializer(ticket).data)
-
+    
     @action(detail=True, methods=['post'])
     def self_assign(self, request, id=None):
-        """Allow project member to self-assign an unassigned ticket"""
+        """Allow project member to self-assign (add themselves to assignees). Multiple people can self-assign."""
         ticket = self.get_object()
         user = request.user
-        
-        if ticket.assignee is not None:
-            is_manager_or_admin = user.role in ['admin', 'manager']
-            is_creator = ticket.created_by_id == user.id
-            
-            if not is_manager_or_admin and not is_creator:
-                return Response(
-                    {'error': 'This ticket is already assigned. Only managers or ticket creators can reassign.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
         
         is_member = ticket.project.members.filter(id=user.id).exists() or user.role in ['admin', 'manager']
         if not is_member:
             return Response(
-                {'error': 'You must be a member of this project to self-assign tickets.'},
+                {'error': 'Only project members can self-assign tickets.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        ticket.assignee = user
-        ticket.save()
+        # Add user to assignees - multiple people can self-assign
+        ticket.assignees.add(user)
         
         log_activity(
             action='update',

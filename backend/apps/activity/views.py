@@ -24,11 +24,11 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
                 object_id=ticket_id
             )
             
-            # Check if user is the assignee of this ticket
+            # Check if user is an assignee of this ticket
             from apps.tickets.models import Ticket
             try:
                 ticket = Ticket.objects.get(id=ticket_id)
-                is_assignee = ticket.assignee_id == user.id
+                is_assignee = ticket.assignees.filter(id=user.id).exists()
             except Ticket.DoesNotExist:
                 is_assignee = False
         else:
@@ -86,8 +86,8 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
         # Admin and Manager see all activities for the ticket
         if user.role in ['admin', 'manager']:
             pass
-        # Ticket assignee sees all activities on their ticket
-        elif ticket.assignee_id == user.id:
+        # Ticket assignees see all activities on their ticket
+        elif ticket.assignees.filter(id=user.id).exists():
             pass
         # Employees cannot see activity logs
         else:

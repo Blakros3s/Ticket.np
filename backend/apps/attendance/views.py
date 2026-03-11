@@ -195,6 +195,13 @@ class AttendanceListView(generics.ListCreateAPIView):
         target_date = serializer.validated_data.get('date', date.today())
         new_status = serializer.validated_data.get('status')
         
+        # Block toggle on non-working days (Saturday, holidays)
+        if not Attendance.is_working_day(target_date):
+            return Response(
+                {'detail': 'Cannot mark attendance on non-working days (Saturday or Holiday).'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         # Get or create attendance record
         attendance, created = Attendance.objects.get_or_create(
             employee=request.user,
@@ -228,6 +235,15 @@ class AttendanceListView(generics.ListCreateAPIView):
 def get_team_attendance(request):
     """Get today's attendance for all team members"""
     today = date.today()
+    
+    # Skip attendance logic on non-working days (Saturday, holidays)
+    if not Attendance.is_working_day(today):
+        return Response({
+            'is_working_day': False,
+            'message': 'Today is a non-working day (Saturday or Holiday).',
+            'records': []
+        })
+    
     settings = OfficeSettings.get_settings()
     
     # Get all employees
@@ -282,6 +298,19 @@ def get_team_attendance(request):
 def get_my_attendance(request):
     """Get current user's attendance for today"""
     today = date.today()
+    
+    # On non-working days (Saturday, holidays), return a special response
+    if not Attendance.is_working_day(today):
+        return Response({
+            'date': today.isoformat(),
+            'is_working_day': False,
+            'message': 'Today is a non-working day (Saturday or Holiday).',
+            'status': 'neutral',
+            'current_availability': 'none',
+            'can_toggle_status': False,
+            'daily_logs': []
+        })
+    
     settings = OfficeSettings.get_settings()
     
     attendance, created = Attendance.objects.get_or_create(
@@ -430,13 +459,8 @@ def get_attendance_stats(request):
         except ValueError:
             return Response({'detail': 'Invalid date format'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Calculate ACTUAL working days recorded in this range (any employee marked present, absent, or leave)
-    # We count the distinct dates where this occurred.
-    from apps.attendance.models import Attendance
-    total_working_days = Attendance.objects.filter(
-        date__range=[start_date, end_date],
-        status__in=['present', 'absent', 'leave']
-    ).values('date').distinct().count()
+    # Count working days in range (excluding Saturday and holidays from calendar)
+    total_working_days = Attendance.count_working_days_in_range(start_date, end_date)
 
     # If admin/manager and requesting for everyone
     if user.role in ['admin', 'manager'] and request.query_params.get('all_employees') == 'true':

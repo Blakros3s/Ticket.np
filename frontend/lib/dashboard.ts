@@ -1,18 +1,27 @@
-﻿import api from './api';
+import api from './api';
+
+export interface MyTicketItem {
+  id: number;
+  ticket_id: string;
+  title: string;
+  project_name: string | null;
+  priority: string;
+  created_at: string;
+}
 
 export interface EmployeeDashboard {
   assigned_tickets_count: number;
   in_progress_count: number;
   completed_tickets_count: number;
   tickets_by_status: Record<string, number>;
-  in_progress_tickets: Array<{
-    id: number;
-    ticket_id: string;
-    title: string;
-    project_name: string | null;
-    priority: string;
-    created_at: string;
-  }>;
+  my_tickets_by_status: {
+    new: MyTicketItem[];
+    in_progress: MyTicketItem[];
+    qa: MyTicketItem[];
+    closed: MyTicketItem[];
+    reopened: MyTicketItem[];
+  };
+  in_progress_tickets: MyTicketItem[];
   recent_activity: Array<{
     id: number;
     action: string;

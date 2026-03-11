@@ -27,7 +27,7 @@ export default function CreateTicketPage() {
     type: 'task',
     priority: 'medium',
     project: 0,
-    assignee: null,
+    assignees: [],
     media_files: [],
   });
 
@@ -169,7 +169,7 @@ export default function CreateTicketPage() {
               required
               className="input-field w-full"
               value={formData.project}
-              onChange={(e) => setFormData({ ...formData, project: Number(e.target.value), assignee: null })}
+              onChange={(e) => setFormData({ ...formData, project: Number(e.target.value), assignees: [] })}
             >
               <option value="">Select a project...</option>
               {projects.map((project) => (
@@ -244,31 +244,33 @@ export default function CreateTicketPage() {
 
           <div>
             <label className="block text-sm font-medium text-slate-200 mb-2">
-              Assignee
+              Assignees (optional)
             </label>
-            <select
-              className="input-field w-full"
-              value={formData.assignee || ''}
-              onChange={(e) => setFormData({ ...formData, assignee: e.target.value ? Number(e.target.value) : null })}
-            >
-              <option value="">Unassigned - Can self-assign</option>
-              {projectMembers.length > 0 ? (
-                projectMembers.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.first_name} {member.last_name} (@{member.username})
-                  </option>
-                ))
-              ) : (
-                users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.first_name} {u.last_name} (@{u.username})
-                  </option>
-                ))
-              )}
-            </select>
-            <p className="text-xs text-slate-500 mt-1">
-              Leave unassigned to allow team members to self-assign
+            <p className="text-xs text-slate-500 mb-2">
+              Select project members to assign. Leave empty to allow self-assign.
             </p>
+            <div className="border border-slate-600 rounded-lg p-3 max-h-32 overflow-y-auto space-y-2">
+              {(projectMembers.length > 0 ? projectMembers : users).map((member) => (
+                <label key={member.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-700/30 rounded px-2 py-1">
+                  <input
+                    type="checkbox"
+                    checked={formData.assignees?.includes(member.id) ?? false}
+                    onChange={(e) => {
+                      const ids = formData.assignees || [];
+                      if (e.target.checked) {
+                        setFormData({ ...formData, assignees: [...ids, member.id] });
+                      } else {
+                        setFormData({ ...formData, assignees: ids.filter(id => id !== member.id) });
+                      }
+                    }}
+                    className="rounded border-slate-500"
+                  />
+                  <span className="text-sm text-slate-200">
+                    {member.first_name} {member.last_name} (@{member.username})
+                  </span>
+                </label>
+              ))}
+            </div>
           </div>
 
           <div>

@@ -177,7 +177,7 @@ class WorkLogViewSet(viewsets.ModelViewSet):
         except Ticket.DoesNotExist:
             return Response({'active': False, 'error': 'Ticket not found'})
         
-        can_view = user.role in ['admin', 'manager'] or ticket.assignee_id == user.id
+        can_view = user.role in ['admin', 'manager'] or ticket.assignees.filter(id=user.id).exists()
         
         if not can_view:
             return Response({'active': False, 'error': 'Permission denied'})

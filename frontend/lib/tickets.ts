@@ -1,4 +1,4 @@
-﻿import api from './api';
+import api from './api';
 
 export type TicketType = 'bug' | 'task' | 'feature';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
@@ -25,6 +25,14 @@ export interface TicketComment {
   updated_at: string;
 }
 
+export interface TicketAssignee {
+  id: number;
+  username: string;
+  first_name: string;
+  last_name: string;
+  display_name: string;
+}
+
 export interface Ticket {
   id: number;
   ticket_id: string;
@@ -35,9 +43,8 @@ export interface Ticket {
   status: TicketStatus;
   project: number;
   project_name: string;
-  assignee: number | null;
-  assignee_name: string | null;
-  assignee_username: string | null;
+  assignees: number[];
+  assignees_list: TicketAssignee[];
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -54,7 +61,7 @@ export interface CreateTicketData {
   type: TicketType;
   priority: TicketPriority;
   project: number;
-  assignee?: number | null;
+  assignees?: number[];
   media_files?: File[];
 }
 
@@ -64,7 +71,7 @@ export interface UpdateTicketData {
   type?: TicketType;
   priority?: TicketPriority;
   status?: TicketStatus;
-  assignee?: number | null;
+  assignees?: number[];
 }
 
 export interface TicketFilters {
@@ -112,8 +119,8 @@ export const ticketsApi = {
       formData.append('type', data.type);
       formData.append('priority', data.priority);
       formData.append('project', data.project.toString());
-      if (data.assignee) {
-        formData.append('assignee', data.assignee.toString());
+      if (data.assignees && data.assignees.length > 0) {
+        data.assignees.forEach(id => formData.append('assignees', id.toString()));
       }
       data.media_files.forEach((file) => {
         formData.append('media_files', file);
@@ -176,6 +183,11 @@ export const ticketsApi = {
 
   assignTicket: async (id: number, userId: number): Promise<Ticket> => {
     const response = await api.post<Ticket>(`/tickets/tickets/${id}/assign_ticket/`, { user_id: userId });
+    return response.data;
+  },
+
+  unassignTicket: async (id: number, userId?: number): Promise<Ticket> => {
+    const response = await api.post<Ticket>(`/tickets/tickets/${id}/unassign/`, userId != null ? { user_id: userId } : {});
     return response.data;
   },
 

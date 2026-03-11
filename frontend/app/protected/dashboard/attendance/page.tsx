@@ -214,6 +214,16 @@ export default function AttendancePage() {
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400"></div>
         </div>
+      ) : (myAttendance as any)?.is_working_day === false ? (
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-12 text-center">
+          <div className="w-16 h-16 rounded-full bg-slate-600/50 flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-white mb-2">Non-Working Day</h2>
+          <p className="text-slate-400">{(myAttendance as any)?.message || 'Today is a Saturday or Holiday. Attendance is not required.'}</p>
+        </div>
       ) : (
         <>
           {/* 1. My Status Today - TOP */}

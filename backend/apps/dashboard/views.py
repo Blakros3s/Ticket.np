@@ -25,7 +25,7 @@ def employee_dashboard(request):
     user = request.user
     
     # Get assigned tickets
-    assigned_tickets = Ticket.objects.filter(assignee=user)
+    assigned_tickets = Ticket.objects.filter(assignees=user)
     
     # Tickets by status
     tickets_by_status = assigned_tickets.values('status').annotate(
@@ -59,11 +59,36 @@ def employee_dashboard(request):
         status__in=['new', 'in_progress', 'qa']
     ).count()
     
+    # My tickets grouped by status
+    my_tickets_by_status = {
+        'new': [
+            {'id': t.id, 'ticket_id': t.ticket_id, 'title': t.title, 'project_name': t.project.name if t.project else None, 'priority': t.priority, 'created_at': t.created_at}
+            for t in assigned_tickets.filter(status='new').select_related('project')[:20]
+        ],
+        'in_progress': [
+            {'id': t.id, 'ticket_id': t.ticket_id, 'title': t.title, 'project_name': t.project.name if t.project else None, 'priority': t.priority, 'created_at': t.created_at}
+            for t in in_progress_tickets[:20]
+        ],
+        'qa': [
+            {'id': t.id, 'ticket_id': t.ticket_id, 'title': t.title, 'project_name': t.project.name if t.project else None, 'priority': t.priority, 'created_at': t.created_at}
+            for t in assigned_tickets.filter(status='qa').select_related('project')[:20]
+        ],
+        'closed': [
+            {'id': t.id, 'ticket_id': t.ticket_id, 'title': t.title, 'project_name': t.project.name if t.project else None, 'priority': t.priority, 'created_at': t.created_at}
+            for t in assigned_tickets.filter(status='closed').select_related('project')[:20]
+        ],
+        'reopened': [
+            {'id': t.id, 'ticket_id': t.ticket_id, 'title': t.title, 'project_name': t.project.name if t.project else None, 'priority': t.priority, 'created_at': t.created_at}
+            for t in assigned_tickets.filter(status='reopened').select_related('project')[:20]
+        ],
+    }
+
     return Response({
         'assigned_tickets_count': assigned_tickets.count(),
         'in_progress_count': assigned_tickets.filter(status='in_progress').count(),
         'completed_tickets_count': assigned_tickets.filter(status='closed').count(),
         'tickets_by_status': {item['status']: item['count'] for item in tickets_by_status},
+        'my_tickets_by_status': my_tickets_by_status,
         'in_progress_tickets': [
             {
                 'id': t.id,
@@ -152,7 +177,7 @@ def manager_dashboard(request):
         for member in members:
             member_tickets = Ticket.objects.filter(
                 project=project,
-                assignee=member
+                assignees=member
             )
             team_workload.append({
                 'user_id': member.id,
@@ -164,10 +189,10 @@ def manager_dashboard(request):
             })
     
     # Recent tickets in managed projects
-    recent_tickets = project_tickets.select_related('project', 'assignee').order_by('-created_at')[:10]
+    recent_tickets = project_tickets.prefetch_related('assignees').select_related('project').order_by('-created_at')[:10]
     
-    # Unassigned tickets count
-    unassigned_tickets = project_tickets.filter(assignee__isnull=True).count()
+    # Unassigned tickets count (no assignees)
+    unassigned_tickets = project_tickets.annotate(ac=Count('assignees')).filter(ac=0).count()
     
     return Response({
         'total_projects': managed_projects.count(),
@@ -184,7 +209,7 @@ def manager_dashboard(request):
                 'ticket_id': t.ticket_id,
                 'title': t.title,
                 'project_name': t.project.name if t.project else None,
-                'assignee_name': f"{t.assignee.first_name} {t.assignee.last_name}".strip() if t.assignee else 'Unassigned',
+                'assignee_name': ', '.join(f"{u.first_name} {u.last_name}".strip() or u.username for u in t.assignees.all()) or 'Unassigned',
                 'status': t.status,
                 'priority': t.priority,
                 'created_at': t.created_at,
@@ -306,7 +331,7 @@ def employee_reports(request):
     ).order_by('week')
     
     tickets_completed = Ticket.objects.filter(
-        assignee=user,
+        assignees=user,
         status='closed',
         closed_at__gte=start_date
     ).annotate(week=TruncWeek('closed_at')).values('week').annotate(
@@ -324,8 +349,8 @@ def employee_reports(request):
     ).order_by('-total_minutes')[:10]
     
     # Productivity metrics
-    total_assigned = Ticket.objects.filter(assignee=user).count()
-    total_completed = Ticket.objects.filter(assignee=user, status='closed').count()
+    total_assigned = Ticket.objects.filter(assignees=user).count()
+    total_completed = Ticket.objects.filter(assignees=user, status='closed').count()
     
     avg_resolution_time = WorkLog.objects.filter(
         user=user,
@@ -353,7 +378,7 @@ def employee_reports(request):
     
     # Priority distribution of assigned tickets
     priority_dist = Ticket.objects.filter(
-        assignee=user
+        assignees=user
     ).values('priority').annotate(count=Count('id'))
     
     return Response({
@@ -408,7 +433,7 @@ def manager_reports(request):
     
     team_performance = []
     for member in team_members:
-        assigned = Ticket.objects.filter(assignee=member, project__in=managed_projects)
+        assigned = Ticket.objects.filter(assignees=member, project__in=managed_projects)
         completed = assigned.filter(status='closed')
         time_logged = WorkLog.objects.filter(
             user=member,
@@ -558,9 +583,9 @@ def admin_reports(request):
             'health_score': health_score
         })
     
-    # Top performers
+    # Top performers (tickets where user is in assignees)
     top_performers = User.objects.annotate(
-        tickets_closed=Count('assigned_tickets', filter=Q(assigned_tickets__status='closed')),
+        tickets_closed=Count('assigned_tickets', filter=Q(assigned_tickets__status='closed'), distinct=True),
         total_time=Sum('worklog__duration_minutes')
     ).filter(tickets_closed__gt=0).order_by('-tickets_closed')[:10]
     

@@ -56,7 +56,7 @@ export default function TicketDetailPage() {
     type: 'task' as 'bug' | 'task' | 'feature',
     priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
     status: 'new' as TicketStatus,
-    assignee: null as number | null,
+    assignees: [] as number[],
   });
 
   const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'manager';
@@ -85,7 +85,7 @@ export default function TicketDetailPage() {
           type: ticketData.type,
           priority: ticketData.priority,
           status: ticketData.status,
-          assignee: ticketData.assignee,
+          assignees: ticketData.assignees || [],
         });
       } catch (error: any) {
         showToastMessage(error.response?.data?.detail || 'Failed to load ticket', 'error');
@@ -100,7 +100,8 @@ export default function TicketDetailPage() {
 
   const fetchActiveSession = useCallback(async () => {
     if (!ticket) return;
-    const canViewStopwatch = user?.role === 'admin' || user?.role === 'manager' || Number(ticket.assignee) === Number(user?.id);
+    const isAssignee = ticket.assignees?.includes(Number(user?.id));
+    const canViewStopwatch = user?.role === 'admin' || user?.role === 'manager' || isAssignee;
     if (!canViewStopwatch) return;
 
     try {
@@ -116,7 +117,7 @@ export default function TicketDetailPage() {
       setActiveSession(null);
       setElapsedTime(0);
     }
-  }, [ticket, ticketId, user?.id, user?.role, ticket?.assignee]);
+  }, [ticket, ticketId, user?.id, user?.role, ticket?.assignees]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -139,7 +140,7 @@ export default function TicketDetailPage() {
         setElapsedTime(0);
       }
     }
-  }, [ticket?.status, ticket?.assignee, fetchActiveSession]);
+  }, [ticket?.status, ticket?.assignees, fetchActiveSession]);
 
   const handleSave = async () => {
     try {
@@ -164,7 +165,7 @@ export default function TicketDetailPage() {
       setEditData({
         ...editData,
         status: freshTicket.status,
-        assignee: freshTicket.assignee
+        assignees: freshTicket.assignees || []
       });
 
       if (newStatus === 'in_progress') {
@@ -236,8 +237,8 @@ export default function TicketDetailPage() {
     try {
       setSaving(true);
       const updated = await ticketsApi.selfAssign(ticketId);
-      setTicket({ ...ticket!, assignee: updated.assignee, assignee_name: updated.assignee_name, assignee_username: updated.assignee_username });
-      showToastMessage('Ticket self-assigned', 'success');
+      setTicket({ ...ticket!, assignees: updated.assignees, assignees_list: updated.assignees_list });
+      showToastMessage('Added yourself to ticket', 'success');
       const freshTicket = await ticketsApi.getTicket(ticketId);
       setTicket(freshTicket);
     } catch (error: any) {
@@ -252,8 +253,8 @@ export default function TicketDetailPage() {
       setSaving(true);
       setShowAssignDropdown(false);
       const updated = await ticketsApi.assignTicket(ticketId, targetUserId);
-      setTicket({ ...ticket!, assignee: updated.assignee, assignee_name: updated.assignee_name, assignee_username: updated.assignee_username });
-      showToastMessage('Ticket assigned successfully', 'success');
+      setTicket({ ...ticket!, assignees: updated.assignees, assignees_list: updated.assignees_list });
+      showToastMessage('Assignee added', 'success');
       const freshTicket = await ticketsApi.getTicket(ticketId);
       setTicket(freshTicket);
     } catch (error: any) {
@@ -301,10 +302,10 @@ export default function TicketDetailPage() {
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const canViewStopwatch = user?.role === 'admin' || user?.role === 'manager' || (ticket?.assignee != null && Number(ticket?.assignee) === Number(user?.id));
+  const isAssignee = ticket?.assignees?.includes(Number(user?.id));
+  const canViewStopwatch = user?.role === 'admin' || user?.role === 'manager' || isAssignee;
 
   const canEdit = user?.role === 'admin' || user?.role === 'manager' || ticket?.created_by === user?.username;
-  const isAssignee = ticket?.assignee != null && Number(ticket?.assignee) === Number(user?.id);
   const canChangeStatus = isAssignee || user?.role === 'admin' || user?.role === 'manager';
   const isCreator = ticket?.created_by === user?.username;
   const canViewActivity = user?.role === 'admin' || user?.role === 'manager';
@@ -568,48 +569,75 @@ export default function TicketDetailPage() {
         <div className="space-y-6">
           <div className="form-card p-6 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Assignee</label>
-              {ticket.assignee_name ? (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-sky-500/20 flex items-center justify-center">
-                      <span className="text-xs font-medium text-sky-400">
-                        {ticket.assignee_name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-white text-sm font-medium">{ticket.assignee_name}</span>
-                      <span className="text-slate-500 text-xs block">@{ticket.assignee_username}</span>
-                    </div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Assignees</label>
+              {ticket.assignees_list && ticket.assignees_list.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    {ticket.assignees_list.map((a) => (
+                      <div key={a.id} className="flex items-center gap-2 bg-slate-700/50 rounded-lg px-2 py-1.5 group">
+                        <div className="w-6 h-6 rounded-full bg-sky-500/20 flex items-center justify-center flex-shrink-0">
+                          <span className="text-[10px] font-medium text-sky-400">
+                            {(a.display_name || a.username).slice(0, 2).toUpperCase()}
+                          </span>
+                        </div>
+                        <span className="text-sm text-white truncate max-w-[100px]">{a.display_name || a.username}</span>
+                        {canAssign && ticket.status !== 'closed' && (isManagerOrAdmin || isCreator || a.id === user?.id) && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                setSaving(true);
+                                await ticketsApi.unassignTicket(ticketId, a.id);
+                                const fresh = await ticketsApi.getTicket(ticketId);
+                                setTicket(fresh);
+                                showToastMessage('Assignee removed', 'success');
+                              } catch (err: any) {
+                                showToastMessage(err.response?.data?.error || 'Failed to remove', 'error');
+                              } finally {
+                                setSaving(false);
+                              }
+                            }}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-red-400 text-xs p-0.5"
+                            title="Remove"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                   {canAssign && ticket.status !== 'closed' && (
                     <div className="relative">
                       <button
                         onClick={() => setShowAssignDropdown(!showAssignDropdown)}
                         disabled={saving}
-                        className="text-slate-400 hover:text-white text-xs"
+                        className="text-sky-400 hover:text-sky-300 text-xs flex items-center gap-1"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                         </svg>
+                        Add assignee
                       </button>
                       {showAssignDropdown && (
-                        <div className="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-10">
-                          <div className="p-2">
-                            <button
-                              onClick={() => handleAssign(Number(user?.id))}
-                              disabled={saving || Number(ticket.assignee) === Number(user?.id)}
-                              className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded disabled:opacity-50"
-                            >
-                              Assign to me
-                            </button>
-                            <div className="border-t border-slate-700 my-1"></div>
-                            {projectMembers.filter(m => m.id !== user?.id).map(member => (
+                        <div className="absolute left-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-10">
+                          <div className="p-2 max-h-48 overflow-y-auto">
+                            {!ticket.assignees?.includes(Number(user?.id)) && (
+                              <button
+                                onClick={() => handleAssign(Number(user?.id))}
+                                disabled={saving}
+                                className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded"
+                              >
+                                Self-assign (add me)
+                              </button>
+                            )}
+                            {projectMembers.filter(m => !ticket.assignees?.includes(m.id)).map(member => (
                               <button
                                 key={member.id}
                                 onClick={() => handleAssign(member.id)}
-                                disabled={saving || Number(ticket.assignee) === member.id}
-                                className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded disabled:opacity-50 flex items-center gap-2"
+                                disabled={saving}
+                                className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded flex items-center gap-2"
                               >
                                 <div className="w-5 h-5 rounded-full bg-sky-500/20 flex items-center justify-center flex-shrink-0">
                                   <span className="text-[10px] font-medium text-sky-400">
@@ -621,6 +649,9 @@ export default function TicketDetailPage() {
                                 <span className="truncate">{member.first_name && member.last_name ? `${member.first_name} ${member.last_name}` : member.username}</span>
                               </button>
                             ))}
+                            {projectMembers.filter(m => !ticket.assignees?.includes(m.id)).length === 0 && ticket.assignees?.includes(Number(user?.id)) && (
+                              <p className="text-xs text-slate-500 px-2 py-1">All project members assigned</p>
+                            )}
                           </div>
                         </div>
                       )}
@@ -649,7 +680,7 @@ export default function TicketDetailPage() {
                                   disabled={saving}
                                   className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded"
                                 >
-                                  Assign to me
+                                  Self-assign (add me)
                                 </button>
                                 <div className="border-t border-slate-700 my-1"></div>
                                 {projectMembers.filter(m => m.id !== user?.id).map(member => (
@@ -715,7 +746,7 @@ export default function TicketDetailPage() {
                 </div>
               )}
               {!canChangeStatus && ticket.status !== 'closed' && (
-                <p className="text-xs text-slate-500 mt-2">Only assignee can change status</p>
+                <p className="text-xs text-slate-500 mt-2">Only assignees can change status</p>
               )}
             </div>
 

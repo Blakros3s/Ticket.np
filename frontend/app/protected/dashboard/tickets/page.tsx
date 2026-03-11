@@ -1,5 +1,6 @@
-﻿'use client';
+'use client';
 
+import React from 'react';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -47,7 +48,6 @@ export default function TicketsPage() {
       setLoading(true);
       const [ticketsData, projectsData] = await Promise.all([
         ticketsApi.getTickets({
-          status: statusFilter || undefined,
           priority: priorityFilter || undefined,
           type: typeFilter || undefined,
           project: projectFilter || undefined,
@@ -67,7 +67,7 @@ export default function TicketsPage() {
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, priorityFilter, typeFilter, projectFilter]);
+  }, [priorityFilter, typeFilter, projectFilter]);
 
   // Debounced search
   useEffect(() => {
@@ -77,6 +77,11 @@ export default function TicketsPage() {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
+
+  // Filter tickets by selected status tab (client-side)
+  const displayedTickets = statusFilter
+    ? tickets.filter(t => t.status === statusFilter)
+    : tickets;
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -90,7 +95,9 @@ export default function TicketsPage() {
     total: tickets.length,
     new: tickets.filter(t => t.status === 'new').length,
     inProgress: tickets.filter(t => t.status === 'in_progress').length,
+    qa: tickets.filter(t => t.status === 'qa').length,
     closed: tickets.filter(t => t.status === 'closed').length,
+    reopened: tickets.filter(t => t.status === 'reopened').length,
   };
 
   return (
@@ -113,29 +120,9 @@ export default function TicketsPage() {
         <p className="text-slate-400 mt-1">Track and manage issues, tasks, and features</p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-          <p className="text-slate-400 text-sm">Total</p>
-          <p className="text-2xl font-bold text-white">{stats.total}</p>
-        </div>
-        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-          <p className="text-slate-400 text-sm">New</p>
-          <p className="text-2xl font-bold text-blue-400">{stats.new}</p>
-        </div>
-        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-          <p className="text-slate-400 text-sm">In Progress</p>
-          <p className="text-2xl font-bold text-amber-400">{stats.inProgress}</p>
-        </div>
-        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-          <p className="text-slate-400 text-sm">Closed</p>
-          <p className="text-2xl font-bold text-green-400">{stats.closed}</p>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="filter-bar mb-6">
-        <div className="flex flex-col lg:flex-row gap-4">
+      {/* Search and New Ticket */}
+      <div className="mb-4">
+        <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1 search-input flex items-center">
             <div className="pl-4 flex items-center pointer-events-none">
               <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -160,22 +147,53 @@ export default function TicketsPage() {
               </button>
             )}
           </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <select
-              className="input-field min-w-[130px]"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as TicketStatus)}
+          {projects.length > 0 && (
+            <Link
+              href="/protected/dashboard/tickets/new"
+              className="btn-primary flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg whitespace-nowrap font-medium"
             >
-              <option value="">All Status</option>
-              <option value="new">New</option>
-              <option value="in_progress">In Progress</option>
-              <option value="qa">QA</option>
-              <option value="closed">Closed</option>
-              <option value="reopened">Reopened</option>
-            </select>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Ticket
+            </Link>
+          )}
+        </div>
+      </div>
 
-            <select
+      {/* Status Tabs */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {(['', 'new', 'in_progress', 'qa', 'closed', 'reopened'] as const).map((status) => {
+          const label = status === '' ? 'All' : status.replace('_', ' ');
+          const count = status === '' ? stats.total : status === 'in_progress' ? stats.inProgress : stats[status as keyof typeof stats] ?? 0;
+          const isActive = statusFilter === status;
+          const activeStyles: Record<string, React.CSSProperties> = {
+            '': { backgroundColor: 'rgba(71, 85, 105, 0.4)', color: 'rgb(148, 163, 184)', borderColor: 'rgba(71, 85, 105, 0.5)' },
+            new: { backgroundColor: 'rgba(59, 130, 246, 0.2)', color: 'rgb(96, 165, 250)', borderColor: 'rgba(59, 130, 246, 0.4)' },
+            in_progress: { backgroundColor: 'rgba(245, 158, 11, 0.2)', color: 'rgb(251, 191, 36)', borderColor: 'rgba(245, 158, 11, 0.4)' },
+            qa: { backgroundColor: 'rgba(168, 85, 247, 0.2)', color: 'rgb(192, 132, 252)', borderColor: 'rgba(168, 85, 247, 0.4)' },
+            closed: { backgroundColor: 'rgba(34, 197, 94, 0.2)', color: 'rgb(74, 222, 128)', borderColor: 'rgba(34, 197, 94, 0.4)' },
+            reopened: { backgroundColor: 'rgba(239, 68, 68, 0.2)', color: 'rgb(248, 113, 113)', borderColor: 'rgba(239, 68, 68, 0.4)' },
+          };
+          return (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(status)}
+              className={`px-4 py-2.5 rounded-lg font-medium text-sm transition-all border ${
+                isActive ? '' : 'bg-slate-800/50 text-slate-400 border-slate-700/50 hover:bg-slate-700/50 hover:text-white'
+              }`}
+              style={isActive ? activeStyles[status] : {}}
+            >
+              {label.charAt(0).toUpperCase() + label.slice(1)} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Additional Filters */}
+      <div className="filter-bar mb-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <select
               className="input-field min-w-[130px]"
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value as TicketPriority)}
@@ -220,20 +238,6 @@ export default function TicketsPage() {
                 Clear
               </button>
             )}
-          </div>
-
-          {/* Allow all users to create tickets - backend validates project access */}
-          {projects.length > 0 && (
-            <Link
-              href="/protected/dashboard/tickets/new"
-              className="btn-primary flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg whitespace-nowrap font-medium relative overflow-hidden"
-            >
-              <svg className="w-5 h-5 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span className="relative z-10">New Ticket</span>
-            </Link>
-          )}
         </div>
       </div>
 
@@ -243,7 +247,7 @@ export default function TicketsPage() {
           <div className="p-8 text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-400 mx-auto"></div>
           </div>
-        ) : tickets.length === 0 ? (
+        ) : displayedTickets.length === 0 ? (
           <div className="p-8 text-center">
             <svg className="w-12 h-12 text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -269,7 +273,7 @@ export default function TicketsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
-                {tickets.map((ticket) => (
+                {displayedTickets.map((ticket) => (
                   <tr key={ticket.id} className="hover:bg-slate-700/30 transition-colors">
                     <td className="px-6 py-4">
                       <Link href={`/protected/dashboard/tickets/${ticket.id}`} className="block">
@@ -293,19 +297,20 @@ export default function TicketsPage() {
                       <span className="text-sm text-slate-300 capitalize">{ticket.type}</span>
                     </td>
                     <td className="px-6 py-4">
-                      {ticket.assignee_name ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-sky-500/20 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-medium text-sky-400">
-                              {ticket.assignee_name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                            </span>
-                          </div>
-                          <div className="flex flex-col min-w-0">
-                            <span className="text-sm text-white truncate">{ticket.assignee_name}</span>
-                            {ticket.assignee_username && (
-                              <span className="text-xs text-slate-500">@{ticket.assignee_username}</span>
-                            )}
-                          </div>
+                      {ticket.assignees_list && ticket.assignees_list.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {ticket.assignees_list.map((a) => (
+                            <div key={a.id} className="flex items-center gap-1.5">
+                              <div className="w-6 h-6 rounded-full bg-sky-500/20 flex items-center justify-center flex-shrink-0">
+                                <span className="text-[10px] font-medium text-sky-400">
+                                  {(a.display_name || a.username).slice(0, 2).toUpperCase()}
+                                </span>
+                              </div>
+                              <span className="text-xs text-white truncate max-w-[80px]" title={a.display_name || a.username}>
+                                {a.display_name || a.username}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <span className="text-sm text-slate-500 italic">Unassigned</span>

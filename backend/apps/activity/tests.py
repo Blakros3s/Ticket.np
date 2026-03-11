@@ -110,10 +110,10 @@ class ActivityLogTestCase(TestCase):
         
         self.client.force_authenticate(user=self.admin_user)
         
-        # Change assignee
+        # Change assignees
         response = self.client.patch(
-            f'/api/tickets/{self.ticket.id}/',
-            {'assignee': new_assignee.id},
+            f'/api/tickets/tickets/{self.ticket.id}/',
+            {'assignees': [new_assignee.id]},
             format='json'
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)

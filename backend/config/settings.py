@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'apps.todos',
     'apps.core',
     'apps.attendance',
+    'apps.notifications',
 ]
 
 MIDDLEWARE = [

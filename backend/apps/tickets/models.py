@@ -43,7 +43,7 @@ class Ticket(models.Model):
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='medium')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new')
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='tickets')
-    assignee = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_tickets')
+    assignees = models.ManyToManyField(User, related_name='assigned_tickets', blank=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_tickets')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
