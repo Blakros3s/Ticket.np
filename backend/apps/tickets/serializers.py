@@ -45,10 +45,27 @@ class TicketMediaSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class TicketAssigneeSerializer(serializers.Serializer):
+    """Nested serializer for assignee in list"""
+    id = serializers.IntegerField()
+    username = serializers.CharField()
+    first_name = serializers.CharField()
+    last_name = serializers.CharField()
+    
+    def to_representation(self, instance):
+        return {
+            'id': instance.id,
+            'username': instance.username,
+            'first_name': instance.first_name or '',
+            'last_name': instance.last_name or '',
+            'display_name': f"{instance.first_name or ''} {instance.last_name or ''}".strip() or instance.username,
+        }
+
+
 class TicketSerializer(serializers.ModelSerializer):
     created_by = serializers.StringRelatedField(read_only=True)
-    assignee_name = serializers.StringRelatedField(source='assignee', read_only=True)
-    assignee_username = serializers.SerializerMethodField()
+    assignees = serializers.SerializerMethodField()
+    assignees_list = serializers.SerializerMethodField()
     project_name = serializers.StringRelatedField(source='project', read_only=True)
     media_files = TicketMediaSerializer(many=True, read_only=True)
     comments = TicketCommentSerializer(many=True, read_only=True)
@@ -57,14 +74,28 @@ class TicketSerializer(serializers.ModelSerializer):
         model = Ticket
         fields = [
             'id', 'ticket_id', 'title', 'description', 'type', 'priority', 'status',
-            'project', 'project_name', 'assignee', 'assignee_name', 'assignee_username', 'created_by',
+            'project', 'project_name', 'assignees', 'assignees_list', 'created_by',
             'created_at', 'updated_at', 'media_files', 'comments',
             'in_progress_at', 'qa_at', 'closed_at'
         ]
         read_only_fields = ['ticket_id', 'created_by', 'created_at', 'updated_at', 'in_progress_at', 'qa_at', 'closed_at']
     
-    def get_assignee_username(self, obj):
-        return obj.assignee.username if obj.assignee else None
+    def get_assignees(self, obj):
+        """Return list of assignee IDs for API compatibility"""
+        return list(obj.assignees.values_list('id', flat=True))
+    
+    def get_assignees_list(self, obj):
+        """Return full assignee objects for display"""
+        return [
+            {
+                'id': u.id,
+                'username': u.username,
+                'first_name': u.first_name or '',
+                'last_name': u.last_name or '',
+                'display_name': f"{u.first_name or ''} {u.last_name or ''}".strip() or u.username,
+            }
+            for u in obj.assignees.all()
+        ]
 
 
 class TicketCreateSerializer(serializers.ModelSerializer):
@@ -73,15 +104,24 @@ class TicketCreateSerializer(serializers.ModelSerializer):
         required=False,
         write_only=True
     )
+    assignees = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        write_only=True
+    )
     
     class Meta:
         model = Ticket
-        fields = ['title', 'description', 'type', 'priority', 'project', 'assignee', 'media_files']
+        fields = ['title', 'description', 'type', 'priority', 'project', 'assignees', 'media_files']
     
     def create(self, validated_data):
         media_files = validated_data.pop('media_files', [])
+        assignee_ids = validated_data.pop('assignees', [])
         validated_data['created_by'] = self.context['request'].user
         ticket = super().create(validated_data)
+        
+        if assignee_ids:
+            ticket.assignees.set(assignee_ids)
         
         for file in media_files:
             TicketMedia.objects.create(
@@ -107,9 +147,22 @@ class TicketCreateSerializer(serializers.ModelSerializer):
 
 
 class TicketUpdateSerializer(serializers.ModelSerializer):
+    assignees = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        write_only=True
+    )
+    
     class Meta:
         model = Ticket
-        fields = ['title', 'description', 'type', 'priority', 'status', 'assignee']
+        fields = ['title', 'description', 'type', 'priority', 'status', 'assignees']
+    
+    def update(self, instance, validated_data):
+        assignee_ids = validated_data.pop('assignees', None)
+        instance = super().update(instance, validated_data)
+        if assignee_ids is not None:
+            instance.assignees.set(assignee_ids)
+        return instance
 
 
 class TicketStatusSerializer(serializers.ModelSerializer):

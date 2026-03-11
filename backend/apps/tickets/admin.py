@@ -4,7 +4,7 @@ from .models import Ticket
 
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
-    list_display = ['ticket_id', 'title', 'type', 'priority', 'status', 'project', 'assignee', 'created_at']
+    list_display = ['ticket_id', 'title', 'type', 'priority', 'status', 'project', 'created_at']
     list_filter = ['type', 'priority', 'status', 'created_at']
-    search_fields = ['ticket_id', 'title', 'description', 'project__name', 'assignee__username']
+    search_fields = ['ticket_id', 'title', 'description', 'project__name']
     ordering = ['-created_at']

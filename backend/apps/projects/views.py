@@ -73,6 +73,15 @@ class ProjectViewSet(viewsets.ModelViewSet):
             )
         
         member = ProjectMember.objects.create(project=project, user=user)
+        # Notify the added user (when added by someone else)
+        if user.id != request.user.id:
+            from apps.notifications.models import Notification
+            Notification.objects.create(
+                user=user,
+                message=f"You were added to project \"{project.name}\" by {request.user.username}",
+                project_id=project.id,
+                project_name=project.name[:255],
+            )
         serializer = ProjectMemberSerializer(member)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
@@ -171,33 +171,49 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* In Progress Tickets */}
-              {employeeData.in_progress_tickets.length > 0 && (
-                <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden mb-6">
-                  <div className="p-4 border-b border-slate-700/50">
-                    <h3 className="text-lg font-semibold text-white">In Progress</h3>
-                  </div>
-                  <div className="divide-y divide-slate-700/50">
-                    {employeeData.in_progress_tickets.map((ticket) => (
-                      <Link 
-                        key={ticket.id}
-                        href={`/protected/dashboard/tickets/${ticket.id}`}
-                        className="flex items-center justify-between p-4 hover:bg-slate-700/30 transition-colors"
-                      >
-                        <div>
-                          <p className="text-white font-medium">{ticket.ticket_id}: {ticket.title}</p>
-                          <p className="text-sm text-slate-400">
-                            {ticket.project_name} &bull; Priority: <span className={getPriorityColor(ticket.priority)}>{ticket.priority}</span>
-                          </p>
+              {/* My Tickets - Status-wise */}
+              <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden mb-6">
+                <div className="p-4 border-b border-slate-700/50 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-white">My Tickets</h3>
+                  <Link href="/protected/dashboard/tickets" className="text-sm text-sky-400 hover:text-sky-300">
+                    View All
+                  </Link>
+                </div>
+                <div className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    {(['new', 'in_progress', 'qa', 'closed', 'reopened'] as const).map((status) => {
+                      const tickets = employeeData.my_tickets_by_status?.[status] || [];
+                      const statusLabel = status.replace('_', ' ');
+                      const statusColor = status === 'new' ? 'blue' : status === 'in_progress' ? 'amber' : status === 'qa' ? 'purple' : status === 'closed' ? 'green' : 'red';
+                      return (
+                        <div key={status} className="bg-slate-700/30 rounded-lg p-3">
+                          <h4 className={`text-sm font-medium mb-2 capitalize ${
+                            statusColor === 'blue' ? 'text-blue-400' : statusColor === 'amber' ? 'text-amber-400' : statusColor === 'purple' ? 'text-purple-400' : statusColor === 'green' ? 'text-green-400' : 'text-red-400'
+                          }`}>
+                            {statusLabel} ({tickets.length})
+                          </h4>
+                          <div className="space-y-2 max-h-40 overflow-y-auto">
+                            {tickets.length === 0 ? (
+                              <p className="text-xs text-slate-500">None</p>
+                            ) : (
+                              tickets.map((ticket) => (
+                                <Link
+                                  key={ticket.id}
+                                  href={`/protected/dashboard/tickets/${ticket.id}`}
+                                  className="block p-2 rounded bg-slate-800/50 hover:bg-slate-700/50 transition-colors"
+                                >
+                                  <p className="text-xs text-white font-medium truncate">{ticket.ticket_id}</p>
+                                  <p className="text-xs text-slate-400 truncate">{ticket.title}</p>
+                                </Link>
+                              ))
+                            )}
+                          </div>
                         </div>
-                        <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </Link>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           )}
 

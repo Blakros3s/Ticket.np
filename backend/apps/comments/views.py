@@ -32,13 +32,13 @@ class CommentViewSet(viewsets.ModelViewSet):
             return queryset.filter(
                 Q(ticket__project__created_by=user) | 
                 Q(ticket__project__members=user) |
-                Q(ticket__assignee=user) |
+                Q(ticket__assignees=user) |
                 Q(ticket__created_by=user)
             ).distinct().select_related('author', 'ticket')
         
         # Employee: only comments on their assigned tickets or tickets in their projects
         return queryset.filter(
-            Q(ticket__assignee=user) |
+            Q(ticket__assignees=user) |
             Q(ticket__project__members=user) |
             Q(ticket__created_by=user)
         ).distinct().select_related('author', 'ticket')

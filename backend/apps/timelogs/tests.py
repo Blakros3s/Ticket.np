@@ -42,9 +42,9 @@ class WorkLogAPITestCase(TestCase):
             priority='medium',
             status='in_progress',
             project=self.project,
-            created_by=self.manager_user,
-            assignee=self.employee_user
+            created_by=self.manager_user
         )
+        self.ticket.assignees.add(self.employee_user)
     
     def test_start_work(self):
         """Test starting work on a ticket"""
@@ -95,9 +95,9 @@ class WorkLogAPITestCase(TestCase):
             priority='low',
             status='new',
             project=self.project,
-            created_by=self.manager_user,
-            assignee=self.employee_user
+            created_by=self.manager_user
         )
+        ticket2.assignees.add(self.employee_user)
         
         self.client.force_authenticate(user=self.employee_user)
         response = self.client.post(f'/api/tickets/{ticket2.id}/start_work/')

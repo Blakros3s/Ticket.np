@@ -226,7 +226,7 @@ class Attendance(models.Model):
     @staticmethod
     def is_working_day(check_date):
         """Check if date is a working day (not Saturday, not a Holiday)"""
-        # Saturday is index 5
+        # Saturday is index 5 (weekday: 0=Mon, 6=Sun)
         if check_date.weekday() == 5:
             return False
             
@@ -238,6 +238,29 @@ class Attendance(models.Model):
         ).exists()
         
         return not is_holiday
+    
+    @staticmethod
+    def count_working_days_in_range(start_date, end_date):
+        """Count working days (excluding Saturday and holidays) in a date range"""
+        from datetime import timedelta
+        from apps.calendar.models import CalendarEvent
+        
+        # Get all dates in range
+        current = start_date
+        count = 0
+        holiday_dates = set(
+            CalendarEvent.objects.filter(
+                date__range=[start_date, end_date],
+                category='holiday'
+            ).values_list('date', flat=True)
+        )
+        
+        while current <= end_date:
+            if current.weekday() != 5 and current not in holiday_dates:
+                count += 1
+            current += timedelta(days=1)
+        
+        return count
     
     def mark_available(self):
         """Mark employee as available"""

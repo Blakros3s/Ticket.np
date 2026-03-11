@@ -1,14 +1,14 @@
-#!/usr/bin/env python
 """
 Populate TicketHub with realistic dummy data for testing and demo purposes.
 
 Usage:
-    python manage.py shell < populate.py
-    OR
-    docker-compose exec backend python manage.py shell < populate.py
+    python manage.py populate_db              # Add data (keeps existing)
+    python manage.py populate_db --clear       # Clear all data, then populate
+
+    With Docker:
+    docker exec -it <backend_container> python manage.py populate_db --clear
 """
 
-from django.contrib.auth import get_user_model
 from django.utils import timezone
 from datetime import timedelta, datetime
 import random
@@ -19,15 +19,17 @@ from apps.tickets.models import Ticket
 from apps.comments.models import Comment
 from apps.timelogs.models import WorkLog
 from apps.activity.models import ActivityLog
+from apps.notifications.models import Notification
 from django.contrib.contenttypes.models import ContentType
 
-# Clear existing data (optional - uncomment if you want to start fresh)
-# User.objects.exclude(username='admin').delete()
-# Project.objects.all().delete()
-# Ticket.objects.all().delete()
-# Comment.objects.all().delete()
-# WorkLog.objects.all().delete()
-# ActivityLog.objects.all().delete()
+
+def clear_data():
+    """Clear all populated data (keeps admin user)."""
+    ActivityLog.objects.all().delete()
+    Notification.objects.all().delete()
+    Ticket.objects.all().delete()
+    Project.objects.all().delete()
+    User.objects.exclude(username='admin').delete()
 
 
 # Realistic sample data
@@ -261,7 +263,8 @@ def create_tickets(projects, users):
         for _ in range(num_tickets):
             title = random.choice(TICKET_TITLES)
             description = random.choice(TICKET_DESCRIPTIONS)
-            
+            creator = random.choice(project_users)
+
             # Try to create ticket with unique ID, retry if collision
             max_retries = 10
             for attempt in range(max_retries):
@@ -273,9 +276,10 @@ def create_tickets(projects, users):
                         priority=random.choice(priorities),
                         status=random.choice(statuses),
                         project=project,
-                        created_by=random.choice(project_users),
-                        assignee=random.choice(project_users) if random.random() > 0.1 else None
+                        created_by=creator
                     )
+                    if random.random() > 0.1:
+                        ticket.assignees.add(random.choice(project_users))
                     print(f"Created ticket: {ticket.ticket_id}")
                     tickets.append((ticket, project_users))
                     break
@@ -314,7 +318,8 @@ def create_work_logs(tickets_data):
     
     for ticket, project_users in tickets_data:
         # Only add work logs for assigned and non-closed tickets
-        if ticket.assignee and ticket.status != 'closed' and random.random() > 0.3:
+        first_assignee = ticket.assignees.first()
+        if first_assignee and ticket.status != 'closed' and random.random() > 0.3:
             # Add 1-3 work log entries
             num_logs = random.randint(1, 3)
             
@@ -325,7 +330,7 @@ def create_work_logs(tickets_data):
                 
                 WorkLog.objects.create(
                     ticket=ticket,
-                    user=ticket.assignee,
+                    user=first_assignee,
                     start_time=start_time,
                     end_time=end_time,
                     notes=random.choice(WORK_LOG_NOTES)
@@ -357,7 +362,7 @@ def create_activity_logs(tickets_data, projects, users):
                 'create': f'Created ticket {ticket.ticket_id}',
                 'update': f'Updated ticket {ticket.ticket_id}',
                 'status_change': f'Changed status of {ticket.ticket_id} to {ticket.status}',
-                'assignment_change': f'Assigned {ticket.ticket_id} to {ticket.assignee.username if ticket.assignee else "Unassigned"}',
+                'assignment_change': f'Assigned {ticket.ticket_id} to {", ".join(u.username for u in ticket.assignees.all()) or "Unassigned"}',
                 'comment': f'Added comment to ticket {ticket.ticket_id}',
                 'work_log': f'Logged work on ticket {ticket.ticket_id}',
             }
@@ -434,11 +439,16 @@ def print_summary(users, projects):
     print("="*50 + "\n")
 
 
-def main():
+def main(clear=False):
     """Main function to populate the database."""
     print("\nStarting TicketHub database population...")
     print("="*50)
-    
+
+    if clear:
+        print("\nClearing existing data...")
+        clear_data()
+        print("Data cleared.\n")
+
     # Create users
     users = create_users()
     
@@ -461,7 +471,3 @@ def main():
     print_summary(users, projects)
 
 
-if __name__ == '__main__':
-    main()
-else:
-    main()
