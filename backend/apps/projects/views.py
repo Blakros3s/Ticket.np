@@ -2,15 +2,17 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 import logging
 
 logger = logging.getLogger(__name__)
-from django.db import models # Moved this import to the top as it's used in ProjectViewSet
+
+from apps.notifications.models import Notification
+from apps.users.models import User
+from apps.users.permissions import IsManagerOrAdmin
 from .models import Project, ProjectMember, ProjectDocument
 from .serializers import ProjectSerializer, ProjectCreateSerializer, ProjectMemberSerializer, ProjectDocumentSerializer
-from apps.users.permissions import IsManagerOrAdmin
-from apps.users.models import User
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -23,20 +25,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
-        
-        # Admin sees all projects
+
         if user.role == 'admin':
             return Project.objects.all()
-        
-        # Manager sees projects they created and are members of
-        if user.role == 'manager':
-            return Project.objects.filter(
-                models.Q(created_by=user) | models.Q(members=user)
-            ).distinct()
-        
-        # Employee sees projects they are members of or created
+
+        # Managers and employees both see projects they created or are members of
         return Project.objects.filter(
-            models.Q(created_by=user) | models.Q(members=user)
+            Q(created_by=user) | Q(members=user)
         ).distinct()
     
     def get_permissions(self):
@@ -73,9 +68,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
             )
         
         member = ProjectMember.objects.create(project=project, user=user)
-        # Notify the added user (when added by someone else)
         if user.id != request.user.id:
-            from apps.notifications.models import Notification
             Notification.objects.create(
                 user=user,
                 message=f"You were added to project \"{project.name}\" by {request.user.username}",

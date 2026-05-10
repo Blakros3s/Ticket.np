@@ -1,5 +1,6 @@
 ﻿import api from './api';
 import { UserRole } from './auth';
+import { normalizeListResponse } from './http-utils';
 
 export interface Project {
   id: number;
@@ -61,15 +62,7 @@ export interface CreateProjectData {
 export const projectsApi = {
   getProjects: async (): Promise<Project[]> => {
     const response = await api.get<Project[] | { results: Project[] }>('/projects/projects/');
-    // Handle both direct array and { results: array } formats
-    const data = response.data;
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data && typeof data === 'object' && 'results' in data) {
-      return data.results;
-    }
-    return [];
+    return normalizeListResponse(response.data);
   },
 
   getProject: async (id: number): Promise<Project> => {
@@ -106,26 +99,12 @@ export const projectsApi = {
 
   getMyProjects: async (): Promise<Project[]> => {
     const response = await api.get<Project[] | { results: Project[] }>('/projects/projects/my_projects/');
-    const data = response.data;
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data && typeof data === 'object' && 'results' in data) {
-      return data.results;
-    }
-    return [];
+    return normalizeListResponse(response.data);
   },
 
   getDocuments: async (projectId: number): Promise<ProjectDocument[]> => {
     const response = await api.get<ProjectDocument[] | { results: ProjectDocument[] }>(`/projects/projects/${projectId}/documents/`);
-    const data = response.data;
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data && typeof data === 'object' && 'results' in data) {
-      return data.results;
-    }
-    return [];
+    return normalizeListResponse(response.data);
   },
 
   uploadDocument: async (projectId: number, formData: FormData): Promise<ProjectDocument> => {

@@ -8,7 +8,6 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from .models import CalendarEvent
 from .serializers import CalendarEventSerializer, CalendarEventCreateSerializer, CalendarEventListSerializer
-from apps.users.permissions import IsAdminUser
 
 
 class IsAdminOrReadOnly(permissions.BasePermission):

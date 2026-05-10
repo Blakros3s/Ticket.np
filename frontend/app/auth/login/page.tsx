@@ -8,6 +8,7 @@ import { ErrorModal, extractErrorMessage } from '@/components/error-modal';
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [statusCode, setStatusCode] = useState<number | undefined>();
   const [isLoading, setIsLoading] = useState(false);
@@ -119,13 +120,46 @@ export default function LoginPage() {
                   <input
                     id="password"
                     name="password"
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="input-field w-full pl-12 pr-4 py-3 rounded-xl text-white placeholder-slate-500"
+                    className="input-field w-full pl-12 pr-12 py-3 rounded-xl text-white placeholder-slate-500"
                     placeholder="Enter your password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-200 transition-colors"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    disabled={isLoading}
+                  >
+                    {showPassword ? (
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M13.875 18.825A10.05 10.05 0 0112 19c-5 0-9.27-3.11-11-7 1-2.25 2.62-4.13 4.63-5.38M9.88 9.88a3 3 0 104.24 4.24M6.1 6.1L3 3m3.1 3.1A10.04 10.04 0 0112 5c5 0 9.27 3.11 11 7a11.83 11.83 0 01-4.1 4.9M6.1 6.1l12.8 12.8"
+                        />
+                      </svg>
+                    ) : (
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                        />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7S3.732 16.057 2.458 12z"
+                        />
+                      </svg>
+                    )}
+                  </button>
                 </div>
               </div>
 

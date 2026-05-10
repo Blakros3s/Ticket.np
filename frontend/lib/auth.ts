@@ -1,4 +1,5 @@
 ﻿import api from './api';
+import { normalizeListResponse } from './http-utils';
 
 export interface UserRole {
   id: number;
@@ -51,13 +52,6 @@ export const authApi = {
     return response.data;
   },
 
-  refreshToken: async (refreshToken: string): Promise<{ access: string; refresh: string }> => {
-    const response = await api.post<{ access: string; refresh: string }>('/auth/token/refresh/', {
-      refresh: refreshToken,
-    });
-    return response.data;
-  },
-
   getProfile: async (): Promise<User> => {
     const response = await api.get<User>('/auth/profile/');
     return response.data;
@@ -75,14 +69,7 @@ export const authApi = {
 
   getUsers: async (): Promise<User[]> => {
     const response = await api.get<User[] | { results: User[] }>('/auth/users/');
-    const data = response.data;
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data && typeof data === 'object' && 'results' in data) {
-      return data.results;
-    }
-    return [];
+    return normalizeListResponse(response.data);
   },
 
   deactivateUser: async (userId: number): Promise<void> => {
@@ -127,14 +114,7 @@ export const authApi = {
   // Get all department roles
   getDepartmentRoles: async (): Promise<UserRole[]> => {
     const response = await api.get<UserRole[] | { results: UserRole[] }>('/auth/department-roles/');
-    console.log('API response for department roles:', response.data);
-    // Handle both direct array and wrapped response
-    if (Array.isArray(response.data)) {
-      return response.data;
-    } else if (response.data && Array.isArray(response.data.results)) {
-      return response.data.results;
-    }
-    return [];
+    return normalizeListResponse(response.data);
   },
 
   // Admin: create a new department role

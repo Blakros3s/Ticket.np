@@ -65,14 +65,6 @@ export const calendarApi = {
     return response.data;
   },
 
-  // Get events for a date range
-  getEventsByRange: async (start: string, end: string): Promise<{ events: CalendarEvent[]; count: number }> => {
-    const response = await api.get('/calendar/events/range/', {
-      params: { start, end }
-    });
-    return response.data;
-  },
-
   // Create event (admin only)
   createEvent: async (data: CalendarEventInput): Promise<CalendarEvent> => {
     // Remove empty time fields to avoid validation errors

@@ -7,6 +7,7 @@ from rest_framework.exceptions import ValidationError
 from .models import User, UserRole
 from .serializers import UserSerializer, AdminUserCreateSerializer, UserRoleSerializer
 from .permissions import IsAdminUser
+from .views import _get_error_detail
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
         description="Retrieve list of users. Admin can see all users, others see only active users."
     )
 )
-class UserListView(generics.ListAPIView):
+class UserListView(generics.ListCreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -28,8 +29,7 @@ class UserListView(generics.ListAPIView):
             logger.info(f"User list request by: {user.username} (role: {user.role})")
             if user.role == 'admin':
                 return User.objects.all()
-            else:
-                return User.objects.filter(is_active=True)
+            return User.objects.filter(is_active=True)
         except Exception as e:
             logger.error(f"Error in UserListView.get_queryset: {str(e)}")
             raise
@@ -41,8 +41,8 @@ class UserListView(generics.ListAPIView):
             logger.error(f"Error listing users: {str(e)}")
             return Response({'detail': 'Failed to retrieve users list'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def post(self, request, *args, **kwargs):
-        # Admin creation of a new user with a specific role
+    def create(self, request, *args, **kwargs):
+        """Admin creation of a new user with a specific role."""
         serializer = AdminUserCreateSerializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)
@@ -50,8 +50,7 @@ class UserListView(generics.ListAPIView):
             return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
         except ValidationError as e:
             logger.warning(f"Admin user creation failed: {str(e)}")
-            error_detail = e.detail if hasattr(e, 'detail') else {'detail': str(e)}
-            return Response(error_detail, status=status.HTTP_400_BAD_REQUEST)
+            return Response(_get_error_detail(e), status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error creating user via admin: {str(e)}")
             return Response({'detail': 'Failed to create user'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -109,7 +108,6 @@ class UserRoleListView(generics.ListCreateAPIView):
     def create(self, request, *args, **kwargs):
         try:
             logger.info(f"Creating new department role by {request.user.username}")
-            logger.info(f"Request data: {request.data}")
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             role = serializer.save()
@@ -117,8 +115,7 @@ class UserRoleListView(generics.ListCreateAPIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except ValidationError as e:
             logger.warning(f"Department role creation failed: {str(e)}")
-            error_detail = e.detail if hasattr(e, 'detail') else {'detail': str(e)}
-            return Response(error_detail, status=status.HTTP_400_BAD_REQUEST)
+            return Response(_get_error_detail(e), status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error creating department role: {str(e)}")
             return Response({'detail': 'Failed to create department role'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -148,17 +145,13 @@ class UserRoleDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
     lookup_field = 'pk'
 
-    def get_object(self):
-        return UserRole.objects.get(id=self.kwargs.get('pk'))
-
     def update(self, request, *args, **kwargs):
         try:
             logger.info(f"Updating department role {self.kwargs.get('pk')} by {request.user.username}")
             return super().update(request, *args, **kwargs)
         except ValidationError as e:
             logger.warning(f"Department role update failed: {str(e)}")
-            error_detail = e.detail if hasattr(e, 'detail') else {'detail': str(e)}
-            return Response(error_detail, status=status.HTTP_400_BAD_REQUEST)
+            return Response(_get_error_detail(e), status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error updating department role: {str(e)}")
             return Response({'detail': 'Failed to update department role'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

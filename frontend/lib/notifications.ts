@@ -1,4 +1,5 @@
 import api from './api';
+import { normalizeListResponse } from './http-utils';
 
 export interface Notification {
   id: number;
@@ -14,10 +15,7 @@ export interface Notification {
 export const notificationsApi = {
   getNotifications: async (): Promise<Notification[]> => {
     const response = await api.get<Notification[] | { results: Notification[] }>('/notifications/');
-    const data = response.data;
-    if (Array.isArray(data)) return data;
-    if (data && typeof data === 'object' && 'results' in data) return data.results;
-    return [];
+    return normalizeListResponse(response.data);
   },
 
   markRead: async (id: number): Promise<Notification> => {

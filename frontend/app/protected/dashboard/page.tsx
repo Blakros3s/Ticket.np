@@ -136,10 +136,14 @@ export default function DashboardPage() {
                   <p className="text-slate-400 text-sm">Assigned Tickets</p>
                   <p className="text-3xl font-bold text-white mt-2">{employeeData.assigned_tickets_count}</p>
                 </div>
-                <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-                  <p className="text-slate-400 text-sm">In Progress</p>
+                <Link
+                  href="/protected/dashboard/my-tickets?status=in_progress"
+                  className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50 hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group"
+                >
+                  <p className="text-slate-400 text-sm group-hover:text-amber-300 transition-colors">In Progress</p>
                   <p className="text-3xl font-bold text-amber-400 mt-2">{employeeData.in_progress_count}</p>
-                </div>
+                  <p className="text-xs text-slate-500 mt-1 group-hover:text-amber-400/70 transition-colors">View →</p>
+                </Link>
                 <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
                   <p className="text-slate-400 text-sm">Completed</p>
                   <p className="text-3xl font-bold text-green-400 mt-2">{employeeData.completed_tickets_count}</p>
@@ -175,28 +179,33 @@ export default function DashboardPage() {
               <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden mb-6">
                 <div className="p-4 border-b border-slate-700/50 flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-white">My Tickets</h3>
-                  <Link href="/protected/dashboard/tickets" className="text-sm text-sky-400 hover:text-sky-300">
-                    View All
+                  <Link href="/protected/dashboard/my-tickets" className="text-sm text-sky-400 hover:text-sky-300 font-medium">
+                    View All →
                   </Link>
                 </div>
                 <div className="p-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                     {(['new', 'in_progress', 'qa', 'closed', 'reopened'] as const).map((status) => {
-                      const tickets = employeeData.my_tickets_by_status?.[status] || [];
+                      const statusTickets = employeeData.my_tickets_by_status?.[status] || [];
                       const statusLabel = status.replace('_', ' ');
-                      const statusColor = status === 'new' ? 'blue' : status === 'in_progress' ? 'amber' : status === 'qa' ? 'purple' : status === 'closed' ? 'green' : 'red';
+                      const colorMap: Record<string, string> = {
+                        new: 'text-blue-400', in_progress: 'text-amber-400',
+                        qa: 'text-purple-400', closed: 'text-green-400', reopened: 'text-red-400',
+                      };
                       return (
                         <div key={status} className="bg-slate-700/30 rounded-lg p-3">
-                          <h4 className={`text-sm font-medium mb-2 capitalize ${
-                            statusColor === 'blue' ? 'text-blue-400' : statusColor === 'amber' ? 'text-amber-400' : statusColor === 'purple' ? 'text-purple-400' : statusColor === 'green' ? 'text-green-400' : 'text-red-400'
-                          }`}>
-                            {statusLabel} ({tickets.length})
-                          </h4>
+                          <Link
+                            href={`/protected/dashboard/my-tickets?status=${status}`}
+                            className={`text-sm font-medium mb-2 capitalize flex items-center justify-between hover:underline ${colorMap[status]}`}
+                          >
+                            <span>{statusLabel} ({statusTickets.length})</span>
+                            <span className="text-xs opacity-60">→</span>
+                          </Link>
                           <div className="space-y-2 max-h-40 overflow-y-auto">
-                            {tickets.length === 0 ? (
+                            {statusTickets.length === 0 ? (
                               <p className="text-xs text-slate-500">None</p>
                             ) : (
-                              tickets.map((ticket) => (
+                              statusTickets.map((ticket) => (
                                 <Link
                                   key={ticket.id}
                                   href={`/protected/dashboard/tickets/${ticket.id}`}

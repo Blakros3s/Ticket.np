@@ -1,4 +1,5 @@
 import api from './api';
+import { buildQueryString, normalizeListResponse } from './http-utils';
 
 export type TicketType = 'bug' | 'task' | 'feature';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
@@ -84,26 +85,15 @@ export interface TicketFilters {
 
 export const ticketsApi = {
   getTickets: async (filters?: TicketFilters): Promise<Ticket[]> => {
-    const params = new URLSearchParams();
-    if (filters?.status) params.append('status', filters.status);
-    if (filters?.priority) params.append('priority', filters.priority);
-    if (filters?.type) params.append('type', filters.type);
-    if (filters?.project) params.append('project', filters.project.toString());
-    if (filters?.search) params.append('search', filters.search);
-    
-    const queryString = params.toString();
-    const url = `/tickets/tickets/${queryString ? `?${queryString}` : ''}`;
-    
-    const response = await api.get<Ticket[] | { results: Ticket[] }>(url);
-    const data = response.data;
-    
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data && typeof data === 'object' && 'results' in data) {
-      return data.results;
-    }
-    return [];
+    const queryString = buildQueryString({
+      status: filters?.status,
+      priority: filters?.priority,
+      type: filters?.type,
+      project: filters?.project,
+      search: filters?.search,
+    });
+    const response = await api.get<Ticket[] | { results: Ticket[] }>(`/tickets/tickets/${queryString}`);
+    return normalizeListResponse(response.data);
   },
 
   getTicket: async (id: number): Promise<Ticket> => {
@@ -152,28 +142,12 @@ export const ticketsApi = {
 
   getMyTickets: async (): Promise<Ticket[]> => {
     const response = await api.get<Ticket[] | { results: Ticket[] }>('/tickets/tickets/my_tickets/');
-    const data = response.data;
-    
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data && typeof data === 'object' && 'results' in data) {
-      return data.results;
-    }
-    return [];
+    return normalizeListResponse(response.data);
   },
 
   getTicketsByProject: async (projectId: number): Promise<Ticket[]> => {
     const response = await api.get<Ticket[] | { results: Ticket[] }>(`/tickets/tickets/by_project/?project_id=${projectId}`);
-    const data = response.data;
-    
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data && typeof data === 'object' && 'results' in data) {
-      return data.results;
-    }
-    return [];
+    return normalizeListResponse(response.data);
   },
 
   selfAssign: async (id: number): Promise<Ticket> => {

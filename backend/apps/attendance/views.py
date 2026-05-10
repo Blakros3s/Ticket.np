@@ -191,8 +191,8 @@ class AttendanceListView(generics.ListCreateAPIView):
         """Toggle availability status - only during office hours"""
         serializer = AttendanceToggleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        target_date = serializer.validated_data.get('date', date.today())
+        today = timezone.localdate()
+        target_date = serializer.validated_data.get('date', today)
         new_status = serializer.validated_data.get('status')
         
         # Block toggle on non-working days (Saturday, holidays)
@@ -234,7 +234,7 @@ class AttendanceListView(generics.ListCreateAPIView):
 @permission_classes([permissions.IsAuthenticated])
 def get_team_attendance(request):
     """Get today's attendance for all team members"""
-    today = date.today()
+    today = timezone.localdate()
     
     # Skip attendance logic on non-working days (Saturday, holidays)
     if not Attendance.is_working_day(today):
@@ -297,7 +297,7 @@ def get_team_attendance(request):
 @permission_classes([permissions.IsAuthenticated])
 def get_my_attendance(request):
     """Get current user's attendance for today"""
-    today = date.today()
+    today = timezone.localdate()
     
     # On non-working days (Saturday, holidays), return a special response
     if not Attendance.is_working_day(today):
@@ -369,7 +369,7 @@ def get_daily_attendance_logs(request):
         except ValueError:
             return Response({'detail': 'Invalid date format. Use YYYY-MM-DD'}, status=status.HTTP_400_BAD_REQUEST)
     else:
-        target_date = date.today()
+        target_date = timezone.localdate()
     
     # Check if it's a working day
     if not Attendance.is_working_day(target_date):
