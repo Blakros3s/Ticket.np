@@ -1,11 +1,15 @@
+import { ProtectedRoute } from '@/components/protected-route';
+
 export default function ProtectedLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen">
-      {children}
-    </div>
+    <ProtectedRoute>
+      <div className="min-h-screen">
+        {children}
+      </div>
+    </ProtectedRoute>
   );
 }
