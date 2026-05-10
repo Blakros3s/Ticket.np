@@ -23,6 +23,30 @@ const api = axios.create({
   timeout: 30000, // 30 second timeout
 });
 
+let isRefreshing = false;
+let refreshPromise: Promise<string> | null = null;
+
+const requestNewAccessToken = async (): Promise<string> => {
+  const refreshToken = localStorage.getItem('refresh_token');
+  if (!refreshToken) {
+    throw new Error('No refresh token');
+  }
+
+  const response = await axios.post(`${API_URL}/auth/token/refresh/`, {
+    refresh: refreshToken,
+  });
+
+  const { access, refresh } = response.data;
+  localStorage.setItem('access_token', access);
+
+  // Some backends may not rotate refresh on every call.
+  if (refresh) {
+    localStorage.setItem('refresh_token', refresh);
+  }
+
+  return access;
+};
+
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
@@ -70,18 +94,16 @@ api.interceptors.response.use(
       (originalRequest as any)._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (!refreshToken) {
-          throw new Error('No refresh token');
+        // Ensure only one refresh request runs at a time.
+        if (!isRefreshing) {
+          isRefreshing = true;
+          refreshPromise = requestNewAccessToken().finally(() => {
+            isRefreshing = false;
+            refreshPromise = null;
+          });
         }
 
-        const response = await axios.post(`${API_URL}/auth/token/refresh/`, {
-          refresh: refreshToken,
-        });
-
-        const { access, refresh } = response.data;
-        localStorage.setItem('access_token', access);
-        localStorage.setItem('refresh_token', refresh);
+        const access = await refreshPromise;
 
         originalRequest.headers.Authorization = `Bearer ${access}`;
         return api(originalRequest);
