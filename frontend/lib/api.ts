@@ -1,4 +1,4 @@
-﻿import axios, { AxiosError } from 'axios';
+import axios, { AxiosError } from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
@@ -107,10 +107,18 @@ api.interceptors.response.use(
 
         originalRequest.headers.Authorization = `Bearer ${access}`;
         return api(originalRequest);
-      } catch (refreshError) {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        window.location.href = '/auth/login';
+      } catch (refreshError: any) {
+        // Only clear tokens and redirect if it's an explicit authentication failure (401/403).
+        // Otherwise, it might be a temporary network issue.
+        const refreshStatus = refreshError.response?.status;
+        if (refreshStatus === 401 || refreshStatus === 403) {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          if (typeof window !== 'undefined') {
+            window.location.href = '/auth/login';
+          }
+        }
+        
         return Promise.reject(
           new ApiError('Your session has expired. Please log in again.', 401)
         );
