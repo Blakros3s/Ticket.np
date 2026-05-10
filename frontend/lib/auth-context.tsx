@@ -39,9 +39,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const userData = await authApi.getProfile();
         setUser(userData);
-      } catch (error) {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+      } catch (error: any) {
+        const statusCode = error?.statusCode ?? error?.response?.status;
+        // Keep tokens on temporary/network/server issues; only clear on explicit auth failures.
+        if (statusCode === 401 || statusCode === 403) {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+        }
       }
     }
     setIsLoading(false);

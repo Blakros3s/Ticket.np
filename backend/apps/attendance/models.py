@@ -213,20 +213,20 @@ class Attendance(models.Model):
         if new_status == 'available' and not self.first_available_at:
             self.first_available_at = now
         
-        # If employee marked available at any point, they are present
+        # Update record status
         if new_status == 'available':
             self.status = 'present'
-        
-        # Ensure 'present' status is not downgraded if previously set
-        if self.status != 'present' and new_status == 'available':
-            self.status = 'present'
+        elif new_status == 'unavailable':
+            # If they were never present today and not on leave, they are effectively absent
+            if self.status not in ['present', 'leave']:
+                self.status = 'absent'
         
         self.save()
 
     @staticmethod
     def is_working_day(check_date):
         """Check if date is a working day (not Saturday, not a Holiday)"""
-        # Saturday is index 5 (weekday: 0=Mon, 6=Sun)
+        # Saturday is index 5
         if check_date.weekday() == 5:
             return False
             
@@ -243,20 +243,13 @@ class Attendance(models.Model):
     def count_working_days_in_range(start_date, end_date):
         """Count working days (excluding Saturday and holidays) in a date range"""
         from datetime import timedelta
-        from apps.calendar.models import CalendarEvent
         
         # Get all dates in range
         current = start_date
         count = 0
-        holiday_dates = set(
-            CalendarEvent.objects.filter(
-                date__range=[start_date, end_date],
-                category='holiday'
-            ).values_list('date', flat=True)
-        )
         
         while current <= end_date:
-            if current.weekday() != 5 and current not in holiday_dates:
+            if Attendance.is_working_day(current):
                 count += 1
             current += timedelta(days=1)
         
@@ -316,9 +309,11 @@ class Attendance(models.Model):
     @property
     def visibility_status(self):
         """Get visibility status for team view"""
+        if self.status == 'leave':
+            return 'leave'
         if self.current_availability == 'available':
             return 'available'
-        elif self.current_availability == 'unavailable' or self.status == 'leave':
+        elif self.current_availability == 'unavailable':
             return 'unavailable'
         else:
             return 'hidden'

@@ -27,8 +27,8 @@ class Command(BaseCommand):
                 defaults={'status': 'neutral'}
             )
             
-            # If status is still neutral (i.e., they never marked available/unavailable)
-            if attendance.status == 'neutral':
+            # If status is still neutral (never touched) or if they marked unavailable but never available
+            if attendance.status == 'neutral' or (attendance.current_availability == 'unavailable' and attendance.status not in ['present', 'leave']):
                 attendance.mark_absent()
                 absent_count += 1
                 

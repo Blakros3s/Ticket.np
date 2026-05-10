@@ -19,26 +19,8 @@ export interface ActivityLog {
 }
 
 export const activityApi = {
-  getActivityLogs: async (ticketId?: number, userId?: number, action?: string): Promise<ActivityLog[]> => {
-    const params = new URLSearchParams();
-    if (ticketId) params.append('ticket_id', ticketId.toString());
-    if (userId) params.append('user_id', userId.toString());
-    if (action) params.append('action', action);
-    
-    const queryString = params.toString();
-    const url = `/activity/${queryString ? `?${queryString}` : ''}`;
-    
-    const response = await api.get<ActivityLog[]>(url);
-    return response.data;
-  },
-
   getActivityByTicket: async (ticketId: number): Promise<ActivityLog[]> => {
     const response = await api.get<ActivityLog[]>(`/activity/by_ticket/?ticket_id=${ticketId}`);
-    return response.data;
-  },
-
-  getRecentActivity: async (limit: number = 10): Promise<ActivityLog[]> => {
-    const response = await api.get<ActivityLog[]>(`/activity/recent/?limit=${limit}`);
     return response.data;
   },
 };

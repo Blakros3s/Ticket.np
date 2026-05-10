@@ -1,3 +1,4 @@
+from django.contrib.auth import authenticate
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import User, UserRole
@@ -69,8 +70,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
     
     def validate(self, attrs):
-        from django.contrib.auth import authenticate
-        
         authenticate_kwargs = {
             self.username_field: attrs[self.username_field],
             'password': attrs['password'],
@@ -126,13 +125,10 @@ class AdminUserCreateSerializer(serializers.ModelSerializer):
         validated_data.pop('confirm_password')
         password = validated_data.pop('password')
         department_roles = validated_data.pop('department_roles', [])
-        # role may be provided; default to 'employee' if not
-        role = validated_data.get('role', 'employee')
+        # `role` is included in validated_data; defaults to 'employee' if not provided
         user = User.objects.create(**validated_data)
-        user.role = role
         user.set_password(password)
         user.save()
-        # Add department roles
         if department_roles:
             user.department_roles.set(department_roles)
         return user
