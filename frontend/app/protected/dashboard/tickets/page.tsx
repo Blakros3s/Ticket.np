@@ -3,7 +3,7 @@
 import React from 'react';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { ticketsApi, Ticket, TicketStatus, TicketPriority, TicketType } from '@/lib/tickets';
 import { projectsApi, Project } from '@/lib/projects';
 
@@ -29,6 +29,18 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // Pagination & Stats
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [stats, setStats] = useState({
+    total: 0,
+    new: 0,
+    in_progress: 0,
+    qa: 0,
+    closed: 0,
+    reopened: 0,
+  });
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TicketStatus | ''>('');
@@ -36,52 +48,56 @@ export default function TicketsPage() {
   const [typeFilter, setTypeFilter] = useState<TicketType | ''>('');
   const [projectFilter, setProjectFilter] = useState<number | ''>('');
 
-  const isManager = user?.role === 'manager' || user?.role === 'admin';
-
   const showToastMessage = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async (isInitial = false) => {
     try {
       setLoading(true);
-      const [ticketsData, projectsData] = await Promise.all([
+      const [ticketsResponse, statsData, projectsData] = await Promise.all([
         ticketsApi.getTickets({
+          page,
+          status: statusFilter || undefined,
           priority: priorityFilter || undefined,
           type: typeFilter || undefined,
           project: projectFilter || undefined,
           search: searchQuery || undefined,
         }),
-        projectsApi.getProjects(),
+        ticketsApi.getTicketStats({
+          priority: priorityFilter || undefined,
+          type: typeFilter || undefined,
+          project: projectFilter || undefined,
+          search: searchQuery || undefined,
+        }),
+        isInitial ? projectsApi.getProjects() : Promise.resolve(projects),
       ]);
-      setTickets(ticketsData);
-      setProjects(projectsData);
+      
+      setTickets(ticketsResponse.results);
+      setTotalCount(ticketsResponse.count);
+      setStats(statsData as any);
+      if (isInitial) setProjects(projectsData);
     } catch (error) {
       showToastMessage('Failed to load tickets', 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, statusFilter, priorityFilter, typeFilter, projectFilter, searchQuery, projects]);
 
+  // Reset page to 1 when filters change
   useEffect(() => {
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [priorityFilter, typeFilter, projectFilter]);
+    setPage(1);
+  }, [statusFilter, priorityFilter, typeFilter, projectFilter, searchQuery]);
 
-  // Debounced search
+  // Fetch data on page or filter change (filters trigger setPage(1) which triggers this)
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchData();
-    }, 500);
+      fetchData(projects.length === 0);
+    }, searchQuery ? 500 : 0);
+    
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery]);
-
-  // Filter tickets by selected status tab (client-side)
-  const displayedTickets = statusFilter
-    ? tickets.filter(t => t.status === statusFilter)
-    : tickets;
+  }, [page, statusFilter, priorityFilter, typeFilter, projectFilter, searchQuery, fetchData, projects.length]);
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -89,16 +105,10 @@ export default function TicketsPage() {
     setPriorityFilter('');
     setTypeFilter('');
     setProjectFilter('');
+    setPage(1);
   };
 
-  const stats = {
-    total: tickets.length,
-    new: tickets.filter(t => t.status === 'new').length,
-    inProgress: tickets.filter(t => t.status === 'in_progress').length,
-    qa: tickets.filter(t => t.status === 'qa').length,
-    closed: tickets.filter(t => t.status === 'closed').length,
-    reopened: tickets.filter(t => t.status === 'reopened').length,
-  };
+  const totalPages = Math.ceil(totalCount / 20);
 
   return (
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
@@ -163,10 +173,10 @@ export default function TicketsPage() {
 
       {/* Status Tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
-        {(['', 'new', 'in_progress', 'qa', 'closed', 'reopened'] as const).map((status) => {
-          const label = status === '' ? 'All' : status.replace('_', ' ');
-          const count = status === '' ? stats.total : status === 'in_progress' ? stats.inProgress : stats[status as keyof typeof stats] ?? 0;
-          const isActive = statusFilter === status;
+        {(['', 'new', 'in_progress', 'qa', 'closed', 'reopened'] as const).map((statusKey) => {
+          const label = statusKey === '' ? 'All' : statusKey.replace('_', ' ');
+          const count = statusKey === '' ? stats.total : stats[statusKey as keyof typeof stats] ?? 0;
+          const isActive = statusFilter === statusKey;
           const activeStyles: Record<string, React.CSSProperties> = {
             '': { backgroundColor: 'rgba(71, 85, 105, 0.4)', color: 'rgb(148, 163, 184)', borderColor: 'rgba(71, 85, 105, 0.5)' },
             new: { backgroundColor: 'rgba(59, 130, 246, 0.2)', color: 'rgb(96, 165, 250)', borderColor: 'rgba(59, 130, 246, 0.4)' },
@@ -177,12 +187,12 @@ export default function TicketsPage() {
           };
           return (
             <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
+              key={statusKey}
+              onClick={() => setStatusFilter(statusKey)}
               className={`px-4 py-2.5 rounded-lg font-medium text-sm transition-all border ${
                 isActive ? '' : 'bg-slate-800/50 text-slate-400 border-slate-700/50 hover:bg-slate-700/50 hover:text-white'
               }`}
-              style={isActive ? activeStyles[status] : {}}
+              style={isActive ? activeStyles[statusKey] : {}}
             >
               {label.charAt(0).toUpperCase() + label.slice(1)} ({count})
             </button>
@@ -243,11 +253,11 @@ export default function TicketsPage() {
 
       {/* Tickets List */}
       <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
-        {loading ? (
+        {loading && tickets.length === 0 ? (
           <div className="p-8 text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-400 mx-auto"></div>
           </div>
-        ) : displayedTickets.length === 0 ? (
+        ) : tickets.length === 0 ? (
           <div className="p-8 text-center">
             <svg className="w-12 h-12 text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -273,7 +283,7 @@ export default function TicketsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
-                {displayedTickets.map((ticket) => (
+                {tickets.map((ticket) => (
                   <tr key={ticket.id} className="hover:bg-slate-700/30 transition-colors">
                     <td className="px-6 py-4">
                       <Link href={`/protected/dashboard/tickets/${ticket.id}`} className="block">
@@ -326,6 +336,85 @@ export default function TicketsPage() {
           </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {totalCount > 20 && (
+        <div className="mt-6 flex items-center justify-between px-4 py-3 sm:px-6">
+          <div className="flex flex-1 justify-between sm:hidden">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="relative inline-flex items-center rounded-md border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="relative ml-3 inline-flex items-center rounded-md border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+          <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-slate-400">
+                Showing <span className="font-medium text-white">{(page - 1) * 20 + 1}</span> to{' '}
+                <span className="font-medium text-white">{Math.min(page * 20, totalCount)}</span> of{' '}
+                <span className="font-medium text-white">{totalCount}</span> results
+              </p>
+            </div>
+            <div>
+              <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="relative inline-flex items-center rounded-l-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-700 hover:bg-slate-700 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
+                >
+                  <span className="sr-only">Previous</span>
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+                  </svg>
+                </button>
+                
+                {Array.from({ length: totalPages }).map((_, i) => {
+                  const p = i + 1;
+                  const isCurrent = p === page;
+                  if (p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1)) {
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => setPage(p)}
+                        className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold transition-colors ${
+                          isCurrent
+                            ? 'z-10 bg-sky-500 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500'
+                            : 'text-slate-300 ring-1 ring-inset ring-slate-700 hover:bg-slate-700 focus:z-20 focus:outline-offset-0'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    );
+                  }
+                  if (p === 2 && page > 3) return <span key="dots1" className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-slate-500 ring-1 ring-inset ring-slate-700">...</span>;
+                  if (p === totalPages - 1 && page < totalPages - 2) return <span key="dots2" className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-slate-500 ring-1 ring-inset ring-slate-700">...</span>;
+                  return null;
+                })}
+
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="relative inline-flex items-center rounded-r-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-700 hover:bg-slate-700 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
+                >
+                  <span className="sr-only">Next</span>
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </nav>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

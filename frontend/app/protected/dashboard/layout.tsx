@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/lib/auth-context';
 import { NotificationsProvider, useNotifications } from '@/lib/notifications-context';
+import { SettingsProvider, useSettings } from '@/lib/settings-context';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ReactNode, useState } from 'react';
@@ -12,15 +13,18 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
-    <NotificationsProvider>
-      <DashboardLayoutInner>{children}</DashboardLayoutInner>
-    </NotificationsProvider>
+    <SettingsProvider>
+      <NotificationsProvider>
+        <DashboardLayoutInner>{children}</DashboardLayoutInner>
+      </NotificationsProvider>
+    </SettingsProvider>
   );
 }
 
 function DashboardLayoutInner({ children }: DashboardLayoutProps) {
   const { user, logout } = useAuth();
   const { unreadCount } = useNotifications();
+  const { terminology } = useSettings();
   const pathname = usePathname();
   const canManage = user?.role === 'admin';
   const isEmployee = user?.role === 'employee';
@@ -223,7 +227,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
                   <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                   </svg>
-                  {sidebarOpen && <span className="whitespace-nowrap">Users</span>}
+                  {sidebarOpen && <span className="whitespace-nowrap">{terminology.labelPlural}</span>}
                 </Link>
               </div>
             </div>
@@ -345,7 +349,7 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-2xl max-h-[80vh] overflow-hidden">
             <div className="p-6 border-b border-slate-700 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-white">How to Use TechnestHub</h2>
+              <h2 className="text-xl font-semibold text-white">How to Use {terminology.label} Hub</h2>
               <button
                 onClick={() => setShowHelp(false)}
                 className="text-slate-400 hover:text-white transition-colors"

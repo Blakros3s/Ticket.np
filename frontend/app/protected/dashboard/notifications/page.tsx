@@ -25,6 +25,18 @@ export default function NotificationsPage() {
     }
   };
 
+  const { deleteNotification } = useNotifications();
+
+  const handleDelete = async (e: React.MouseEvent, id: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await deleteNotification(id);
+    } catch {
+      // Ignore
+    }
+  };
+
   const handleNotificationClick = async (n: Notification) => {
     if (!n.read) {
       try {
@@ -86,19 +98,29 @@ export default function NotificationsPage() {
         ) : (
           <div className="divide-y divide-slate-700/50">
             {notifications.map((n) => (
-              <Link
-                key={n.id}
-                href={getNotificationHref(n)}
-                onClick={() => handleNotificationClick(n)}
-                className={`block px-4 py-3 hover:bg-slate-700/30 transition-colors ${
-                  !n.read ? 'bg-sky-500/10 border-l-4 border-sky-400' : ''
-                }`}
-              >
-                <p className="text-sm text-white">{n.message}</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  {new Date(n.created_at).toLocaleString()}
-                </p>
-              </Link>
+              <div key={n.id} className="relative group">
+                <Link
+                  href={getNotificationHref(n)}
+                  onClick={() => handleNotificationClick(n)}
+                  className={`block px-4 py-3 hover:bg-slate-700/30 transition-colors pr-12 ${
+                    !n.read ? 'bg-sky-500/10 border-l-4 border-sky-400' : ''
+                  }`}
+                >
+                  <p className="text-sm text-white">{n.message}</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {new Date(n.created_at).toLocaleString()}
+                  </p>
+                </Link>
+                <button
+                  onClick={(e) => handleDelete(e, n.id)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                  title="Delete notification"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             ))}
           </div>
         )}

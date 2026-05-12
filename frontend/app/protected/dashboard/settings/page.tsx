@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { attendanceApi, OfficeSettings } from '@/lib/attendance';
+import { useSettings } from '@/lib/settings-context';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -10,6 +11,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const router = useRouter();
   const isAdmin = user?.role === 'admin';
+  const { terminology, refreshSettings } = useSettings();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -17,7 +19,8 @@ export default function SettingsPage() {
   const [formData, setFormData] = useState({
     office_start_time: '10:00',
     office_end_time: '17:00',
-    auto_mark_absent: true
+    auto_mark_absent: true,
+    user_terminology: 'employee' as 'employee' | 'developer'
   });
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -45,7 +48,8 @@ export default function SettingsPage() {
       setFormData({
         office_start_time: data.office_start_time,
         office_end_time: data.office_end_time,
-        auto_mark_absent: data.auto_mark_absent
+        auto_mark_absent: data.auto_mark_absent,
+        user_terminology: data.user_terminology
       });
     } catch (error) {
       showToastMessage('Failed to load settings', 'error');
@@ -61,6 +65,7 @@ export default function SettingsPage() {
       await attendanceApi.updateOfficeSettings(formData);
       showToastMessage('Settings saved successfully!', 'success');
       fetchSettings();
+      refreshSettings(); // Update global context
     } catch (error: any) {
       const message = error.response?.data?.detail || 'Failed to save settings';
       showToastMessage(message, 'error');
@@ -152,9 +157,27 @@ export default function SettingsPage() {
                   onChange={(e) => setFormData({ ...formData, auto_mark_absent: e.target.checked })}
                   className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-sky-500 focus:ring-sky-500"
                 />
-                <label htmlFor="auto_mark_absent" className="text-slate-300 cursor-pointer">
+                <label htmlFor="auto_mark_absent" className="text-slate-300 cursor-pointer text-sm">
                   Automatically mark absent after office hours end
                 </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  User Terminology Preference
+                </label>
+                <select
+                  value={formData.user_terminology}
+                  onChange={(e) => setFormData({ ...formData, user_terminology: e.target.value as 'employee' | 'developer' })}
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                >
+                  <option value="employee">Employee (Standard)</option>
+                  <option value="developer">Developer (IT Focused)</option>
+                </select>
+                <p className="text-xs text-slate-500 mt-2">
+                  Choose how staff are referred to throughout the application. 
+                  Currently using: <span className="text-sky-400 font-medium">{terminology.label}</span>
+                </p>
               </div>
 
               <div className="flex gap-3 pt-4">
@@ -247,10 +270,10 @@ export default function SettingsPage() {
                 How it works
               </h3>
               <ul className="text-sm text-slate-400 space-y-2 ml-6">
-                <li>• Employees can only mark attendance during office hours</li>
+                <li>• {terminology.labelPlural} can only mark attendance during office hours</li>
                 <li>• Attendance can be marked anytime between start and end time</li>
                 <li>• Once office hours end, no one can mark attendance</li>
-                <li>• If auto-mark absent is enabled, missing employees are marked absent automatically</li>
+                <li>• If auto-mark absent is enabled, missing {terminology.labelPluralLower} are marked absent automatically</li>
                 <li>• Exact marked time is recorded and visible to managers/admins</li>
               </ul>
             </div>

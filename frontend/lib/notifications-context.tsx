@@ -9,6 +9,7 @@ interface NotificationsContextType {
   unreadCount: number;
   fetchNotifications: () => Promise<void>;
   setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
+  deleteNotification: (id: number) => Promise<void>;
 }
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
@@ -26,6 +27,16 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     }
   }, []);
 
+  const deleteNotification = async (id: number) => {
+    try {
+      await notificationsApi.deleteNotification(id);
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    } catch (error) {
+      console.error('Failed to delete notification:', error);
+      throw error;
+    }
+  };
+
   useEffect(() => {
     if (user) {
       fetchNotifications();
@@ -40,7 +51,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
   return (
     <NotificationsContext.Provider
-      value={{ notifications, unreadCount, fetchNotifications, setNotifications }}
+      value={{ notifications, unreadCount, fetchNotifications, setNotifications, deleteNotification }}
     >
       {children}
     </NotificationsContext.Provider>
