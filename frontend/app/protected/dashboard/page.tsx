@@ -4,9 +4,11 @@ import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { dashboardApi, EmployeeDashboard, ManagerDashboard, AdminDashboard } from '@/lib/dashboard';
+import { useSettings } from '@/lib/settings-context';
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { terminology } = useSettings();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [employeeData, setEmployeeData] = useState<EmployeeDashboard | null>(null);
@@ -102,7 +104,7 @@ export default function DashboardPage() {
               isManager ? 'bg-amber-500/20 text-amber-400' :
               'bg-green-500/20 text-green-400'
             }`}>
-              {user?.role?.charAt(0).toUpperCase()}{user?.role?.slice(1)}
+              {user?.role === 'employee' ? terminology.label : (user?.role?.charAt(0).toUpperCase() + (user?.role?.slice(1) || ''))}
             </span>
           </div>
         </div>
@@ -381,7 +383,9 @@ export default function DashboardPage() {
                             role === 'admin' ? 'bg-red-400' :
                             role === 'manager' ? 'bg-amber-400' : 'bg-green-400'
                           }`}></div>
-                          <span className="text-slate-300 capitalize">{role}s</span>
+                          <span className="text-slate-300 capitalize">
+                            {role === 'employee' ? terminology.labelPlural : (role + 's')}
+                          </span>
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="w-32 bg-slate-700 rounded-full h-2">

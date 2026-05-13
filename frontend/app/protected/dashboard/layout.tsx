@@ -322,7 +322,9 @@ function DashboardLayoutInner({ children }: DashboardLayoutProps) {
             {sidebarOpen && (
               <div className="min-w-0">
                 <p className="text-sm font-medium text-white truncate">{user?.first_name} {user?.last_name}</p>
-                <p className="text-xs text-slate-400 capitalize">{user?.role}</p>
+                <p className="text-xs text-slate-400 capitalize">
+                  {user?.role === 'employee' ? terminology.labelLower : user?.role}
+                </p>
               </div>
             )}
           </Link>

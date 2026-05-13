@@ -3,7 +3,8 @@
 import React from 'react';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ticketsApi, Ticket, TicketStatus, TicketPriority, TicketType } from '@/lib/tickets';
 import { projectsApi, Project } from '@/lib/projects';
 
@@ -22,8 +23,11 @@ const priorityColors: Record<TicketPriority, string> = {
   critical: 'bg-red-500/20 text-red-400',
 };
 
-export default function TicketsPage() {
+function TicketsList() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const initialProject = searchParams.get('project') ? Number(searchParams.get('project')) : '';
+  
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +50,7 @@ export default function TicketsPage() {
   const [statusFilter, setStatusFilter] = useState<TicketStatus | ''>('');
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | ''>('');
   const [typeFilter, setTypeFilter] = useState<TicketType | ''>('');
-  const [projectFilter, setProjectFilter] = useState<number | ''>('');
+  const [projectFilter, setProjectFilter] = useState<number | ''>(initialProject);
 
   const showToastMessage = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -416,5 +420,17 @@ export default function TicketsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function TicketsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[70vh]">
+        <div className="w-16 h-16 border-4 border-slate-700 rounded-full border-t-sky-500 animate-spin"></div>
+      </div>
+    }>
+      <TicketsList />
+    </Suspense>
   );
 }
