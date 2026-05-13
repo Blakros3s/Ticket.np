@@ -11,6 +11,7 @@ import { authApi, User } from '@/lib/auth';
 import { activityApi, ActivityLog } from '@/lib/activity';
 import { timelogsApi, TicketActiveSession } from '@/lib/timelogs';
 import Markdown from '@/components/Markdown';
+import { FileUploadZone } from '@/components/file-upload-zone';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:8000';
 
@@ -410,29 +411,31 @@ export default function TicketDetailPage() {
           <div className="form-card p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-white">Attachments</h3>
-              {(isProjectMember || canEdit) && (
-                <div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.xls,.xlsx"
-                    onChange={handleMediaUpload}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploadingMedia}
-                    className="px-3 py-1.5 bg-sky-500/20 text-sky-400 text-sm rounded-lg hover:bg-sky-500/30 flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    {uploadingMedia ? 'Uploading...' : 'Add'}
-                  </button>
-                </div>
-              )}
             </div>
+            {(isProjectMember || canEdit) && (
+              <div className="mb-6">
+                <FileUploadZone
+                  onFilesSelected={async (files) => {
+                    try {
+                      setUploadingMedia(true);
+                      for (const file of files) {
+                        const media = await ticketsApi.uploadMedia(ticketId, file);
+                        setTicket(prev => prev ? { ...prev, media_files: [...prev.media_files, media] } : null);
+                      }
+                      showToastMessage('Media uploaded successfully', 'success');
+                    } catch (error: any) {
+                      showToastMessage(error.response?.data?.detail || 'Failed to upload media', 'error');
+                    } finally {
+                      setUploadingMedia(false);
+                    }
+                  }}
+                  multiple
+                  accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.xls,.xlsx"
+                  placeholder="Click, drag, or paste files to attach"
+                  className="bg-slate-700/20"
+                />
+              </div>
+            )}
             {ticket.media_files && ticket.media_files.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {ticket.media_files.map((media) => (

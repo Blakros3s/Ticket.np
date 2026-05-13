@@ -13,8 +13,8 @@ class OfficeSettingsSerializer(serializers.ModelSerializer):
         model = OfficeSettings
         fields = [
             'id', 'office_start_time', 'office_end_time', 
-            'auto_mark_absent', 'is_within_office_hours', 
-            'has_office_hours_ended', 'updated_at'
+            'auto_mark_absent', 'user_terminology',
+            'is_within_office_hours', 'has_office_hours_ended', 'updated_at'
         ]
         read_only_fields = ['id', 'updated_at']
 
