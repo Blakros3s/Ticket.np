@@ -1,9 +1,10 @@
-﻿'use client';
+'use client';
 
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { authApi } from '@/lib/auth';
+import { useSettings } from '@/lib/settings-context';
 
 type UserSystemRole = 'admin' | 'manager' | 'employee';
 
@@ -28,6 +29,7 @@ interface User {
 export default function UsersManagementPage() {
   const { user: currentUser, isLoading: authLoading } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
+  const { terminology } = useSettings();
 
   const [users, setUsers] = useState<User[]>([]);
   const [departmentRoles, setDepartmentRoles] = useState<UserRole[]>([]);
@@ -411,9 +413,9 @@ export default function UsersManagementPage() {
             Dashboard
           </Link>
           <span className="text-slate-500">/</span>
-          <span className="text-white">User Management</span>
+          <span className="text-white">{terminology.label} Management</span>
         </div>
-        <h1 className="text-3xl font-bold text-white">User Management</h1>
+        <h1 className="text-3xl font-bold text-white">{terminology.label} Management</h1>
         <p className="text-slate-400 mt-1">Manage system users, roles and permissions</p>
       </div>
 
@@ -464,7 +466,7 @@ export default function UsersManagementPage() {
         <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm">Employees</p>
+              <p className="text-slate-400 text-sm">{terminology.labelPlural}</p>
               <p className="text-2xl font-bold text-white mt-1">{totalEmployees}</p>
             </div>
             <div className="w-12 h-12 rounded-lg bg-green-500/20 flex items-center justify-center">
@@ -649,7 +651,7 @@ export default function UsersManagementPage() {
                         user.role === 'manager' ? 'bg-amber-500/20 text-amber-400' :
                           'bg-green-500/20 text-green-400'
                         }`}>
-                        {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                        {user.role === 'employee' ? terminology.label : user.role.charAt(0).toUpperCase() + user.role.slice(1)}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -758,7 +760,7 @@ export default function UsersManagementPage() {
           <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-700">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white">Add New User</h2>
+                <h2 className="text-xl font-semibold text-white">Add New {terminology.label}</h2>
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
@@ -824,7 +826,7 @@ export default function UsersManagementPage() {
                   value={newUser.role}
                   onChange={(e) => setNewUser({ ...newUser, role: e.target.value as UserSystemRole })}
                 >
-                  <option value="employee">Employee</option>
+                  <option value="employee">{terminology.label}</option>
                   <option value="manager">Manager</option>
                   <option value="admin">Admin</option>
                 </select>
@@ -990,7 +992,7 @@ export default function UsersManagementPage() {
                   value={selectedUser.role}
                   onChange={(e) => setSelectedUser({ ...selectedUser, role: e.target.value as UserSystemRole })}
                 >
-                  <option value="employee">Employee</option>
+                  <option value="employee">{terminology.label}</option>
                   <option value="manager">Manager</option>
                   <option value="admin">Admin</option>
                 </select>

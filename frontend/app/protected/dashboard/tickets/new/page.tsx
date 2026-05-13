@@ -3,15 +3,18 @@
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { ticketsApi, TicketType, TicketPriority, CreateTicketData } from '@/lib/tickets';
 import { projectsApi, Project } from '@/lib/projects';
 import { authApi, User } from '@/lib/auth';
+import { FileUploadZone } from '@/components/file-upload-zone';
 
-export default function CreateTicketPage() {
+function CreateTicketForm() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialProjectId = searchParams.get('project') ? Number(searchParams.get('project')) : 0;
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -26,7 +29,7 @@ export default function CreateTicketPage() {
     description: '',
     type: 'task',
     priority: 'medium',
-    project: 0,
+    project: initialProjectId,
     assignees: [],
     media_files: [],
   });
@@ -46,8 +49,10 @@ export default function CreateTicketPage() {
         setProjects(projectsData);
         setUsers(usersData.filter(u => u.is_active));
 
-        if (projectsData.length > 0) {
+        if (projectsData.length > 0 && !initialProjectId) {
           setFormData(prev => ({ ...prev, project: projectsData[0].id }));
+        } else if (initialProjectId) {
+          setFormData(prev => ({ ...prev, project: initialProjectId }));
         }
       } catch (error) {
         showToastMessage('Failed to load data', 'error');
@@ -277,24 +282,23 @@ export default function CreateTicketPage() {
             <label className="block text-sm font-medium text-slate-200 mb-2">
               Attachments
             </label>
-            <input
-              ref={fileInputRef}
-              type="file"
+            <FileUploadZone
+              onFilesSelected={(files) => {
+                setMediaFiles(prev => [...prev, ...files]);
+                files.forEach(file => {
+                  if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                      setMediaPreviews(prev => [...prev, e.target?.result as string]);
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                });
+              }}
               multiple
               accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md"
-              onChange={handleMediaChange}
-              className="hidden"
+              className="bg-slate-700/30"
             />
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-slate-600 hover:border-sky-500 rounded-lg p-6 text-center cursor-pointer transition-colors"
-            >
-              <svg className="w-10 h-10 text-slate-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              <p className="text-slate-400 text-sm">Click to upload files or drag and drop</p>
-              <p className="text-slate-500 text-xs mt-1">Images, videos, PDF, documents</p>
-            </div>
 
             {mediaPreviews.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
@@ -349,5 +353,17 @@ export default function CreateTicketPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function CreateTicketPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[70vh]">
+        <div className="w-16 h-16 border-4 border-slate-700 rounded-full border-t-sky-500 animate-spin"></div>
+      </div>
+    }>
+      <CreateTicketForm />
+    </Suspense>
   );
 }

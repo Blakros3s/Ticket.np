@@ -8,6 +8,12 @@ class OfficeSettings(models.Model):
     office_start_time = models.TimeField(default='10:00', help_text="Office start time (e.g., 10:00)")
     office_end_time = models.TimeField(default='17:00', help_text="Office end time (e.g., 17:00)")
     auto_mark_absent = models.BooleanField(default=True, help_text="Automatically mark absent after office hours end")
+    user_terminology = models.CharField(
+        max_length=20, 
+        choices=[('employee', 'Employee'), ('developer', 'Developer')],
+        default='employee',
+        help_text="Terminology to use for staff (Employee or Developer)"
+    )
     
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
@@ -32,7 +38,8 @@ class OfficeSettings(models.Model):
             defaults={
                 'office_start_time': '10:00',
                 'office_end_time': '17:00',
-                'auto_mark_absent': True
+                'auto_mark_absent': True,
+                'user_terminology': 'employee'
             }
         )
         return settings

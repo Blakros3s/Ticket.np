@@ -1,5 +1,5 @@
 import api from './api';
-import { buildQueryString, normalizeListResponse } from './http-utils';
+import { buildQueryString, normalizeListResponse, normalizePaginatedResponse, PaginatedResponse } from './http-utils';
 
 export type TicketType = 'bug' | 'task' | 'feature';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
@@ -81,19 +81,32 @@ export interface TicketFilters {
   type?: TicketType;
   project?: number;
   search?: string;
+  page?: number;
 }
 
 export const ticketsApi = {
-  getTickets: async (filters?: TicketFilters): Promise<Ticket[]> => {
+  getTickets: async (filters?: TicketFilters): Promise<PaginatedResponse<Ticket>> => {
     const queryString = buildQueryString({
       status: filters?.status,
       priority: filters?.priority,
       type: filters?.type,
       project: filters?.project,
       search: filters?.search,
+      page: filters?.page,
     });
-    const response = await api.get<Ticket[] | { results: Ticket[] }>(`/tickets/tickets/${queryString}`);
-    return normalizeListResponse(response.data);
+    const response = await api.get<any>(`/tickets/tickets/${queryString}`);
+    return normalizePaginatedResponse<Ticket>(response.data);
+  },
+
+  getTicketStats: async (filters?: TicketFilters): Promise<Record<string, number>> => {
+    const queryString = buildQueryString({
+      priority: filters?.priority,
+      type: filters?.type,
+      project: filters?.project,
+      search: filters?.search,
+    });
+    const response = await api.get<Record<string, number>>(`/tickets/tickets/stats/${queryString}`);
+    return response.data;
   },
 
   getTicket: async (id: number): Promise<Ticket> => {

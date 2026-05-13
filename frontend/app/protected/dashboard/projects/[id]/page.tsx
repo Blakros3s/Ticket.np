@@ -10,6 +10,7 @@ import { authApi, User } from '@/lib/auth';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import * as mammoth from 'mammoth';
+import { FileUploadZone } from '@/components/file-upload-zone';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -574,7 +575,14 @@ export default function ProjectDetailPage() {
                 </button>
               )}
               <Link
-                href="/protected/dashboard/tickets"
+                href={`/protected/dashboard/tickets/new?project=${projectId}`}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white text-sm font-medium rounded-xl transition-all shadow-lg shadow-sky-500/20"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                Create Ticket
+              </Link>
+              <Link
+                href={`/protected/dashboard/tickets?project=${projectId}`}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-xl transition-all border border-slate-600"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"></path></svg>
@@ -737,15 +745,21 @@ export default function ProjectDetailPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1.5">File</label>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    required
+                  <FileUploadZone
+                    onFilesSelected={(files) => {
+                      const file = files[0];
+                      if (file) {
+                        setDocFile(file);
+                        if (!docTitle.trim()) {
+                          setDocTitle(file.name.replace(/\.[^/.]+$/, ''));
+                        }
+                      }
+                    }}
                     accept=".pdf,.doc,.docx,.md,.txt,.png,.jpg,.jpeg,.gif,.webp"
-                    onChange={handleFileChange}
-                    className="w-full bg-slate-700 border border-slate-600 rounded-xl py-2.5 px-4 text-sm text-slate-300 file:mr-4 file:py-1.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-amber-500 file:text-white hover:file:bg-amber-400 file:transition-colors cursor-pointer"
+                    placeholder="Click or drag file here, or paste from clipboard"
+                    className="bg-slate-700/30"
                   />
-                  <p className="text-xs text-slate-500 mt-1">Max size: 10MB</p>
+                  <p className="text-xs text-slate-500 mt-2">Max size: 10MB</p>
                 </div>
                 {docFile && (
                   <div className="p-3 bg-slate-700/50 rounded-xl flex items-center gap-3">

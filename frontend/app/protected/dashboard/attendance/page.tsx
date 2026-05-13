@@ -3,10 +3,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { attendanceApi, Attendance, TeamAttendance, OfficeSettings, AttendanceLog, AttendanceStats } from '@/lib/attendance';
 import { useAuth } from '@/lib/auth-context';
+import { useSettings } from '@/lib/settings-context';
 import Link from 'next/link';
 
 export default function AttendancePage() {
   const { user, isLoading: authLoading } = useAuth();
+  const { terminology } = useSettings();
   const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager';
 
   const [loading, setLoading] = useState(true);
@@ -499,7 +501,7 @@ export default function AttendancePage() {
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-slate-700/50">
-                      <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Employee</th>
+                      <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{terminology.label}</th>
                       <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Working Days</th>
                       <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Present</th>
                       <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Absent</th>

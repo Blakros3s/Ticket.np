@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import FilterSet, NumberFilter
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.utils import timezone
 
 from apps.users.models import User
@@ -64,7 +64,7 @@ class TicketViewSet(viewsets.ModelViewSet):
     ordering_fields     = ['created_at', 'updated_at', 'priority']
     ordering            = ['-created_at']
     lookup_field        = 'id'
-    pagination_class    = None  # return all tickets — filtering is done client-side
+    # pagination_class    = None  # return all tickets — filtering is done client-side
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -245,6 +245,41 @@ class TicketViewSet(viewsets.ModelViewSet):
                 instance=ticket,
                 description="Ticket reopened - assignees cleared, ready for new assignment",
             )
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Get ticket counts by status, respecting other filters."""
+        queryset = self.get_queryset()
+        
+        # Apply filters except status
+        filter_params = request.query_params.copy()
+        if 'status' in filter_params:
+            del filter_params['status']
+            
+        if self.filterset_class:
+            filterset = self.filterset_class(filter_params, queryset=queryset, request=request)
+            if filterset.is_valid():
+                queryset = filterset.qs
+
+        # Apply search filter
+        for backend in list(self.filter_backends):
+            if backend == filters.SearchFilter:
+                queryset = backend().filter_queryset(request, queryset, self)
+
+        status_counts = queryset.values('status').annotate(count=Count('id'))
+        
+        result = {
+            'total': queryset.count(),
+            'new': 0,
+            'in_progress': 0,
+            'qa': 0,
+            'closed': 0,
+            'reopened': 0
+        }
+        for item in status_counts:
+            result[item['status']] = item['count']
+            
+        return Response(result)
 
     # ------------------------------------------------------------------
     # Assignment actions

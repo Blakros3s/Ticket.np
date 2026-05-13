@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from 'react';
 import { authApi } from '@/lib/auth';
 import { User } from '@/lib/auth';
 import { useAuth } from '@/lib/auth-context';
+import { useSettings } from '@/lib/settings-context';
 
 type UserRow = {
   id: number;
@@ -16,6 +17,9 @@ type UserRow = {
 };
 
 function UserRowView({ user }: { user: UserRow }) {
+  const { terminology } = useSettings();
+  const displayRole = user.role === 'employee' ? terminology.labelLower : user.role;
+
   return (
     <div className="flex items-center justify-between py-2 border-t border-slate-700/50">
       <div className="flex items-center gap-3">
@@ -28,7 +32,9 @@ function UserRowView({ user }: { user: UserRow }) {
         </div>
       </div>
       <div className="flex items-center gap-4 text-sm text-slate-300">
-        <span className="px-2 py-1 rounded bg-slate-700/40">{user.role}</span>
+        <span className="px-2 py-1 rounded bg-slate-700/40 capitalize">
+          {displayRole}
+        </span>
         <span className={`px-2 py-1 rounded ${user.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
           {user.is_active ? 'Active' : 'Inactive'}
         </span>
@@ -114,13 +120,14 @@ export default function UserPanel() {
   const total = users.length;
   const managers = users.filter((u) => u.role === 'manager').length;
   const employees = users.filter((u) => u.role === 'employee').length;
+  const { terminology } = useSettings();
 
   return (
     <section className="card glow-border rounded-xl p-6 mt-6 bg-slate-900/40">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-semibold text-white">User Management</h2>
-          <div className="text-sm text-slate-400">Total: {total} • Managers: {managers} • Employees: {employees}</div>
+          <div className="text-sm text-slate-400">Total: {total} • Managers: {managers} • {terminology.labelPlural}: {employees}</div>
         </div>
         <div className="flex items-center gap-3">
           <input className="input-field w-60" placeholder="Search by name or email" onChange={(e) => {
@@ -149,7 +156,7 @@ export default function UserPanel() {
             <select className="input-field w-full" value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value as any })}>
               <option value="admin">Admin</option>
               <option value="manager">Manager</option>
-              <option value="employee">Employee</option>
+              <option value="employee">{terminology.label}</option>
             </select>
             <input className="input-field w-full" placeholder="Password" type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} />
           </div>
