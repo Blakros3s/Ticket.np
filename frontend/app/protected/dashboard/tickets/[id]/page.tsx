@@ -59,6 +59,7 @@ export default function TicketDetailPage() {
     status: 'new' as TicketStatus,
     assignees: [] as number[],
   });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | string[]>>({});
 
   const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'manager';
 
@@ -146,12 +147,18 @@ export default function TicketDetailPage() {
   const handleSave = async () => {
     try {
       setSaving(true);
-      const updated = await ticketsApi.updateTicket(ticketId, editData);
+      setFieldErrors({});
+      const { assignees: _, status: _s, ...savePayload } = editData;
+      const updated = await ticketsApi.updateTicket(ticketId, savePayload);
       setTicket({ ...ticket!, ...updated });
       setIsEditing(false);
       showToastMessage('Ticket updated successfully', 'success');
     } catch (error: any) {
-      showToastMessage(error.response?.data?.detail || 'Failed to update ticket', 'error');
+      const data = error.response?.data;
+      if (data && typeof data === 'object' && !data.detail) {
+        setFieldErrors(data);
+      }
+      showToastMessage(data?.detail || 'Failed to update ticket', 'error');
     } finally {
       setSaving(false);
     }
@@ -238,7 +245,9 @@ export default function TicketDetailPage() {
     try {
       setSaving(true);
       const updated = await ticketsApi.selfAssign(ticketId);
-      setTicket({ ...ticket!, assignees: updated.assignees, assignees_list: updated.assignees_list });
+      const assignees = updated.assignees || [];
+      setTicket({ ...ticket!, assignees, assignees_list: updated.assignees_list });
+      setEditData(prev => ({ ...prev, assignees }));
       showToastMessage('Added yourself to ticket', 'success');
       const freshTicket = await ticketsApi.getTicket(ticketId);
       setTicket(freshTicket);
@@ -254,7 +263,9 @@ export default function TicketDetailPage() {
       setSaving(true);
       setShowAssignDropdown(false);
       const updated = await ticketsApi.assignTicket(ticketId, targetUserId);
-      setTicket({ ...ticket!, assignees: updated.assignees, assignees_list: updated.assignees_list });
+      const assignees = updated.assignees || [];
+      setTicket({ ...ticket!, assignees, assignees_list: updated.assignees_list });
+      setEditData(prev => ({ ...prev, assignees }));
       showToastMessage('Assignee added', 'success');
       const freshTicket = await ticketsApi.getTicket(ticketId);
       setTicket(freshTicket);
@@ -277,7 +288,7 @@ export default function TicketDetailPage() {
     const transitions: Record<TicketStatus, TicketStatus[]> = {
       new: ['in_progress'],
       in_progress: ['qa'],
-      qa: ['closed'],
+      qa: ['closed', 'in_progress'],
       closed: ['reopened'],
       reopened: ['in_progress'],
     };
@@ -358,29 +369,33 @@ export default function TicketDetailPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-200 mb-1">Title</label>
-                  <input type="text" className="input-field w-full" value={editData.title} onChange={(e) => setEditData({ ...editData, title: e.target.value })} />
+                  <input type="text" className="input-field w-full" value={editData.title} onChange={(e) => { setEditData({ ...editData, title: e.target.value }); setFieldErrors({ ...fieldErrors, title: undefined }); }} />
+                  {fieldErrors.title && <p className="text-red-400 text-xs mt-1">{Array.isArray(fieldErrors.title) ? fieldErrors.title[0] : fieldErrors.title}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-200 mb-1">Description</label>
-                  <textarea rows={6} className="input-field w-full resize-none" value={editData.description} onChange={(e) => setEditData({ ...editData, description: e.target.value })} />
+                  <textarea rows={6} className="input-field w-full resize-none" value={editData.description} onChange={(e) => { setEditData({ ...editData, description: e.target.value }); setFieldErrors({ ...fieldErrors, description: undefined }); }} />
+                  {fieldErrors.description && <p className="text-red-400 text-xs mt-1">{Array.isArray(fieldErrors.description) ? fieldErrors.description[0] : fieldErrors.description}</p>}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-200 mb-1">Type</label>
-                    <select className="input-field w-full" value={editData.type} onChange={(e) => setEditData({ ...editData, type: e.target.value as any })}>
+                    <select className="input-field w-full" value={editData.type} onChange={(e) => { setEditData({ ...editData, type: e.target.value as any }); setFieldErrors({ ...fieldErrors, type: undefined }); }}>
                       <option value="bug">Bug</option>
                       <option value="task">Task</option>
                       <option value="feature">Feature</option>
                     </select>
+                    {fieldErrors.type && <p className="text-red-400 text-xs mt-1">{Array.isArray(fieldErrors.type) ? fieldErrors.type[0] : fieldErrors.type}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-200 mb-1">Priority</label>
-                    <select className="input-field w-full" value={editData.priority} onChange={(e) => setEditData({ ...editData, priority: e.target.value as any })}>
+                    <select className="input-field w-full" value={editData.priority} onChange={(e) => { setEditData({ ...editData, priority: e.target.value as any }); setFieldErrors({ ...fieldErrors, priority: undefined }); }}>
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
                       <option value="high">High</option>
                       <option value="critical">Critical</option>
                     </select>
+                    {fieldErrors.priority && <p className="text-red-400 text-xs mt-1">{Array.isArray(fieldErrors.priority) ? fieldErrors.priority[0] : fieldErrors.priority}</p>}
                   </div>
                 </div>
                 <div className="flex gap-2 pt-2">
@@ -592,6 +607,7 @@ export default function TicketDetailPage() {
                                 await ticketsApi.unassignTicket(ticketId, a.id);
                                 const fresh = await ticketsApi.getTicket(ticketId);
                                 setTicket(fresh);
+                                setEditData(prev => ({ ...prev, assignees: fresh.assignees || [] }));
                                 showToastMessage('Assignee removed', 'success');
                               } catch (err: any) {
                                 showToastMessage(err.response?.data?.error || 'Failed to remove', 'error');

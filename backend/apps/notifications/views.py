@@ -14,12 +14,18 @@ class NotificationViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSe
     serializer_class = NotificationSerializer
 
     def get_queryset(self):
-        # Only show notifications from last 7 days
-        cutoff = timezone.now() - timedelta(days=7)
+        self._cleanup_old_read()
         return Notification.objects.filter(
-            user=self.request.user,
-            created_at__gte=cutoff
+            user=self.request.user
         ).order_by('-created_at')
+
+    def _cleanup_old_read(self):
+        cutoff = timezone.now() - timedelta(days=28)
+        Notification.objects.filter(
+            user=self.request.user,
+            read=True,
+            created_at__lt=cutoff
+        ).delete()
 
     @action(detail=True, methods=['post'])
     def mark_read(self, request, pk=None):
@@ -31,4 +37,5 @@ class NotificationViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSe
     @action(detail=False, methods=['post'])
     def mark_all_read(self, request):
         self.get_queryset().update(read=True)
+        self._cleanup_old_read()
         return Response({'status': 'ok'})

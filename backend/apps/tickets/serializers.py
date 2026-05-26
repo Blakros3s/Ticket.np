@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
+from django.utils.html import strip_tags
 from .models import Ticket, TicketMedia
 from apps.comments.models import Comment
 from apps.users.models import User
@@ -11,6 +13,17 @@ from apps.projects.models import Project
 _IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg')
 _VIDEO_EXTS = ('.mp4', '.webm', '.mov', '.avi', '.mkv')
 _DOC_EXTS   = ('.pdf', '.doc', '.docx', '.txt', '.md', '.xls', '.xlsx', '.ppt', '.pptx')
+
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+_FILE_EXTS = _IMAGE_EXTS + _VIDEO_EXTS + _DOC_EXTS
+
+
+def validate_file(file):
+    if file.size > MAX_FILE_SIZE:
+        raise ValidationError(f"File size exceeds 10 MB limit ({file.size / 1024 / 1024:.1f} MB).")
+    name = file.name.lower()
+    if not name.endswith(_FILE_EXTS):
+        raise ValidationError(f"File type '{name.rsplit('.', 1)[-1]}' is not supported.")
 
 
 def get_file_type(filename: str) -> str:
@@ -121,6 +134,12 @@ class TicketCreateSerializer(serializers.ModelSerializer):
         model  = Ticket
         fields = ['title', 'description', 'type', 'priority', 'project', 'assignees', 'media_files']
 
+    def validate_title(self, value):
+        return strip_tags(value)
+
+    def validate_description(self, value):
+        return strip_tags(value)
+
     def create(self, validated_data):
         media_files  = validated_data.pop('media_files', [])
         assignee_ids = validated_data.pop('assignees', [])
@@ -131,6 +150,7 @@ class TicketCreateSerializer(serializers.ModelSerializer):
             ticket.assignees.set(assignee_ids)
 
         for file in media_files:
+            validate_file(file)
             TicketMedia.objects.create(
                 ticket=ticket,
                 file=file,
@@ -152,7 +172,13 @@ class TicketUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Ticket
-        fields = ['title', 'description', 'type', 'priority', 'status', 'assignees']
+        fields = ['title', 'description', 'type', 'priority', 'assignees']
+
+    def validate_title(self, value):
+        return strip_tags(value)
+
+    def validate_description(self, value):
+        return strip_tags(value)
 
     def update(self, instance, validated_data):
         assignee_ids = validated_data.pop('assignees', None)
