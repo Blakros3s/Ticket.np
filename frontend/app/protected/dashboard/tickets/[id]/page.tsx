@@ -59,7 +59,7 @@ export default function TicketDetailPage() {
     status: 'new' as TicketStatus,
     assignees: [] as number[],
   });
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string | string[]>>({});
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<string, string | string[]>>>({});
 
   const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'manager';
 
