@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { notificationsApi, Notification } from '@/lib/notifications';
 import { useNotifications } from '@/lib/notifications-context';
 
@@ -92,34 +91,49 @@ export default function NotificationsPage() {
             </svg>
             <p className="text-slate-400">No notifications</p>
             <p className="text-slate-500 text-sm mt-1">
-              Notifications auto-delete after 7 days
-            </p>
+                Seen notifications auto-delete after 28 days
+              </p>
           </div>
         ) : (
           <div className="divide-y divide-slate-700/50">
             {notifications.map((n) => (
-              <div key={n.id} className="relative group">
-                <Link
-                  href={getNotificationHref(n)}
-                  onClick={() => handleNotificationClick(n)}
-                  className={`block px-4 py-3 hover:bg-slate-700/30 transition-colors pr-12 ${
-                    !n.read ? 'bg-sky-500/10 border-l-4 border-sky-400' : ''
-                  }`}
-                >
-                  <p className="text-sm text-white">{n.message}</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {new Date(n.created_at).toLocaleString()}
-                  </p>
-                </Link>
-                <button
-                  onClick={(e) => handleDelete(e, n.id)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                  title="Delete notification"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+              <div key={n.id} className={`flex items-start gap-3 px-4 py-3 hover:bg-slate-700/30 transition-colors ${
+                !n.read ? 'bg-sky-500/10 border-l-4 border-sky-400' : ''
+              }`}>
+                <div className="flex-1 min-w-0">
+                  <a
+                    href={getNotificationHref(n)}
+                    onClick={(e) => { e.preventDefault(); handleNotificationClick(n); }}
+                    className="block cursor-pointer"
+                  >
+                    <p className="text-sm text-white">{n.message}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {new Date(n.created_at).toLocaleString()}
+                    </p>
+                  </a>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {!n.read && (
+                    <button
+                      onClick={async (e) => { e.stopPropagation(); await handleNotificationClick(n); }}
+                      className="p-2 text-slate-500 hover:text-sky-400 hover:bg-sky-400/10 rounded-lg transition-all"
+                      title="Mark as read"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                  )}
+                  <button
+                    onClick={(e) => handleDelete(e, n.id)}
+                    className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+                    title="Delete notification"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             ))}
           </div>

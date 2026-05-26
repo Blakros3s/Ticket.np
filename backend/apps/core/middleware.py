@@ -25,6 +25,9 @@ class RateLimitMiddleware:
         if '/auth/' in request.path:
             limit = 10  # 10 requests
             window = 60  # per 60 seconds
+        elif '/media' in request.path and request.method in ('POST', 'PUT', 'PATCH'):
+            limit = 20  # 20 requests
+            window = 60  # per 60 seconds
         else:
             limit = 100  # 100 requests
             window = 60  # per 60 seconds

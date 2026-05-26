@@ -2,6 +2,7 @@ from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import FilterSet, NumberFilter
 from django.db.models import Q, Count
@@ -21,6 +22,7 @@ from .serializers import (
     TicketStatusSerializer,
     TicketCommentSerializer,
     TicketMediaSerializer,
+    validate_file,
 )
 
 
@@ -108,18 +110,57 @@ class TicketViewSet(viewsets.ModelViewSet):
     # Standard CRUD hooks
     # ------------------------------------------------------------------
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        ticket = serializer.instance
+        output = TicketSerializer(ticket, context=self.get_serializer_context())
+        headers = self.get_success_headers(output.data)
+        return Response(output.data, status=status.HTTP_201_CREATED, headers=headers)
+
     def perform_create(self, serializer):
         ticket = serializer.save(created_by=self.request.user)
-        log_activity(
-            action='create',
-            user=self.request.user,
-            instance=ticket,
-            description=f"Created ticket {ticket.ticket_id}: {ticket.title}",
-        )
+        try:
+            log_activity(
+                action='create',
+                user=self.request.user,
+                instance=ticket,
+                description=f"Created ticket {ticket.ticket_id}: {ticket.title}",
+            )
+        except Exception:
+            pass
+        for assignee in ticket.assignees.all():
+            if assignee != self.request.user:
+                try:
+                    Notification.objects.create(
+                        user=assignee,
+                        message=f"You were assigned to ticket {ticket.ticket_id} by {self.request.user.username}",
+                        ticket_id=ticket.id,
+                        ticket_title=ticket.title[:255],
+                    )
+                except Exception:
+                    pass
 
     def perform_update(self, serializer):
         old = self.get_object()
         ticket = serializer.save()
+
+        old_ids = set(old.assignees.values_list('id', flat=True))
+        new_ids = set(ticket.assignees.values_list('id', flat=True))
+        new_assignee_ids = new_ids - old_ids
+        if new_assignee_ids:
+            for assignee in User.objects.filter(id__in=new_assignee_ids):
+                if assignee != self.request.user:
+                    try:
+                        Notification.objects.create(
+                            user=assignee,
+                            message=f"You were assigned to ticket {ticket.ticket_id} by {self.request.user.username}",
+                            ticket_id=ticket.id,
+                            ticket_title=ticket.title[:255],
+                        )
+                    except Exception:
+                        pass
 
         changes = []
         if old.title != ticket.title:
@@ -131,8 +172,6 @@ class TicketViewSet(viewsets.ModelViewSet):
         if old.priority != ticket.priority:
             changes.append(f"priority from '{old.priority}' to '{ticket.priority}'")
 
-        old_ids = set(old.assignees.values_list('id', flat=True))
-        new_ids = set(ticket.assignees.values_list('id', flat=True))
         if old_ids != new_ids:
             old_names = ', '.join(u.username for u in old.assignees.all()) or 'Unassigned'
             new_names = ', '.join(u.username for u in ticket.assignees.all()) or 'Unassigned'
@@ -204,7 +243,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         transitions = {
             'new':        ['in_progress'],
             'in_progress': ['qa'],
-            'qa':         ['closed'],
+            'qa':         ['closed', 'in_progress'],
             'closed':     ['reopened'],
             'reopened':   ['in_progress'],
         }
@@ -456,6 +495,11 @@ class TicketViewSet(viewsets.ModelViewSet):
         file = request.FILES.get('file')
         if not file:
             return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            validate_file(file)
+        except ValidationError as e:
+            return Response({'error': str(e.detail[0]) if isinstance(e.detail, list) else str(e.detail)}, status=status.HTTP_400_BAD_REQUEST)
 
         media = TicketMedia.objects.create(
             ticket=ticket,
