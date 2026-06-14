@@ -3,7 +3,6 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
-from django.shortcuts import get_object_or_404
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,6 +10,8 @@ logger = logging.getLogger(__name__)
 from apps.notifications.models import Notification
 from apps.users.models import User
 from apps.users.permissions import IsManagerOrAdmin
+from apps.core.access import get_accessible_project
+from apps.core.media_utils import build_protected_media_url
 from .models import Project, ProjectMember, ProjectDocument
 from .serializers import ProjectSerializer, ProjectCreateSerializer, ProjectMemberSerializer, ProjectDocumentSerializer
 
@@ -124,10 +125,14 @@ class ProjectViewSet(viewsets.ModelViewSet):
 class ProjectDocumentViewSet(viewsets.ModelViewSet):
     serializer_class = ProjectDocumentSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_project(self):
+        if not hasattr(self, '_project'):
+            self._project = get_accessible_project(self.request.user, self.kwargs['project_pk'])
+        return self._project
     
     def get_queryset(self):
-        return ProjectDocument.objects.filter(project_id=self.kwargs['project_pk'])
+        return ProjectDocument.objects.filter(project=self.get_project())
     
     def perform_create(self, serializer):
-        project = get_object_or_404(Project, pk=self.kwargs['project_pk'])
-        serializer.save(project=project)
+        serializer.save(project=self.get_project())

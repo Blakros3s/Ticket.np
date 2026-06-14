@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Project, ProjectMember, ProjectDocument
 from apps.users.models import User
 from apps.users.serializers import UserSerializer
+from apps.core.media_utils import build_protected_media_url
 
 
 class ProjectMemberSerializer(serializers.ModelSerializer):
@@ -63,6 +64,13 @@ class ProjectDocumentSerializer(serializers.ModelSerializer):
         model = ProjectDocument
         fields = ['id', 'title', 'file', 'file_type', 'file_size', 'uploaded_by', 'created_at']
         read_only_fields = ['uploaded_by', 'created_at', 'file_type', 'file_size']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        if request and instance.file:
+            data['file'] = build_protected_media_url(request, instance.file.name)
+        return data
     
     def create(self, validated_data):
         validated_data['uploaded_by'] = self.context['request'].user

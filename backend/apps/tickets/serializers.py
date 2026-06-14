@@ -2,6 +2,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 import re
 from django.utils.html import strip_tags
+from apps.core.media_utils import build_protected_media_url
 from .models import Ticket, TicketMedia
 from apps.comments.models import Comment
 from apps.users.models import User
@@ -96,6 +97,13 @@ class TicketMediaSerializer(serializers.ModelSerializer):
             'uploaded_by', 'uploaded_by_username', 'created_at',
         ]
         read_only_fields = ['file_type', 'file_size', 'uploaded_by', 'created_at']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        if request and instance.file:
+            data['file'] = build_protected_media_url(request, instance.file.name)
+        return data
 
     def create(self, validated_data):
         file = validated_data['file']

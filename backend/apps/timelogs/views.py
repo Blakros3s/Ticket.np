@@ -2,11 +2,22 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 from django.utils import timezone
 from django.db.models import Sum
 from .models import WorkLog
 from .serializers import WorkLogSerializer, WorkLogCreateSerializer, WorkLogUpdateSerializer
 from apps.activity.utils import log_activity
+from apps.core.access import get_accessible_ticket, accessible_ticket_ids_for_user
+
+
+class IsWorkLogOwnerOrAdmin(IsAuthenticated):
+    def has_object_permission(self, request, view, obj):
+        if request.user.role == 'admin':
+            return True
+        if view.action in ('retrieve', 'list'):
+            return True
+        return obj.user_id == request.user.id
 
 
 class WorkLogViewSet(viewsets.ModelViewSet):
@@ -19,27 +30,37 @@ class WorkLogViewSet(viewsets.ModelViewSet):
             return WorkLogUpdateSerializer
         return WorkLogSerializer
     
+    def get_permissions(self):
+        if self.action in ['update', 'partial_update', 'destroy']:
+            return [IsAuthenticated(), IsWorkLogOwnerOrAdmin()]
+        return [IsAuthenticated()]
+
     def get_queryset(self):
         user = self.request.user
         queryset = WorkLog.objects.all()
         
-        # Filter by ticket if provided
         ticket_id = self.request.query_params.get('ticket_id')
         if ticket_id:
             queryset = queryset.filter(ticket_id=ticket_id)
         
-        # Filter by user if provided
         user_id = self.request.query_params.get('user_id')
         if user_id:
             queryset = queryset.filter(user_id=user_id)
         
-        # Non-admin and non-manager users can only see their own work logs
+        if user.role == 'admin':
+            return queryset.select_related('user', 'ticket')
+
+        accessible_ids = accessible_ticket_ids_for_user(user)
+        queryset = queryset.filter(ticket_id__in=accessible_ids)
+
         if user.role not in ['admin', 'manager']:
             queryset = queryset.filter(user=user)
         
         return queryset.select_related('user', 'ticket')
     
     def perform_create(self, serializer):
+        ticket = serializer.validated_data['ticket']
+        get_accessible_ticket(self.request.user, ticket.id)
         work_log = serializer.save(user=self.request.user, start_time=timezone.now())
         # Log activity
         log_activity(
@@ -61,6 +82,8 @@ class WorkLogViewSet(viewsets.ModelViewSet):
                 {'error': 'ticket_id is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        ticket = get_accessible_ticket(request.user, int(ticket_id))
         
         # Check if user already has an active work log
         active_log = WorkLog.objects.filter(
@@ -80,7 +103,7 @@ class WorkLogViewSet(viewsets.ModelViewSet):
         # Create new work log
         work_log = WorkLog.objects.create(
             user=request.user,
-            ticket_id=ticket_id,
+            ticket=ticket,
             start_time=timezone.now(),
             notes=notes
         )
@@ -163,24 +186,12 @@ class WorkLogViewSet(viewsets.ModelViewSet):
             )
         
         user = request.user
+        ticket = get_accessible_ticket(user, int(ticket_id))
         
-        # Get active work log for this ticket
         active_log = WorkLog.objects.filter(
-            ticket_id=ticket_id,
+            ticket=ticket,
             end_time__isnull=True
         ).first()
-        
-        # Check if user can view this - admin/manager or the assignee
-        from apps.tickets.models import Ticket
-        try:
-            ticket = Ticket.objects.get(id=ticket_id)
-        except Ticket.DoesNotExist:
-            return Response({'active': False, 'error': 'Ticket not found'})
-        
-        can_view = user.role in ['admin', 'manager'] or ticket.assignees.filter(id=user.id).exists()
-        
-        if not can_view:
-            return Response({'active': False, 'error': 'Permission denied'})
         
         if not active_log:
             return Response({'active': False})

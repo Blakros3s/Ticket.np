@@ -2,7 +2,10 @@ from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
 from django.db.models import Q
+from apps.core.access import user_can_access_ticket
+from apps.comments.utils import notify_comment_mentions
 from .models import Comment
 from .serializers import CommentSerializer, CommentCreateSerializer
 
@@ -44,20 +47,22 @@ class CommentViewSet(viewsets.ModelViewSet):
         ).distinct().select_related('author', 'ticket')
     
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        ticket = serializer.validated_data['ticket']
+        if not user_can_access_ticket(self.request.user, ticket):
+            raise PermissionDenied('You do not have access to comment on this ticket.')
+        comment = serializer.save(author=self.request.user)
+        notify_comment_mentions(self.request.user, ticket, comment.content)
     
     def perform_update(self, serializer):
-        # Only allow updating own comments
         comment = self.get_object()
         if comment.author != self.request.user:
-            raise PermissionError("You can only edit your own comments")
+            raise PermissionDenied('You can only edit your own comments.')
         serializer.save()
     
     def perform_destroy(self, instance):
-        # Only allow deleting own comments or admin/manager
         user = self.request.user
         if instance.author != user and user.role not in ['admin', 'manager']:
-            raise PermissionError("You can only delete your own comments")
+            raise PermissionDenied('You can only delete your own comments.')
         instance.delete()
     
     @action(detail=False, methods=['get'])

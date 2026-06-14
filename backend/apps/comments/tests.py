@@ -5,6 +5,7 @@ from apps.users.models import User
 from apps.projects.models import Project
 from apps.tickets.models import Ticket
 from apps.comments.models import Comment
+from apps.notifications.models import Notification
 
 
 class CommentAPITestCase(TestCase):
@@ -139,3 +140,25 @@ class CommentAPITestCase(TestCase):
         # Comments should be ordered by created_at ascending
         results = response.data['results']
         self.assertTrue(results[0]['created_at'] <= results[1]['created_at'])
+
+    def test_mention_creates_notification_for_project_member(self):
+        """Mentioning @username notifies that project member."""
+        self.client.force_authenticate(user=self.employee_user)
+        response = self.client.post(
+            '/api/comments/',
+            {
+                'ticket': self.ticket.id,
+                'content': 'Hey @employee2 please review this fix.',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.another_employee,
+                ticket_id=self.ticket.id,
+            ).exists()
+        )
+        self.assertFalse(
+            Notification.objects.filter(user=self.employee_user).exists()
+        )
