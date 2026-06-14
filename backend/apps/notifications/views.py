@@ -39,3 +39,8 @@ class NotificationViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSe
         self.get_queryset().update(read=True)
         self._cleanup_old_read()
         return Response({'status': 'ok'})
+
+    @action(detail=False, methods=['delete'])
+    def delete_all(self, request):
+        deleted, _ = Notification.objects.filter(user=request.user).delete()
+        return Response({'status': 'ok', 'deleted': deleted})

@@ -8,12 +8,17 @@ class OfficeSettingsSerializer(serializers.ModelSerializer):
     """Serializer for office settings"""
     is_within_office_hours = serializers.ReadOnlyField()
     has_office_hours_ended = serializers.ReadOnlyField()
-    
+    weekend_holidays = serializers.ChoiceField(
+        choices=OfficeSettings.WEEKEND_CHOICES,
+        default='saturday',
+        required=False,
+    )
+
     class Meta:
         model = OfficeSettings
         fields = [
             'id', 'office_start_time', 'office_end_time', 
-            'auto_mark_absent', 'user_terminology',
+            'auto_mark_absent', 'user_terminology', 'weekend_holidays',
             'is_within_office_hours', 'has_office_hours_ended', 'updated_at'
         ]
         read_only_fields = ['id', 'updated_at']

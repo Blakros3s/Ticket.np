@@ -2,6 +2,7 @@
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 
 interface MarkdownProps {
   content: string;
@@ -26,8 +27,8 @@ export default function Markdown({ content, className = '' }: MarkdownProps) {
       prose-td:border prose-td:border-slate-700 prose-td:px-3 prose-td:py-2
       ${className}`}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-        {content}
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+        {content.replace(/\r\n?/g, '\n')}
       </ReactMarkdown>
     </div>
   );

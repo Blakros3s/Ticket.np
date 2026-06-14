@@ -1,139 +1,181 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { notificationsApi, Notification } from '@/lib/notifications';
 import { useNotifications } from '@/lib/notifications-context';
 
 export default function NotificationsPage() {
-  const { notifications, setNotifications, fetchNotifications } = useNotifications();
+  const router = useRouter();
+  const {
+    notifications,
+    setNotifications,
+    fetchNotifications,
+    deleteAllNotifications,
+  } = useNotifications();
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<'read' | 'delete' | null>(null);
 
   useEffect(() => {
     fetchNotifications().finally(() => setLoading(false));
   }, [fetchNotifications]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const hasNotifications = notifications.length > 0;
 
   const handleMarkAllRead = async () => {
     if (unreadCount === 0) return;
     try {
+      setActionLoading('read');
       await notificationsApi.markAllRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     } catch {
       // Ignore
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const { deleteNotification } = useNotifications();
-
-  const handleDelete = async (e: React.MouseEvent, id: number) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDeleteAll = async () => {
+    if (!hasNotifications) return;
     try {
-      await deleteNotification(id);
+      setActionLoading('delete');
+      await deleteAllNotifications();
     } catch {
       // Ignore
+    } finally {
+      setActionLoading(null);
     }
   };
 
   const handleNotificationClick = async (n: Notification) => {
-    if (!n.read) {
-      try {
-        await notificationsApi.markRead(n.id);
-        setNotifications((prev) =>
-          prev.map((x) => (x.id === n.id ? { ...x, read: true } : x))
-        );
-      } catch {
-        // Ignore
-      }
+    if (n.read) return;
+
+    try {
+      await notificationsApi.markRead(n.id);
+      setNotifications((prev) =>
+        prev.map((x) => (x.id === n.id ? { ...x, read: true } : x))
+      );
+    } catch {
+      // Ignore
+    }
+
+    if (n.ticket_id) {
+      router.push(`/protected/dashboard/tickets/${n.ticket_id}`);
+    } else if (n.project_id) {
+      router.push(`/protected/dashboard/projects/${n.project_id}`);
     }
   };
 
-  const getNotificationHref = (n: Notification) => {
-    if (n.ticket_id) return `/protected/dashboard/tickets/${n.ticket_id}`;
-    if (n.project_id) return `/protected/dashboard/projects/${n.project_id}`;
-    return '#';
-  };
-
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Notifications</h1>
-        {unreadCount > 0 && (
-          <button
-            onClick={handleMarkAllRead}
-            className="px-4 py-2 text-sm font-medium text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 rounded-lg transition-colors"
-          >
-            Mark all as read
-          </button>
-        )}
+    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-2">
+          <Link href="/protected/dashboard" className="text-slate-400 hover:text-white transition-colors">
+            Dashboard
+          </Link>
+          <span className="text-slate-500">/</span>
+          <span className="text-white">Notifications</span>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-white">Notifications</h1>
+            <p className="text-slate-400 mt-1">
+              {hasNotifications
+                ? `${unreadCount} unread · ${notifications.length} total`
+                : 'Stay updated on tickets and projects'}
+            </p>
+          </div>
+
+          {hasNotifications && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleMarkAllRead}
+                disabled={actionLoading !== null || unreadCount === 0}
+                className="px-4 py-2 text-sm font-medium text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors border border-sky-500/20"
+              >
+                {actionLoading === 'read' ? 'Marking...' : 'Mark all as read'}
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAll}
+                disabled={actionLoading !== null}
+                className="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors border border-red-500/20"
+              >
+                {actionLoading === 'delete' ? 'Deleting...' : 'Delete all'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-400 mx-auto"></div>
+          <div className="p-12 text-center">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-sky-400 mx-auto"></div>
           </div>
-        ) : notifications.length === 0 ? (
-          <div className="p-8 text-center">
-            <svg
-              className="w-12 h-12 text-slate-600 mx-auto mb-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-              />
-            </svg>
-            <p className="text-slate-400">No notifications</p>
+        ) : !hasNotifications ? (
+          <div className="p-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-slate-700/50 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                />
+              </svg>
+            </div>
+            <p className="text-slate-300 font-medium">No notifications</p>
             <p className="text-slate-500 text-sm mt-1">
-                Seen notifications auto-delete after 28 days
-              </p>
+              Read notifications are automatically removed after 28 days
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-slate-700/50">
             {notifications.map((n) => (
-              <div key={n.id} className={`flex items-start gap-3 px-4 py-3 hover:bg-slate-700/30 transition-colors ${
-                !n.read ? 'bg-sky-500/10 border-l-4 border-sky-400' : ''
-              }`}>
-                <div className="flex-1 min-w-0">
-                  <a
-                    href={getNotificationHref(n)}
-                    onClick={(e) => { e.preventDefault(); handleNotificationClick(n); }}
-                    className="block cursor-pointer"
-                  >
-                    <p className="text-sm text-white">{n.message}</p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {new Date(n.created_at).toLocaleString()}
-                    </p>
-                  </a>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {!n.read && (
-                    <button
-                      onClick={async (e) => { e.stopPropagation(); await handleNotificationClick(n); }}
-                      className="p-2 text-slate-500 hover:text-sky-400 hover:bg-sky-400/10 rounded-lg transition-all"
-                      title="Mark as read"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </button>
-                  )}
+              <div
+                key={n.id}
+                className={`px-5 py-4 transition-colors ${
+                  n.read
+                    ? 'bg-slate-900/20 opacity-75'
+                    : 'bg-sky-500/5 hover:bg-sky-500/10 border-l-4 border-sky-400'
+                }`}
+              >
+                {n.read ? (
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-400">{n.message}</p>
+                      <p className="text-xs text-slate-600 mt-1">
+                        {new Date(n.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                    <span className="flex-shrink-0 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-700/50 rounded-full">
+                      Read
+                    </span>
+                  </div>
+                ) : (
                   <button
-                    onClick={(e) => handleDelete(e, n.id)}
-                    className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
-                    title="Delete notification"
+                    type="button"
+                    onClick={() => handleNotificationClick(n)}
+                    className="w-full text-left flex items-start justify-between gap-4 group"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white group-hover:text-sky-300 transition-colors">
+                        {n.message}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {new Date(n.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                    <span className="flex-shrink-0 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-sky-400 bg-sky-500/10 rounded-full">
+                      Unread
+                    </span>
                   </button>
-                </div>
+                )}
               </div>
             ))}
           </div>

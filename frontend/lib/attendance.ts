@@ -1,14 +1,36 @@
 import api from './api';
 
+export type WeekendHolidays = 'saturday' | 'sunday' | 'both';
+
 export interface OfficeSettings {
   id: number;
   office_start_time: string;
   office_end_time: string;
   auto_mark_absent: boolean;
   user_terminology: 'employee' | 'developer';
+  weekend_holidays: WeekendHolidays;
   is_within_office_hours: boolean;
   has_office_hours_ended: boolean;
   updated_at: string;
+}
+
+export type AttendanceDayStatus = 'present' | 'absent' | 'leave' | 'none' | 'off';
+
+export interface AttendanceCalendarDay {
+  date: string;
+  day: number;
+  weekday: number;
+  is_working_day: boolean;
+  status: AttendanceDayStatus;
+  first_available_time?: string | null;
+}
+
+export interface AttendanceCalendar {
+  year: number;
+  month: number;
+  start_date: string;
+  end_date: string;
+  days: AttendanceCalendarDay[];
 }
 
 export interface LeaveRequest {
@@ -118,6 +140,8 @@ export const attendanceApi = {
     office_start_time: string;
     office_end_time: string;
     auto_mark_absent: boolean;
+    user_terminology?: 'employee' | 'developer';
+    weekend_holidays?: WeekendHolidays;
   }): Promise<OfficeSettings> => {
     const response = await api.put<OfficeSettings>('/attendance/settings/', data);
     return response.data;
@@ -214,6 +238,16 @@ export const attendanceApi = {
   // Attendance Stats
   getAttendanceStats: async (params: { start_date?: string; end_date?: string; all_employees?: boolean; employee_id?: number }): Promise<AttendanceStats> => {
     const response = await api.get<AttendanceStats>('/attendance/attendance/stats/', { params });
+    return response.data;
+  },
+
+  getAttendanceCalendar: async (params: {
+    year?: number;
+    month?: number;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<AttendanceCalendar> => {
+    const response = await api.get<AttendanceCalendar>('/attendance/attendance/calendar/', { params });
     return response.data;
   },
 };

@@ -209,7 +209,7 @@ function CreateTicketForm() {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             />
-            <p className="text-xs text-slate-500 mt-1">Supports Markdown: **bold**, *italic*, `code`, [links](url)</p>
+            <p className="text-xs text-slate-500 mt-1">Supports Markdown: **bold**, *italic*, `code`, [links](url). Line breaks are preserved when pasted.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

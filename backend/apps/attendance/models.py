@@ -14,6 +14,17 @@ class OfficeSettings(models.Model):
         default='employee',
         help_text="Terminology to use for staff (Employee or Developer)"
     )
+    WEEKEND_CHOICES = [
+        ('saturday', 'Saturday only'),
+        ('sunday', 'Sunday only'),
+        ('both', 'Saturday and Sunday'),
+    ]
+    weekend_holidays = models.CharField(
+        max_length=10,
+        choices=WEEKEND_CHOICES,
+        default='saturday',
+        help_text="Weekly off-days when attendance is not required"
+    )
     
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
@@ -33,15 +44,19 @@ class OfficeSettings(models.Model):
     @classmethod
     def get_settings(cls):
         """Get or create the singleton settings instance"""
-        settings, created = cls.objects.get_or_create(
+        settings, _created = cls.objects.get_or_create(
             pk=1,
             defaults={
                 'office_start_time': '10:00',
                 'office_end_time': '17:00',
                 'auto_mark_absent': True,
-                'user_terminology': 'employee'
+                'user_terminology': 'employee',
+                'weekend_holidays': 'saturday',
             }
         )
+        if not settings.weekend_holidays:
+            settings.weekend_holidays = 'saturday'
+            settings.save(update_fields=['weekend_holidays'])
         return settings
     
     @property
@@ -231,36 +246,153 @@ class Attendance(models.Model):
         self.save()
 
     @staticmethod
+    def is_weekend_off(check_date):
+        """Check if date falls on a configured weekly off-day."""
+        settings = OfficeSettings.get_settings()
+        weekday = check_date.weekday()  # Monday=0, Sunday=6
+        if settings.weekend_holidays == 'saturday' and weekday == 5:
+            return True
+        if settings.weekend_holidays == 'sunday' and weekday == 6:
+            return True
+        if settings.weekend_holidays == 'both' and weekday in (5, 6):
+            return True
+        return False
+
+    @staticmethod
     def is_working_day(check_date):
-        """Check if date is a working day (not Saturday, not a Holiday)"""
-        # Saturday is index 5
-        if check_date.weekday() == 5:
+        """Check if date is a working day (not a configured weekend off-day or public holiday)."""
+        if Attendance.is_weekend_off(check_date):
             return False
-            
-        # Check CalendarEvent for holidays
+
         from apps.calendar.models import CalendarEvent
-        is_holiday = CalendarEvent.objects.filter(
+        return not CalendarEvent.objects.filter(
             date=check_date,
             category='holiday'
         ).exists()
-        
-        return not is_holiday
     
     @staticmethod
     def count_working_days_in_range(start_date, end_date):
-        """Count working days (excluding Saturday and holidays) in a date range"""
+        """Count working days in a date range (excludes weekends and public holidays)."""
         from datetime import timedelta
-        
-        # Get all dates in range
+
         current = start_date
         count = 0
-        
         while current <= end_date:
             if Attendance.is_working_day(current):
                 count += 1
             current += timedelta(days=1)
-        
         return count
+
+    @classmethod
+    def aggregate_stats_for_employee(cls, employee, start_date, end_date):
+        """Compute present/absent/leave counts for an employee in a date range."""
+        from datetime import timedelta
+
+        today = timezone.localdate()
+        settings = OfficeSettings.get_settings()
+        total_working_days = cls.count_working_days_in_range(start_date, end_date)
+
+        records = {
+            record.date: record
+            for record in cls.objects.filter(
+                employee=employee,
+                date__range=[start_date, end_date]
+            )
+        }
+
+        present = absent = leave = 0
+        current = start_date
+        while current <= end_date:
+            if not cls.is_working_day(current):
+                current += timedelta(days=1)
+                continue
+
+            day_complete = (
+                current < today
+                or (current == today and settings.has_office_hours_ended)
+            )
+            record = records.get(current)
+
+            if record:
+                if record.status == 'present':
+                    present += 1
+                elif record.status == 'absent':
+                    absent += 1
+                elif record.status == 'leave':
+                    leave += 1
+                elif record.status == 'neutral' and day_complete:
+                    absent += 1
+            elif day_complete:
+                absent += 1
+
+            current += timedelta(days=1)
+
+        percentage = (present / total_working_days * 100) if total_working_days > 0 else 0
+        return {
+            'total_working_days': total_working_days,
+            'present_days': present,
+            'absent_days': absent,
+            'leave_days': leave,
+            'percentage': percentage,
+        }
+
+    @classmethod
+    def build_calendar_days(cls, employee, start_date, end_date):
+        """Build day-by-day calendar data for attendance history views."""
+        from datetime import timedelta
+
+        today = timezone.localdate()
+        settings = OfficeSettings.get_settings()
+        records = {
+            record.date: record
+            for record in cls.objects.filter(
+                employee=employee,
+                date__range=[start_date, end_date]
+            )
+        }
+
+        days = []
+        current = start_date
+        while current <= end_date:
+            is_working = cls.is_working_day(current)
+            record = records.get(current)
+            day_complete = (
+                current < today
+                or (current == today and settings.has_office_hours_ended)
+            )
+
+            if not is_working:
+                status = 'off'
+            elif record:
+                if record.status == 'present':
+                    status = 'present'
+                elif record.status == 'absent':
+                    status = 'absent'
+                elif record.status == 'leave':
+                    status = 'leave'
+                elif day_complete:
+                    status = 'absent'
+                else:
+                    status = 'none'
+            elif day_complete:
+                status = 'absent'
+            else:
+                status = 'none'
+
+            days.append({
+                'date': current.isoformat(),
+                'day': current.day,
+                'weekday': current.weekday(),
+                'is_working_day': is_working,
+                'status': status,
+                'first_available_time': (
+                    timezone.localtime(record.first_available_at).strftime('%I:%M %p')
+                    if record and record.first_available_at else None
+                ),
+            })
+            current += timedelta(days=1)
+
+        return days
     
     def mark_available(self):
         """Mark employee as available"""

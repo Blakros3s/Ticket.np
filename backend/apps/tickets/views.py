@@ -38,6 +38,9 @@ class TicketFilter(FilterSet):
         fields = ['status', 'priority', 'type', 'project']
 
 
+TICKET_STATUS_KEYS = ('new', 'in_progress', 'qa', 'closed', 'reopened')
+
+
 # ---------------------------------------------------------------------------
 # Permissions
 # ---------------------------------------------------------------------------
@@ -105,6 +108,32 @@ class TicketViewSet(viewsets.ModelViewSet):
             Q(project__members=user) |
             Q(created_by=user)
         ).distinct()
+
+    def filter_queryset(self, queryset):
+        """Ensure list/pagination counts stay accurate after M2M filters."""
+        return super().filter_queryset(queryset).distinct()
+
+    def _queryset_without_status_filter(self):
+        """Apply the same filters as list, excluding status."""
+        queryset = self.get_queryset()
+        filter_params = self.request.query_params.copy()
+        filter_params.pop('status', None)
+
+        if self.filterset_class:
+            filterset = self.filterset_class(
+                filter_params, queryset=queryset, request=self.request
+            )
+            if filterset.is_valid():
+                queryset = filterset.qs
+
+        for backend in list(self.filter_backends):
+            if backend is filters.SearchFilter:
+                queryset = backend().filter_queryset(
+                    self.request, queryset, self
+                )
+
+        # Collapse to distinct ticket IDs so M2M joins cannot inflate counts.
+        return Ticket.objects.filter(pk__in=queryset.values('pk').distinct())
 
     # ------------------------------------------------------------------
     # Standard CRUD hooks
@@ -288,36 +317,16 @@ class TicketViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def stats(self, request):
         """Get ticket counts by status, respecting other filters."""
-        queryset = self.get_queryset()
-        
-        # Apply filters except status
-        filter_params = request.query_params.copy()
-        if 'status' in filter_params:
-            del filter_params['status']
-            
-        if self.filterset_class:
-            filterset = self.filterset_class(filter_params, queryset=queryset, request=request)
-            if filterset.is_valid():
-                queryset = filterset.qs
+        queryset = self._queryset_without_status_filter()
+        result = {key: 0 for key in TICKET_STATUS_KEYS}
 
-        # Apply search filter
-        for backend in list(self.filter_backends):
-            if backend == filters.SearchFilter:
-                queryset = backend().filter_queryset(request, queryset, self)
+        for row in queryset.values('status').annotate(count=Count('pk')):
+            status_key = row['status']
+            if status_key in result:
+                result[status_key] = row['count']
 
-        status_counts = queryset.values('status').annotate(count=Count('id'))
-        
-        result = {
-            'total': queryset.count(),
-            'new': 0,
-            'in_progress': 0,
-            'qa': 0,
-            'closed': 0,
-            'reopened': 0
-        }
-        for item in status_counts:
-            result[item['status']] = item['count']
-            
+        # Derive total from the breakdown so "All" always matches the tabs.
+        result['total'] = sum(result[key] for key in TICKET_STATUS_KEYS)
         return Response(result)
 
     # ------------------------------------------------------------------
