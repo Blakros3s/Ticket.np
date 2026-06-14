@@ -4,6 +4,20 @@ from rest_framework import status
 from apps.users.models import User
 from apps.projects.models import Project
 from apps.tickets.models import Ticket
+from apps.tickets.serializers import sanitize_multiline_text
+
+
+class SanitizeMultilineTextTestCase(TestCase):
+    def test_preserves_plain_text_line_breaks(self):
+        value = "First line\nSecond line\n\nThird paragraph"
+        self.assertEqual(sanitize_multiline_text(value), value)
+
+    def test_converts_html_breaks_to_newlines(self):
+        value = "<p>First paragraph</p><p>Second paragraph</p>Line one<br>Line two"
+        result = sanitize_multiline_text(value)
+        self.assertIn("First paragraph\n", result)
+        self.assertIn("Second paragraph\n", result)
+        self.assertIn("Line one\nLine two", result)
 
 
 class TicketAPITestCase(TestCase):
@@ -363,3 +377,98 @@ class TicketSearchTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data['results']), 1)
         self.assertEqual(response.data['results'][0]['type'], 'bug')
+
+
+class TicketStatsTestCase(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+        self.manager_user = User.objects.create_user(
+            username='stats_manager',
+            email='stats_manager@test.com',
+            password='managerpass123',
+            role='manager',
+        )
+        self.assignee_user = User.objects.create_user(
+            username='stats_assignee',
+            email='stats_assignee@test.com',
+            password='assigneepass123',
+            role='employee',
+        )
+
+        self.project = Project.objects.create(
+            name='Stats Project',
+            description='Stats test project',
+            created_by=self.manager_user,
+            status='active',
+        )
+        self.project.members.add(self.manager_user, self.assignee_user)
+
+        self.ticket_new = Ticket.objects.create(
+            title='Stats ticket new',
+            description='New ticket',
+            type='bug',
+            priority='high',
+            status='new',
+            project=self.project,
+            created_by=self.manager_user,
+        )
+        self.ticket_new.assignees.add(self.manager_user, self.assignee_user)
+
+        self.ticket_progress = Ticket.objects.create(
+            title='Stats ticket progress',
+            description='In progress ticket',
+            type='task',
+            priority='medium',
+            status='in_progress',
+            project=self.project,
+            created_by=self.manager_user,
+        )
+        self.ticket_progress.assignees.add(self.assignee_user)
+
+        self.ticket_closed = Ticket.objects.create(
+            title='Stats ticket closed',
+            description='Closed ticket',
+            type='feature',
+            priority='low',
+            status='closed',
+            project=self.project,
+            created_by=self.manager_user,
+        )
+
+    def _status_sum(self, data):
+        return sum(data[key] for key in ('new', 'in_progress', 'qa', 'closed', 'reopened'))
+
+    def test_stats_total_matches_status_breakdown(self):
+        """All count must equal the sum of individual status tabs."""
+        self.client.force_authenticate(user=self.manager_user)
+        response = self.client.get('/api/tickets/tickets/stats/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        data = response.data
+        self.assertEqual(data['total'], self._status_sum(data))
+        self.assertEqual(data['new'], 1)
+        self.assertEqual(data['in_progress'], 1)
+        self.assertEqual(data['closed'], 1)
+        self.assertEqual(data['total'], 3)
+
+    def test_stats_respects_non_status_filters(self):
+        """Priority/type filters should apply to stats the same way as list."""
+        self.client.force_authenticate(user=self.manager_user)
+
+        response = self.client.get('/api/tickets/tickets/stats/?priority=high')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(response.data['new'], 1)
+        self.assertEqual(response.data['in_progress'], 0)
+
+    def test_list_count_matches_stats_total(self):
+        """Paginated list count should stay in sync with stats total."""
+        self.client.force_authenticate(user=self.manager_user)
+
+        stats_response = self.client.get('/api/tickets/tickets/stats/')
+        list_response = self.client.get('/api/tickets/tickets/')
+
+        self.assertEqual(stats_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(list_response.data['count'], stats_response.data['total'])

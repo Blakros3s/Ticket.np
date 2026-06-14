@@ -99,13 +99,14 @@ export const ticketsApi = {
   },
 
   getTicketStats: async (filters?: TicketFilters): Promise<Record<string, number>> => {
-    const queryString = buildQueryString({
-      priority: filters?.priority,
-      type: filters?.type,
-      project: filters?.project,
-      search: filters?.search,
+    const response = await api.get<Record<string, number>>('/tickets/tickets/stats/', {
+      params: {
+        priority: filters?.priority,
+        type: filters?.type,
+        project: filters?.project,
+        search: filters?.search,
+      },
     });
-    const response = await api.get<Record<string, number>>(`/tickets/tickets/stats/${queryString}`);
     return response.data;
   },
 

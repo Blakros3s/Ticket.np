@@ -20,7 +20,8 @@ export default function SettingsPage() {
     office_start_time: '10:00',
     office_end_time: '17:00',
     auto_mark_absent: true,
-    user_terminology: 'employee' as 'employee' | 'developer'
+    user_terminology: 'employee' as 'employee' | 'developer',
+    weekend_holidays: 'saturday' as 'saturday' | 'sunday' | 'both',
   });
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -49,7 +50,8 @@ export default function SettingsPage() {
         office_start_time: data.office_start_time,
         office_end_time: data.office_end_time,
         auto_mark_absent: data.auto_mark_absent,
-        user_terminology: data.user_terminology
+        user_terminology: data.user_terminology,
+        weekend_holidays: data.weekend_holidays ?? 'saturday',
       });
     } catch (error) {
       showToastMessage('Failed to load settings', 'error');
@@ -180,6 +182,24 @@ export default function SettingsPage() {
                 </p>
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Weekly Off Days
+                </label>
+                <select
+                  value={formData.weekend_holidays}
+                  onChange={(e) => setFormData({ ...formData, weekend_holidays: e.target.value as 'saturday' | 'sunday' | 'both' })}
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                >
+                  <option value="saturday">Saturday only (Default)</option>
+                  <option value="sunday">Sunday only</option>
+                  <option value="both">Saturday and Sunday</option>
+                </select>
+                <p className="text-xs text-slate-500 mt-2">
+                  Attendance is not required on selected weekly off days. Public holidays from the calendar are also excluded.
+                </p>
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
@@ -250,6 +270,17 @@ export default function SettingsPage() {
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
                     When enabled, employees who haven&apos;t marked attendance by end of office hours will be automatically marked absent
+                  </p>
+                </div>
+
+                <div className="p-4 bg-slate-900/50 rounded-lg">
+                  <p className="text-slate-400 text-sm mb-1">Weekly Off Days</p>
+                  <p className="text-lg text-white capitalize">
+                    {settings.weekend_holidays === 'both'
+                      ? 'Saturday & Sunday'
+                      : settings.weekend_holidays === 'sunday'
+                        ? 'Sunday'
+                        : 'Saturday'}
                   </p>
                 </div>
 

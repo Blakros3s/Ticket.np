@@ -4,7 +4,8 @@ from .views import (
     LeaveRequestListView, LeaveRequestDetailView,
     approve_leave_request, reject_leave_request,
     AttendanceListView, get_team_attendance, get_my_attendance,
-    get_my_leave_requests, get_daily_attendance_logs, get_attendance_stats
+    get_my_leave_requests, get_daily_attendance_logs, get_attendance_stats,
+    get_attendance_calendar
 )
 
 urlpatterns = [
@@ -24,4 +25,5 @@ urlpatterns = [
     path('attendance/me/', get_my_attendance, name='my-attendance'),
     path('attendance/logs/', get_daily_attendance_logs, name='daily-attendance-logs'),
     path('attendance/stats/', get_attendance_stats, name='attendance-stats'),
+    path('attendance/calendar/', get_attendance_calendar, name='attendance-calendar'),
 ]

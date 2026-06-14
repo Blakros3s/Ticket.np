@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { calendarApi, CalendarEvent, CalendarEventInput, CalendarCategory } from '@/lib/calendar';
+import { attendanceApi, WeekendHolidays } from '@/lib/attendance';
 
 export default function CalendarPage() {
   const { user } = useAuth();
@@ -17,6 +18,7 @@ export default function CalendarPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showEventDetail, setShowEventDetail] = useState<CalendarEvent | null>(null);
+  const [weekendHolidays, setWeekendHolidays] = useState<WeekendHolidays>('saturday');
 
   // Form state
   const [formData, setFormData] = useState<CalendarEventInput>({
@@ -33,6 +35,9 @@ export default function CalendarPage() {
   useEffect(() => {
     fetchEvents();
     fetchCategories();
+    attendanceApi.getOfficeSettings()
+      .then((settings) => setWeekendHolidays(settings.weekend_holidays ?? 'saturday'))
+      .catch(() => setWeekendHolidays('saturday'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate]);
 
@@ -109,9 +114,11 @@ export default function CalendarPage() {
     return date.toDateString() === today.toDateString();
   };
 
-  // Check if date is Saturday (holiday in Nepali calendar)
-  const isSaturday = (date: Date) => {
-    return date.getDay() === 6;
+  const isWeekendOff = (date: Date) => {
+    const day = date.getDay();
+    if (weekendHolidays === 'saturday') return day === 6;
+    if (weekendHolidays === 'sunday') return day === 0;
+    return day === 0 || day === 6;
   };
 
   // Modal handlers
@@ -305,7 +312,7 @@ export default function CalendarPage() {
 
                 const dayEvents = getEventsForDate(date);
                 const today = isToday(date);
-                const saturday = isSaturday(date);
+                const weekendOff = isWeekendOff(date);
                 const primaryEvent = dayEvents.length > 0 ? dayEvents[0] : null;
 
                 let cellStyle: React.CSSProperties = {};
@@ -324,13 +331,13 @@ export default function CalendarPage() {
                       }
                     }}
                     className={`min-h-[120px] border-b border-r border-slate-700/30 flex flex-col p-3 cursor-pointer transition-colors hover:opacity-80 ${today && !primaryEvent ? 'bg-sky-500/10' : ''
-                      } ${saturday && !primaryEvent ? 'bg-red-500/5' : ''}`}
+                      } ${weekendOff && !primaryEvent ? 'bg-red-500/5' : ''}`}
                     style={cellStyle}
                   >
-                    <div className={`text-sm font-medium mb-1 ${today ? 'text-sky-400' : saturday ? 'text-red-400' : 'text-slate-300'
+                    <div className={`text-sm font-medium mb-1 ${today ? 'text-sky-400' : weekendOff ? 'text-red-400' : 'text-slate-300'
                       }`}>
                       {date.getDate()}
-                      {saturday && !primaryEvent && <span className="ml-1 text-xs text-red-500/70">(Holiday)</span>}
+                      {weekendOff && !primaryEvent && <span className="ml-1 text-xs text-red-500/70">(Off)</span>}
                     </div>
                     <div className="flex-1 flex flex-col gap-3 mt-1">
                       {dayEvents.map(event => (

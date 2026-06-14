@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { attendanceApi, Attendance, TeamAttendance, OfficeSettings, AttendanceLog, AttendanceStats } from '@/lib/attendance';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/settings-context';
+import { AttendanceMonthCalendar } from '@/components/attendance-month-calendar';
+import { getMonthStartDate, toLocalDateString } from '@/lib/date-utils';
 import Link from 'next/link';
 
 export default function AttendancePage() {
@@ -14,18 +16,15 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true);
   const [myAttendance, setMyAttendance] = useState<Attendance | null>(null);
   const [teamAttendance, setTeamAttendance] = useState<TeamAttendance[]>([]);
-  const [attendanceHistory, setAttendanceHistory] = useState<Attendance[]>([]);
   const [officeSettings, setOfficeSettings] = useState<OfficeSettings | null>(null);
-  const [dailyLogs, setDailyLogs] = useState<{ summary: any; records: any[] } | null>(null);
-  const [showLogsModal, setShowLogsModal] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
   const [attendanceStats, setAttendanceStats] = useState<AttendanceStats | null>(null);
   const [teamStats, setTeamStats] = useState<AttendanceStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
-  // Date Range State (Default: Today)
-  const [dateRange, setDateRange] = useState({
-    start: new Date().toISOString().split('T')[0],
-    end: new Date().toISOString().split('T')[0]
+  const today = toLocalDateString();
+  const [dateRangeInput, setDateRangeInput] = useState({
+    start: getMonthStartDate(),
+    end: today,
   });
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -35,64 +34,65 @@ export default function AttendancePage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchData = useCallback(async (silent = false) => {
+  const fetchLiveData = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const params = {
-        start_date: dateRange.start,
-        end_date: dateRange.end
-      };
-
-      const today = new Date();
-      const sevenDaysAgo = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
-      const historyStart = sevenDaysAgo.toISOString().split('T')[0];
-      const historyEnd = today.toISOString().split('T')[0];
-
       const promises: Promise<any>[] = [
         attendanceApi.getMyAttendance(),
         attendanceApi.getTeamAttendance(),
-        attendanceApi.getAttendanceHistory(historyStart, historyEnd),
         attendanceApi.getOfficeSettings(),
-        attendanceApi.getAttendanceStats(params)
       ];
 
-      if (isAdminOrManager) {
-        promises.push(attendanceApi.getDailyAttendanceLogs());
-        promises.push(attendanceApi.getAttendanceStats({ ...params, all_employees: true }));
-      }
-
       const results = await Promise.all(promises);
-
       setMyAttendance(results[0]);
       setTeamAttendance(results[1]);
-      setAttendanceHistory(results[2]);
-      setOfficeSettings(results[3]);
-      setAttendanceStats(results[4]);
-
-      if (isAdminOrManager) {
-        setDailyLogs(results[5]);
-        setTeamStats(results[6]);
-      }
+      setOfficeSettings(results[2]);
     } catch (error) {
       console.error('Failed to load attendance data:', error);
       if (!silent) showToastMessage('Failed to load attendance data', 'error');
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [isAdminOrManager, dateRange]);
+  }, []);
+
+  const fetchPeriodStats = useCallback(async (range: { start: string; end: string }) => {
+    try {
+      setStatsLoading(true);
+      const params = { start_date: range.start, end_date: range.end };
+      const promises: Promise<AttendanceStats>[] = [
+        attendanceApi.getAttendanceStats(params),
+      ];
+
+      if (isAdminOrManager) {
+        promises.push(attendanceApi.getAttendanceStats({ ...params, all_employees: true }));
+      }
+
+      const results = await Promise.all(promises);
+      setAttendanceStats(results[0]);
+      if (isAdminOrManager) {
+        setTeamStats(results[1]);
+      }
+    } catch (error) {
+      console.error('Failed to load attendance statistics:', error);
+      showToastMessage('Failed to load attendance statistics', 'error');
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [isAdminOrManager]);
 
   useEffect(() => {
     if (authLoading || !user) return;
-    fetchData();
-    const interval = setInterval(() => fetchData(true), 30000);
+    fetchLiveData();
+    fetchPeriodStats({ start: getMonthStartDate(), end: toLocalDateString() });
+    const interval = setInterval(() => fetchLiveData(true), 30000);
     return () => clearInterval(interval);
-  }, [fetchData, authLoading, user]);
+  }, [fetchLiveData, fetchPeriodStats, authLoading, user]);
 
   const handleToggleAvailable = async () => {
     try {
       await attendanceApi.toggleAvailability('available');
       showToastMessage('Marked as available!', 'success');
-      fetchData();
+      fetchLiveData();
     } catch (error: any) {
       showToastMessage(error.response?.data?.detail || 'Failed to update status', 'error');
     }
@@ -102,20 +102,23 @@ export default function AttendancePage() {
     try {
       await attendanceApi.toggleAvailability('unavailable');
       showToastMessage('Marked as unavailable!', 'success');
-      fetchData();
+      fetchLiveData();
     } catch (error: any) {
       showToastMessage(error.response?.data?.detail || 'Failed to update status', 'error');
     }
   };
 
-  const handleViewLogs = (record: any) => {
-    setSelectedEmployee(record);
-    setShowLogsModal(true);
-  };
-
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setDateRange(prev => ({ ...prev, [name]: value }));
+    setDateRangeInput(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleUpdateStatistics = () => {
+    if (dateRangeInput.start > dateRangeInput.end) {
+      showToastMessage('Start date must be before end date', 'error');
+      return;
+    }
+    fetchPeriodStats(dateRangeInput);
   };
 
   const getStatusColor = (status: string) => {
@@ -224,7 +227,7 @@ export default function AttendancePage() {
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-white mb-2">Non-Working Day</h2>
-          <p className="text-slate-400">{(myAttendance as any)?.message || 'Today is a Saturday or Holiday. Attendance is not required.'}</p>
+          <p className="text-slate-400">{(myAttendance as any)?.message || 'Today is a weekend or public holiday. Attendance is not required.'}</p>
         </div>
       ) : (
         <>
@@ -395,58 +398,35 @@ export default function AttendancePage() {
             </div>
           )}
 
-          {/* 4. My Attendance History */}
-          <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 mb-8">
-            <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-              My Attendance History
-              <span className="text-xs font-normal text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md">(last 7 days)</span>
-            </h2>
-            <div className="grid grid-cols-7 gap-2">
-              {attendanceHistory.slice(0, 28).map((record) => {
-                const date = new Date(record.date);
-                const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-                const dayNum = date.getDate();
-                return (
-                  <div key={record.id} className={`p-3 rounded-lg text-center ${record.status === 'present' ? 'bg-green-500/20 border border-green-500/40' :
-                    record.status === 'leave' ? 'bg-purple-500/20 border border-purple-500/40' :
-                      record.status === 'absent' ? 'bg-red-500/20 border border-red-500/40' :
-                        'bg-slate-700/30 border border-slate-600/30'
-                    }`}>
-                    <p className="text-xs text-slate-400">{dayName}</p>
-                    <p className="text-lg font-bold text-white">{dayNum}</p>
-                    <div className={`w-2 h-2 rounded-full mx-auto mt-1 ${record.status === 'present' ? 'bg-green-500' :
-                      record.status === 'leave' ? 'bg-purple-500' :
-                        record.status === 'absent' ? 'bg-red-500' : 'bg-slate-500'
-                      }`}></div>
-                    {record.first_available_time && <p className="text-xs text-green-400 mt-1">{record.first_available_time}</p>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {/* 4. Monthly Attendance History Calendar */}
+          <AttendanceMonthCalendar />
 
-          {/* 4b. Attendance Period Filter - right after history */}
+          {/* 5. Attendance Period Filter */}
           <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50 flex flex-wrap items-center justify-between gap-6 mb-8">
             <div>
               <h3 className="text-white font-semibold mb-1">Attendance Period</h3>
-              <p className="text-xs text-slate-500">Filter history and statistics by date range</p>
+              <p className="text-xs text-slate-500">Select a date range, then click Update Statistics</p>
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
                 <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold">From</label>
-                <input type="date" name="start" value={dateRange.start} onChange={handleDateChange} className="bg-slate-900 border border-slate-700 text-white text-sm rounded-lg px-3 py-1.5 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+                <input type="date" name="start" value={dateRangeInput.start} onChange={handleDateChange} className="bg-slate-900 border border-slate-700 text-white text-sm rounded-lg px-3 py-1.5 focus:ring-sky-500 focus:border-sky-500 outline-none" />
               </div>
               <div className="flex items-center gap-2">
                 <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold">To</label>
-                <input type="date" name="end" value={dateRange.end} onChange={handleDateChange} className="bg-slate-900 border border-slate-700 text-white text-sm rounded-lg px-3 py-1.5 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+                <input type="date" name="end" value={dateRangeInput.end} onChange={handleDateChange} className="bg-slate-900 border border-slate-700 text-white text-sm rounded-lg px-3 py-1.5 focus:ring-sky-500 focus:border-sky-500 outline-none" />
               </div>
-              <button onClick={() => fetchData()} className="px-6 py-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium rounded-lg transition-all active:scale-95 shadow-lg shadow-sky-900/20">
-                Update Statistics
+              <button
+                onClick={handleUpdateStatistics}
+                disabled={statsLoading}
+                className="px-6 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-all active:scale-95 shadow-lg shadow-sky-900/20"
+              >
+                {statsLoading ? 'Updating...' : 'Update Statistics'}
               </button>
             </div>
           </div>
 
-          {/* 5. Attendance Statistics */}
+          {/* 6. Attendance Statistics */}
           {attendanceStats && (
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
               <div className="bg-slate-800/30 rounded-xl border border-slate-700/50 p-5">
@@ -455,7 +435,7 @@ export default function AttendancePage() {
                   <p className="text-3xl font-bold text-white">{attendanceStats.total_working_days}</p>
                   <p className="text-xs text-slate-500">days</p>
                 </div>
-                <p className="text-[10px] text-slate-600 mt-1">Days attendance was recorded</p>
+                <p className="text-[10px] text-slate-600 mt-1">Scheduled working days (excl. weekends & holidays)</p>
               </div>
               <div className="bg-green-500/5 rounded-xl border border-green-500/20 p-5">
                 <p className="text-green-500/70 text-xs font-semibold uppercase tracking-wider mb-1">Present</p>
@@ -487,7 +467,7 @@ export default function AttendancePage() {
             </div>
           )}
 
-          {/* 6. Admin: Team Performance Report */}
+          {/* 7. Admin: Team Performance Report */}
           {isAdminOrManager && teamStats?.stats && (
             <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 mb-8 overflow-hidden">
               <div className="flex items-center justify-between mb-6">
@@ -546,45 +526,6 @@ export default function AttendancePage() {
 
         </>
       )
-      }
-
-      {/* Logs Modal */}
-      {
-        showLogsModal && selectedEmployee && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-lg max-h-[80vh] overflow-y-auto">
-              <div className="p-6 border-b border-slate-700">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-white">Activity Logs: {selectedEmployee.employee_name}</h2>
-                  <button onClick={() => setShowLogsModal(false)} className="text-slate-400 hover:text-white">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
-                </div>
-              </div>
-              <div className="p-6">
-                {selectedEmployee.logs?.length === 0 ? (
-                  <p className="text-slate-500 text-center py-4">No activity logs for today</p>
-                ) : (
-                  <div className="space-y-4">
-                    {selectedEmployee.logs.map((log: AttendanceLog) => (
-                      <div key={log.id} className="flex items-start gap-4 p-3 bg-slate-700/30 rounded-lg">
-                        <div className={`w-3 h-3 rounded-full mt-1 ${log.status === 'available' ? 'bg-green-500' : 'bg-amber-500'}`}></div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-white font-medium">{log.status_display}</span>
-                            <span className="text-slate-500 text-sm">{log.time_display}</span>
-                            {log.is_auto && <span className="px-2 py-0.5 bg-slate-600 text-slate-300 text-xs rounded">Auto</span>}
-                          </div>
-                          {log.note && <p className="text-slate-400 text-sm mt-1">{log.note}</p>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )
       }
     </div >
   );

@@ -198,7 +198,7 @@ class AttendanceListView(generics.ListCreateAPIView):
         # Block toggle on non-working days (Saturday, holidays)
         if not Attendance.is_working_day(target_date):
             return Response(
-                {'detail': 'Cannot mark attendance on non-working days (Saturday or Holiday).'},
+                {'detail': 'Cannot mark attendance on non-working days (weekend or public holiday).'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -240,7 +240,7 @@ def get_team_attendance(request):
     if not Attendance.is_working_day(today):
         return Response({
             'is_working_day': False,
-            'message': 'Today is a non-working day (Saturday or Holiday).',
+            'message': 'Today is a non-working day (weekend or public holiday).',
             'records': []
         })
     
@@ -304,7 +304,7 @@ def get_my_attendance(request):
         return Response({
             'date': today.isoformat(),
             'is_working_day': False,
-            'message': 'Today is a non-working day (Saturday or Holiday).',
+            'message': 'Today is a non-working day (weekend or public holiday).',
             'status': 'neutral',
             'current_availability': 'none',
             'can_toggle_status': False,
@@ -377,7 +377,7 @@ def get_daily_attendance_logs(request):
             'summary': {
                 'date': target_date.isoformat(),
                 'is_working_day': False,
-                'message': 'This is a non-working day (Saturday or Holiday).'
+                'message': 'This is a non-working day (weekend or public holiday).'
             },
             'records': []
         })
@@ -449,9 +449,8 @@ def get_attendance_stats(request):
     end_date_str = request.query_params.get('end_date')
     
     if not start_date_str or not end_date_str:
-        # Default to last 30 days
-        end_date = date.today()
-        start_date = end_date - timedelta(days=30)
+        end_date = timezone.localdate()
+        start_date = end_date.replace(day=1)
     else:
         try:
             start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
@@ -459,52 +458,94 @@ def get_attendance_stats(request):
         except ValueError:
             return Response({'detail': 'Invalid date format'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Count working days in range (excluding Saturday and holidays from calendar)
-    total_working_days = Attendance.count_working_days_in_range(start_date, end_date)
+        if start_date > end_date:
+            return Response({'detail': 'Start date must be before end date'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # If admin/manager and requesting for everyone
     if user.role in ['admin', 'manager'] and request.query_params.get('all_employees') == 'true':
         from apps.users.models import User as AppUser
         employees = AppUser.objects.filter(is_active=True).exclude(role='admin')
         stats = []
         for emp in employees:
-            records = Attendance.objects.filter(employee=emp, date__range=[start_date, end_date])
-            present = records.filter(status='present').count()
-            absent = records.filter(status='absent').count()
-            leave = records.filter(status='leave').count()
+            emp_stats = Attendance.aggregate_stats_for_employee(emp, start_date, end_date)
             stats.append({
                 'employee_id': emp.id,
                 'username': emp.username,
                 'full_name': emp.get_full_name(),
-                'present_days': present,
-                'absent_days': absent,
-                'leave_days': leave,
-                'working_days': total_working_days,
-                'percentage': (present / total_working_days * 100) if total_working_days > 0 else 0
+                'present_days': emp_stats['present_days'],
+                'absent_days': emp_stats['absent_days'],
+                'leave_days': emp_stats['leave_days'],
+                'working_days': emp_stats['total_working_days'],
+                'percentage': emp_stats['percentage'],
             })
+        total_working_days = Attendance.count_working_days_in_range(start_date, end_date)
         return Response({
             'range': {'start': start_date, 'end': end_date},
             'total_working_days': total_working_days,
             'stats': stats
         })
 
-    # Individual stats
     target_user = user
     if user.role in ['admin', 'manager'] and request.query_params.get('employee_id'):
         from apps.users.models import User as AppUser
         target_user = AppUser.objects.get(id=request.query_params.get('employee_id'))
 
-    records = Attendance.objects.filter(employee=target_user, date__range=[start_date, end_date])
-    present = records.filter(status='present').count()
-    absent = records.filter(status='absent').count()
-    leave = records.filter(status='leave').count()
-
+    stats = Attendance.aggregate_stats_for_employee(target_user, start_date, end_date)
     return Response({
         'username': target_user.username,
         'range': {'start': start_date, 'end': end_date},
-        'total_working_days': total_working_days,
-        'present_days': present,
-        'absent_days': absent,
-        'leave_days': leave,
-        'percentage': (present / total_working_days * 100) if total_working_days > 0 else 0
+        **stats,
+    })
+
+
+@extend_schema(
+    summary="Get monthly attendance calendar",
+    description="Get day-by-day attendance calendar for a month"
+)
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_attendance_calendar(request):
+    """Return attendance status for each day in a calendar month or date range."""
+    import calendar as cal_module
+
+    start_date_str = request.query_params.get('start_date')
+    end_date_str = request.query_params.get('end_date')
+    year_str = request.query_params.get('year')
+    month_str = request.query_params.get('month')
+
+    if start_date_str and end_date_str:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({'detail': 'Invalid date format'}, status=status.HTTP_400_BAD_REQUEST)
+        if start_date > end_date:
+            return Response({'detail': 'Start date must be before end date'}, status=status.HTTP_400_BAD_REQUEST)
+        year = start_date.year
+        month = start_date.month
+    else:
+        try:
+            year = int(year_str) if year_str else timezone.localdate().year
+            month = int(month_str) if month_str else timezone.localdate().month
+        except (TypeError, ValueError):
+            return Response({'detail': 'Invalid year or month'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if month < 1 or month > 12:
+            return Response({'detail': 'Month must be between 1 and 12'}, status=status.HTTP_400_BAD_REQUEST)
+
+        last_day = cal_module.monthrange(year, month)[1]
+        start_date = date(year, month, 1)
+        end_date = date(year, month, last_day)
+
+    target_user = request.user
+    if request.user.role in ['admin', 'manager'] and request.query_params.get('employee_id'):
+        from apps.users.models import User as AppUser
+        target_user = AppUser.objects.get(id=request.query_params.get('employee_id'))
+
+    days = Attendance.build_calendar_days(target_user, start_date, end_date)
+    return Response({
+        'year': year,
+        'month': month,
+        'start_date': start_date.isoformat(),
+        'end_date': end_date.isoformat(),
+        'days': days,
     })

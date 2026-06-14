@@ -10,6 +10,7 @@ interface NotificationsContextType {
   fetchNotifications: () => Promise<void>;
   setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
   deleteNotification: (id: number) => Promise<void>;
+  deleteAllNotifications: () => Promise<void>;
 }
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
@@ -37,6 +38,16 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     }
   };
 
+  const deleteAllNotifications = async () => {
+    try {
+      await notificationsApi.deleteAllNotifications();
+      setNotifications([]);
+    } catch (error) {
+      console.error('Failed to delete all notifications:', error);
+      throw error;
+    }
+  };
+
   useEffect(() => {
     if (user) {
       fetchNotifications();
@@ -51,7 +62,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
   return (
     <NotificationsContext.Provider
-      value={{ notifications, unreadCount, fetchNotifications, setNotifications, deleteNotification }}
+      value={{ notifications, unreadCount, fetchNotifications, setNotifications, deleteNotification, deleteAllNotifications }}
     >
       {children}
     </NotificationsContext.Provider>

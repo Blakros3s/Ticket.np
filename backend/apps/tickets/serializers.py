@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
+import re
 from django.utils.html import strip_tags
 from .models import Ticket, TicketMedia
 from apps.comments.models import Comment
@@ -16,6 +17,23 @@ _DOC_EXTS   = ('.pdf', '.doc', '.docx', '.txt', '.md', '.xls', '.xlsx', '.ppt', 
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 _FILE_EXTS = _IMAGE_EXTS + _VIDEO_EXTS + _DOC_EXTS
+
+_BR_TAG_RE = re.compile(r'<br\s*/?>', re.IGNORECASE)
+_BLOCK_END_TAG_RE = re.compile(
+    r'</(p|div|li|h[1-6]|tr|blockquote|pre)>',
+    re.IGNORECASE,
+)
+
+
+def sanitize_multiline_text(value: str) -> str:
+    """Strip HTML while preserving paragraph and line breaks from pasted content."""
+    if not value:
+        return value
+
+    text = value.replace('\r\n', '\n').replace('\r', '\n')
+    text = _BR_TAG_RE.sub('\n', text)
+    text = _BLOCK_END_TAG_RE.sub('\n', text)
+    return strip_tags(text)
 
 
 def validate_file(file):
@@ -138,7 +156,7 @@ class TicketCreateSerializer(serializers.ModelSerializer):
         return strip_tags(value)
 
     def validate_description(self, value):
-        return strip_tags(value)
+        return sanitize_multiline_text(value)
 
     def create(self, validated_data):
         media_files  = validated_data.pop('media_files', [])
@@ -178,7 +196,7 @@ class TicketUpdateSerializer(serializers.ModelSerializer):
         return strip_tags(value)
 
     def validate_description(self, value):
-        return strip_tags(value)
+        return sanitize_multiline_text(value)
 
     def update(self, instance, validated_data):
         assignee_ids = validated_data.pop('assignees', None)
