@@ -2,6 +2,7 @@
 
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.urls import reverse
+from django.conf import settings
 
 MEDIA_SIGNATURE_MAX_AGE = 60 * 60 * 24  # 24 hours
 _SIGNER = TimestampSigner(salt='protected-media')
@@ -24,9 +25,12 @@ def verify_media_signature(file_name: str, signature: str) -> None:
 
 
 def build_protected_media_url(request, file_name: str | None) -> str | None:
-    if not file_name:
+    if not file_name or not request:
         return None
 
-    signature = sign_media_path(file_name)
-    path = reverse('protected-media', kwargs={'path': file_name})
-    return request.build_absolute_uri(f'{path}?sig={signature}')
+    try:
+        signature = sign_media_path(file_name)
+        path = reverse('protected-media', kwargs={'path': file_name})
+        return request.build_absolute_uri(f'{path}?sig={signature}')
+    except Exception:
+        return request.build_absolute_uri(f'{settings.MEDIA_URL}{file_name}')

@@ -87,11 +87,7 @@ class TicketViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        base_qs = (
-            Ticket.objects
-            .select_related('project', 'created_by')
-            .prefetch_related('assignees', 'media_files', 'comments__author')
-        )
+        base_qs = self._ticket_detail_queryset()
 
         if user.role == 'admin':
             return base_qs.all()
@@ -111,9 +107,25 @@ class TicketViewSet(viewsets.ModelViewSet):
             Q(created_by=user)
         ).distinct()
 
+    def _ticket_detail_queryset(self):
+        return (
+            Ticket.objects
+            .select_related('project', 'created_by')
+            .prefetch_related('assignees', 'media_files', 'comments__author')
+        )
+
     def filter_queryset(self, queryset):
-        """Ensure list/pagination counts stay accurate after M2M filters."""
-        return super().filter_queryset(queryset).distinct()
+        """Deduplicate M2M rows without breaking PostgreSQL ORDER BY + DISTINCT."""
+        queryset = super().filter_queryset(queryset)
+        ordering = queryset.query.order_by or ('-created_at',)
+
+        distinct_pks = queryset.order_by().values('pk').distinct()
+
+        return (
+            self._ticket_detail_queryset()
+            .filter(pk__in=distinct_pks)
+            .order_by(*ordering)
+        )
 
     def _queryset_without_status_filter(self):
         """Apply the same filters as list, excluding status."""

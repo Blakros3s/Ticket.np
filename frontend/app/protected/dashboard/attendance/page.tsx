@@ -37,16 +37,31 @@ export default function AttendancePage() {
   const fetchLiveData = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const promises: Promise<any>[] = [
+
+      const [myResult, teamResult, settingsResult] = await Promise.allSettled([
         attendanceApi.getMyAttendance(),
         attendanceApi.getTeamAttendance(),
         attendanceApi.getOfficeSettings(),
-      ];
+      ]);
 
-      const results = await Promise.all(promises);
-      setMyAttendance(results[0]);
-      setTeamAttendance(results[1]);
-      setOfficeSettings(results[2]);
+      if (myResult.status === 'fulfilled') {
+        setMyAttendance(myResult.value);
+      }
+      if (teamResult.status === 'fulfilled') {
+        setTeamAttendance(teamResult.value);
+      } else {
+        setTeamAttendance([]);
+      }
+      if (settingsResult.status === 'fulfilled') {
+        setOfficeSettings(settingsResult.value);
+      }
+
+      const allFailed = [myResult, teamResult, settingsResult].every(
+        (result) => result.status === 'rejected'
+      );
+      if (allFailed && !silent) {
+        showToastMessage('Failed to load attendance data', 'error');
+      }
     } catch (error) {
       console.error('Failed to load attendance data:', error);
       if (!silent) showToastMessage('Failed to load attendance data', 'error');

@@ -231,9 +231,9 @@ class AttendanceListView(generics.ListCreateAPIView):
     get=extend_schema(summary="Get team attendance", description="Get today's attendance for all team members")
 )
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated, IsManagerOrAdmin])
+@permission_classes([permissions.IsAuthenticated])
 def get_team_attendance(request):
-    """Get today's attendance for all team members"""
+    """Get today's team availability board for all authenticated users."""
     today = timezone.localdate()
     
     # Skip attendance logic on non-working days (Saturday, holidays)
