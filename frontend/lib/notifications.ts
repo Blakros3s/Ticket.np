@@ -12,6 +12,16 @@ export interface Notification {
   read: boolean;
 }
 
+export function getNotificationHref(notification: Notification): string | null {
+  if (notification.ticket_id) {
+    return `/protected/dashboard/tickets/${notification.ticket_id}`;
+  }
+  if (notification.project_id) {
+    return `/protected/dashboard/projects/${notification.project_id}`;
+  }
+  return null;
+}
+
 export const notificationsApi = {
   getNotifications: async (): Promise<Notification[]> => {
     const response = await api.get<Notification[] | { results: Notification[] }>('/notifications/');

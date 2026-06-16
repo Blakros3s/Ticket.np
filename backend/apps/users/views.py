@@ -7,7 +7,7 @@ from rest_framework.exceptions import ValidationError, AuthenticationFailed
 from rest_framework.decorators import api_view, permission_classes
 from django.contrib.auth.hashers import check_password
 from .models import User
-from .serializers import UserSerializer, RegisterSerializer, CustomTokenObtainPairSerializer
+from .serializers import UserSerializer, UserProfileSerializer, AdminUserSerializer, RegisterSerializer, CustomTokenObtainPairSerializer
 from .permissions import IsAdminUser
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,12 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
 
     def create(self, request, *args, **kwargs):
+        from django.conf import settings
+        if not getattr(settings, 'ALLOW_PUBLIC_REGISTRATION', False):
+            return Response(
+                {'detail': 'Public registration is disabled.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         try:
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -65,7 +71,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
-    serializer_class = UserSerializer
+    serializer_class = UserProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_object(self):
@@ -73,7 +79,7 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
 
 
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = UserSerializer
+    serializer_class = AdminUserSerializer
     queryset = User.objects.all()
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
 

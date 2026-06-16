@@ -3,8 +3,82 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { notificationsApi, Notification } from '@/lib/notifications';
+import { notificationsApi, Notification, getNotificationHref } from '@/lib/notifications';
 import { useNotifications } from '@/lib/notifications-context';
+
+function NotificationRow({
+  notification,
+  onNavigate,
+}: {
+  notification: Notification;
+  onNavigate: (notification: Notification) => void;
+}) {
+  const href = getNotificationHref(notification);
+  const isClickable = Boolean(href);
+
+  const content = (
+    <div className="flex items-start justify-between gap-4">
+      <div className="flex-1 min-w-0">
+        <p
+          className={`text-sm ${
+            notification.read ? 'text-slate-400' : 'text-white group-hover:text-sky-300'
+          } transition-colors`}
+        >
+          {notification.message}
+        </p>
+        <div className="flex items-center gap-2 mt-1">
+          <p className={`text-xs ${notification.read ? 'text-slate-600' : 'text-slate-500'}`}>
+            {new Date(notification.created_at).toLocaleString()}
+          </p>
+          {isClickable && (
+            <span className="text-xs text-sky-400/80">
+              {notification.ticket_id ? 'View ticket →' : 'View project →'}
+            </span>
+          )}
+        </div>
+      </div>
+      <span
+        className={`flex-shrink-0 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider rounded-full ${
+          notification.read
+            ? 'text-slate-500 bg-slate-700/50'
+            : 'text-sky-400 bg-sky-500/10'
+        }`}
+      >
+        {notification.read ? 'Read' : 'Unread'}
+      </span>
+    </div>
+  );
+
+  if (!isClickable) {
+    return (
+      <div
+        className={`px-5 py-4 ${
+          notification.read ? 'bg-slate-900/20 opacity-75' : 'bg-sky-500/5 border-l-4 border-sky-400'
+        }`}
+      >
+        {content}
+      </div>
+    );
+  }
+
+  const handleClick = () => {
+    onNavigate(notification);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className={`w-full px-5 py-4 text-left transition-colors group ${
+        notification.read
+          ? 'bg-slate-900/20 hover:bg-slate-700/30 opacity-90 hover:opacity-100'
+          : 'bg-sky-500/5 hover:bg-sky-500/10 border-l-4 border-sky-400'
+      }`}
+    >
+      {content}
+    </button>
+  );
+}
 
 export default function NotificationsPage() {
   const router = useRouter();
@@ -49,22 +123,21 @@ export default function NotificationsPage() {
     }
   };
 
-  const handleNotificationClick = async (n: Notification) => {
-    if (n.read) return;
-
-    try {
-      await notificationsApi.markRead(n.id);
-      setNotifications((prev) =>
-        prev.map((x) => (x.id === n.id ? { ...x, read: true } : x))
-      );
-    } catch {
-      // Ignore
+  const handleNotificationNavigate = async (n: Notification) => {
+    if (!n.read) {
+      try {
+        await notificationsApi.markRead(n.id);
+        setNotifications((prev) =>
+          prev.map((x) => (x.id === n.id ? { ...x, read: true } : x))
+        );
+      } catch {
+        // Continue navigation even if mark-read fails
+      }
     }
 
-    if (n.ticket_id) {
-      router.push(`/protected/dashboard/tickets/${n.ticket_id}`);
-    } else if (n.project_id) {
-      router.push(`/protected/dashboard/projects/${n.project_id}`);
+    const href = getNotificationHref(n);
+    if (href) {
+      router.push(href);
     }
   };
 
@@ -137,46 +210,11 @@ export default function NotificationsPage() {
         ) : (
           <div className="divide-y divide-slate-700/50">
             {notifications.map((n) => (
-              <div
+              <NotificationRow
                 key={n.id}
-                className={`px-5 py-4 transition-colors ${
-                  n.read
-                    ? 'bg-slate-900/20 opacity-75'
-                    : 'bg-sky-500/5 hover:bg-sky-500/10 border-l-4 border-sky-400'
-                }`}
-              >
-                {n.read ? (
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-400">{n.message}</p>
-                      <p className="text-xs text-slate-600 mt-1">
-                        {new Date(n.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                    <span className="flex-shrink-0 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-700/50 rounded-full">
-                      Read
-                    </span>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleNotificationClick(n)}
-                    className="w-full text-left flex items-start justify-between gap-4 group"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white group-hover:text-sky-300 transition-colors">
-                        {n.message}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {new Date(n.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                    <span className="flex-shrink-0 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-sky-400 bg-sky-500/10 rounded-full">
-                      Unread
-                    </span>
-                  </button>
-                )}
-              </div>
+                notification={n}
+                onNavigate={handleNotificationNavigate}
+              />
             ))}
           </div>
         )}

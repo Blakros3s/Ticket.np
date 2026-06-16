@@ -7,6 +7,7 @@ from datetime import timedelta
 from collections import OrderedDict
 
 from apps.users.models import User
+from apps.users.permissions import IsManagerOrAdmin
 from apps.projects.models import Project
 from apps.tickets.models import Ticket
 from apps.timelogs.models import WorkLog
@@ -121,7 +122,7 @@ def employee_dashboard(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsManagerOrAdmin])
 def manager_dashboard(request):
     """
     Manager Dashboard:

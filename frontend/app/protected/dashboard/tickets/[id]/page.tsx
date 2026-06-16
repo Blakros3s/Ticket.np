@@ -3,7 +3,7 @@
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { ticketsApi, Ticket, TicketStatus, TicketMedia, TicketComment } from '@/lib/tickets';
 import { projectsApi, Project } from '@/lib/projects';
@@ -12,6 +12,7 @@ import { activityApi, ActivityLog } from '@/lib/activity';
 import { timelogsApi, TicketActiveSession } from '@/lib/timelogs';
 import Markdown from '@/components/Markdown';
 import { FileUploadZone } from '@/components/file-upload-zone';
+import { CommentMentionInput, renderCommentContent } from '@/components/comment-mentions';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:8000';
 
@@ -284,6 +285,27 @@ export default function TicketDetailPage() {
     )
   );
 
+  const mentionableUsers = useMemo(() => {
+    if (!ticket) return [];
+
+    const project = projects.find((p) => p.id === ticket.project);
+    const byId = new Map<number, { id: number; username: string; first_name?: string; last_name?: string }>();
+
+    project?.members?.forEach((member) => {
+      if (member.user.id !== user?.id) {
+        byId.set(member.user.id, member.user);
+      }
+    });
+
+    ticket.assignees_list?.forEach((assignee) => {
+      if (assignee.id !== user?.id) {
+        byId.set(assignee.id, assignee);
+      }
+    });
+
+    return Array.from(byId.values());
+  }, [ticket, projects, user?.id]);
+
   const getValidStatusTransitions = (currentStatus: TicketStatus): TicketStatus[] => {
     const transitions: Record<TicketStatus, TicketStatus[]> = {
       new: ['in_progress'],
@@ -506,12 +528,11 @@ export default function TicketDetailPage() {
           <div className="form-card p-6">
             <h3 className="text-lg font-semibold text-white mb-4">Comments ({ticket.comments?.length || 0})</h3>
             <div className="mb-4">
-              <textarea
-                rows={3}
-                className="input-field w-full resize-none"
-                placeholder="Write a comment..."
+              <CommentMentionInput
                 value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
+                onChange={setNewComment}
+                mentionableUsers={mentionableUsers}
+                disabled={submittingComment}
               />
               <div className="flex justify-end mt-2">
                 <button
@@ -540,7 +561,9 @@ export default function TicketDetailPage() {
                       </div>
                       <span className="text-slate-500 text-xs ml-auto">{formatDateTime(comment.created_at)}</span>
                     </div>
-                    <p className="text-slate-300 text-sm">{comment.content}</p>
+                    <p className="text-slate-300 text-sm whitespace-pre-wrap break-words">
+                      {renderCommentContent(comment.content)}
+                    </p>
                   </div>
                 ))}
               </div>

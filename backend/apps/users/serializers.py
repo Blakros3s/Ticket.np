@@ -11,6 +11,7 @@ class UserRoleSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    """Read-only user representation for lists and auth responses."""
     department_roles = UserRoleSerializer(many=True, read_only=True)
     department_role_ids = serializers.PrimaryKeyRelatedField(
         many=True, queryset=UserRole.objects.all(), source='department_roles', write_only=True, required=False
@@ -19,20 +20,56 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'is_active', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
-    
+        read_only_fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'is_active', 'created_at', 'updated_at']
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    """Profile updates — sensitive fields cannot be self-modified."""
+    department_roles = UserRoleSerializer(many=True, read_only=True)
+    department_role_ids = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=UserRole.objects.all(), source='department_roles', write_only=True, required=False
+    )
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'role', 'is_active', 'created_at', 'updated_at']
+
     def update(self, instance, validated_data):
         department_roles = validated_data.pop('department_roles', None)
-        
-        # Update other fields
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-        
-        # Update department roles if provided
+
         if department_roles is not None:
             instance.department_roles.set(department_roles)
-        
+
+        return instance
+
+
+class AdminUserSerializer(serializers.ModelSerializer):
+    """Admin-only user updates including role and active status."""
+    department_roles = UserRoleSerializer(many=True, read_only=True)
+    department_role_ids = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=UserRole.objects.all(), source='department_roles', write_only=True, required=False
+    )
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def update(self, instance, validated_data):
+        department_roles = validated_data.pop('department_roles', None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if department_roles is not None:
+            instance.department_roles.set(department_roles)
+
         return instance
 
 

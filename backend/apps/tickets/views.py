@@ -2,7 +2,7 @@ from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError, PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import FilterSet, NumberFilter
 from django.db.models import Q, Count
@@ -11,8 +11,10 @@ from django.utils import timezone
 from apps.users.models import User
 from apps.notifications.models import Notification
 from apps.comments.models import Comment
+from apps.comments.utils import notify_comment_mentions
 from apps.timelogs.models import WorkLog
 from apps.activity.utils import log_activity
+from apps.core.access import user_can_create_ticket_on_project
 
 from .models import Ticket, TicketMedia
 from .serializers import (
@@ -149,6 +151,10 @@ class TicketViewSet(viewsets.ModelViewSet):
         return Response(output.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
+        project = serializer.validated_data['project']
+        if not user_can_create_ticket_on_project(self.request.user, project):
+            raise PermissionDenied('You must be a project member to create tickets on this project.')
+
         ticket = serializer.save(created_by=self.request.user)
         try:
             log_activity(
@@ -584,5 +590,7 @@ class TicketViewSet(viewsets.ModelViewSet):
             instance=ticket,
             description="Added a comment",
         )
+
+        notify_comment_mentions(request.user, ticket, content)
 
         return Response(TicketCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
