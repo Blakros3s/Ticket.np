@@ -123,7 +123,8 @@ class AuthorizationSecurityTestCase(TestCase):
         response = self.client.get('/api/dashboard/manager/')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_employee_cannot_access_team_attendance(self):
+    def test_employee_can_access_team_attendance_board(self):
+        """Today's team availability board is visible to all authenticated users."""
         self.client.force_authenticate(user=self.member)
         response = self.client.get('/api/attendance/attendance/team/')
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
