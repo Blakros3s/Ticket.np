@@ -309,8 +309,8 @@ export default function TicketDetailPage() {
   const getValidStatusTransitions = (currentStatus: TicketStatus): TicketStatus[] => {
     const transitions: Record<TicketStatus, TicketStatus[]> = {
       new: ['in_progress'],
-      in_progress: ['qa'],
-      qa: ['closed', 'in_progress'],
+      in_progress: ['qa', 'reopened'],
+      qa: ['closed', 'in_progress', 'reopened'],
       closed: ['reopened'],
       reopened: ['in_progress'],
     };

@@ -289,8 +289,8 @@ class TicketViewSet(viewsets.ModelViewSet):
         """Define valid status transitions — linear workflow."""
         transitions = {
             'new':        ['in_progress'],
-            'in_progress': ['qa'],
-            'qa':         ['closed', 'in_progress'],
+            'in_progress': ['qa', 'reopened'],
+            'qa':         ['closed', 'in_progress', 'reopened'],
             'closed':     ['reopened'],
             'reopened':   ['in_progress'],
         }
