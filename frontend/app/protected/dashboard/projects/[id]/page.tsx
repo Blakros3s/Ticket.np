@@ -409,9 +409,6 @@ export default function ProjectDetailPage() {
                           )}
                         </div>
                       </div>
-                      <p className="text-xs text-slate-400 truncate">
-                        @{member.user.username}
-                      </p>
                     </div>
                     {isManager && member.user.id !== project.created_by.id && (
                       <button

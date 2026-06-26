@@ -557,7 +557,6 @@ export default function TicketDetailPage() {
                       </div>
                       <div>
                         <span className="text-white font-medium text-sm">{comment.user_name}</span>
-                        <span className="text-slate-500 text-xs ml-2">@{comment.user_username}</span>
                       </div>
                       <span className="text-slate-500 text-xs ml-auto">{formatDateTime(comment.created_at)}</span>
                     </div>

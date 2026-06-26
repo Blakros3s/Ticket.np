@@ -57,7 +57,7 @@ export function CommentMentionInput({
   value,
   onChange,
   mentionableUsers,
-  placeholder = 'Write a comment... Use @username to mention someone',
+  placeholder = 'Write a comment... Type @ to mention someone',
   rows = 3,
   disabled = false,
 }: CommentMentionInputProps) {
@@ -70,7 +70,7 @@ export function CommentMentionInput({
     if (mentionQuery === null) return [];
     const query = mentionQuery.toLowerCase();
     return mentionableUsers
-      .filter((user) => user.username.toLowerCase().includes(query))
+      .filter((user) => displayName(user).toLowerCase().includes(query) || user.username.toLowerCase().includes(query))
       .slice(0, 8);
   }, [mentionQuery, mentionableUsers]);
 
@@ -178,15 +178,15 @@ export function CommentMentionInput({
                   : 'text-slate-200 hover:bg-slate-700/60'
               }`}
             >
-              <span className="text-sm font-medium">@{user.username}</span>
-              <span className="ml-2 text-xs text-slate-400">{displayName(user)}</span>
+              <span className="text-sm font-medium">{displayName(user)}</span>
+              <span className="ml-2 text-xs text-slate-400">@{user.username}</span>
             </button>
           ))}
         </div>
       )}
 
       <p className="text-xs text-slate-500 mt-1">
-        Type <span className="text-sky-400">@username</span> to mention a project member
+        Type <span className="text-sky-400">@</span> followed by a name to mention someone
       </p>
     </div>
   );

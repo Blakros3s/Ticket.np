@@ -31,7 +31,7 @@ def notify_comment_mentions(author, ticket, content: str) -> None:
             Notification.objects.create(
                 user=user,
                 message=(
-                    f'{author.username} mentioned you in a comment on '
+                    f'{author.get_full_name() or author.username} mentioned you in a comment on '
                     f'{ticket.ticket_id}: {ticket.title}'
                 ),
                 ticket_id=ticket.id,

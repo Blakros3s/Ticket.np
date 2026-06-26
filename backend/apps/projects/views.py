@@ -72,7 +72,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         if user.id != request.user.id:
             Notification.objects.create(
                 user=user,
-                message=f"You were added to project \"{project.name}\" by {request.user.username}",
+                message=f"You were added to project \"{project.name}\" by {request.user.get_full_name() or request.user.username}",
                 project_id=project.id,
                 project_name=project.name[:255],
             )

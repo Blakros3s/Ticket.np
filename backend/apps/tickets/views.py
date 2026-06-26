@@ -182,7 +182,7 @@ class TicketViewSet(viewsets.ModelViewSet):
                 try:
                     Notification.objects.create(
                         user=assignee,
-                        message=f"You were assigned to ticket {ticket.ticket_id} by {self.request.user.username}",
+                        message=f"You were assigned to ticket {ticket.ticket_id} by {self.request.user.get_full_name() or self.request.user.username}",
                         ticket_id=ticket.id,
                         ticket_title=ticket.title[:255],
                     )
@@ -202,7 +202,7 @@ class TicketViewSet(viewsets.ModelViewSet):
                     try:
                         Notification.objects.create(
                             user=assignee,
-                            message=f"You were assigned to ticket {ticket.ticket_id} by {self.request.user.username}",
+                        message=f"You were assigned to ticket {ticket.ticket_id} by {self.request.user.get_full_name() or self.request.user.username}",
                             ticket_id=ticket.id,
                             ticket_title=ticket.title[:255],
                         )
@@ -428,7 +428,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         if target_user.id != user.id:
             Notification.objects.create(
                 user=target_user,
-                message=f"You were assigned to ticket {ticket.ticket_id} by {user.username}",
+                message=f"You were assigned to ticket {ticket.ticket_id} by {user.get_full_name() or user.username}",
                 ticket_id=ticket.id,
                 ticket_title=ticket.title[:255],
             )
