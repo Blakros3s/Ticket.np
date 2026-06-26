@@ -20,7 +20,6 @@ export interface TicketComment {
   id: number;
   author: number;
   user_name: string;
-  user_username: string;
   content: string;
   created_at: string;
   updated_at: string;

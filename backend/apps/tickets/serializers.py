@@ -75,16 +75,15 @@ def _build_assignee_dict(user) -> dict:
 # ---------------------------------------------------------------------------
 
 class TicketCommentSerializer(serializers.ModelSerializer):
-    user_name     = serializers.StringRelatedField(source='author', read_only=True)
-    user_username = serializers.SerializerMethodField()
+    user_name     = serializers.SerializerMethodField()
 
     class Meta:
         model  = Comment
-        fields = ['id', 'author', 'user_name', 'user_username', 'content', 'created_at', 'updated_at']
+        fields = ['id', 'author', 'user_name', 'content', 'created_at', 'updated_at']
         read_only_fields = ['author', 'created_at', 'updated_at']
 
-    def get_user_username(self, obj):
-        return obj.author.username
+    def get_user_name(self, obj):
+        return obj.author.get_full_name() or obj.author.username
 
 
 class TicketMediaSerializer(serializers.ModelSerializer):
@@ -115,7 +114,10 @@ class TicketMediaSerializer(serializers.ModelSerializer):
 
 
 class TicketSerializer(serializers.ModelSerializer):
-    created_by   = serializers.StringRelatedField(read_only=True)
+    created_by   = serializers.SerializerMethodField()
+
+    def get_created_by(self, obj):
+        return obj.created_by.get_full_name() or obj.created_by.username
     assignees    = serializers.SerializerMethodField()
     assignees_list = serializers.SerializerMethodField()
     project_name = serializers.StringRelatedField(source='project', read_only=True)

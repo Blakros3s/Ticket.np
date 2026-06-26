@@ -282,6 +282,7 @@ function TicketsList() {
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Status</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Priority</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Type</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Created By</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Assignee</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Project</th>
                 </tr>
@@ -309,6 +310,9 @@ function TicketsList() {
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-slate-300 capitalize">{ticket.type}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-slate-300">{ticket.created_by}</span>
                     </td>
                     <td className="px-6 py-4">
                       {ticket.assignees_list && ticket.assignees_list.length > 0 ? (
