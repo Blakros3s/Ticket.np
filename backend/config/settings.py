@@ -177,18 +177,22 @@ RATELIMIT_USE_CACHE = 'default'
 DEFAULT_RATE_LIMIT = '100/minute'
 AUTH_RATE_LIMIT = '10/minute'
 
-# Frontend (deep links in emails)
+# Frontend + public website (Technest-style links in HTML emails)
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+WEBSITE_URL = config('WEBSITE_URL', default='https://technestinnovations.com.np')
 
-# Email — disabled by default; auto-enabled when all three credentials are set.
-# Defaults to Gmail SMTP (smtp.gmail.com). Override EMAIL_HOST for other providers.
+# Mail — Technest-style: file/console in dev, SMTP when credentials are set.
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='').strip()
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='').strip()
-_tls_raw = os.environ.get('EMAIL_TLS', os.environ.get('EMAIL_USE_TLS', 'true'))
-EMAIL_USE_TLS = str(_tls_raw).lower() in ('true', '1', 'yes')
+_use_tls_raw = config('EMAIL_USE_TLS', default='').strip()
+if not _use_tls_raw:
+    _use_tls_raw = config('EMAIL_TLS', default='true')
+EMAIL_USE_TLS = str(_use_tls_raw).lower() in ('true', '1', 'yes')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='').strip()
+SERVER_EMAIL = config('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL or '').strip()
+EMAIL_USE_SMTP_IN_DEBUG = config('EMAIL_USE_SMTP_IN_DEBUG', default=False, cast=bool)
 
 _email_credentials_complete = bool(
     EMAIL_HOST_USER and EMAIL_HOST_PASSWORD and DEFAULT_FROM_EMAIL
@@ -198,7 +202,20 @@ if os.environ.get('EMAIL_ENABLED') is not None:
 else:
     EMAIL_ENABLED = _email_credentials_complete
 
-if EMAIL_ENABLED:
+_email_backend_override = config('EMAIL_BACKEND', default='').strip()
+_email_file_path = config('EMAIL_FILE_PATH', default='').strip()
+
+if _email_backend_override:
+    EMAIL_BACKEND = _email_backend_override
+elif _email_file_path:
+    EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
+    EMAIL_FILE_PATH = str(BASE_DIR / _email_file_path.strip().lstrip('/\\'))
+    Path(EMAIL_FILE_PATH).mkdir(parents=True, exist_ok=True)
+elif _email_credentials_complete and (not DEBUG or EMAIL_USE_SMTP_IN_DEBUG):
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+elif DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+elif _email_credentials_complete:
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 else:
     EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
