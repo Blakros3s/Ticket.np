@@ -21,6 +21,7 @@ export interface TicketComment {
   author: number;
   user_name: string;
   content: string;
+  media_files?: TicketMedia[];
   created_at: string;
   updated_at: string;
 }
@@ -46,6 +47,7 @@ export interface Ticket {
   assignees: number[];
   assignees_list: TicketAssignee[];
   created_by: string;
+  created_by_id: number;
   created_at: string;
   updated_at: string;
   media_files: TicketMedia[];
@@ -198,7 +200,19 @@ export const ticketsApi = {
     return response.data;
   },
 
-  addComment: async (ticketId: number, content: string): Promise<TicketComment> => {
+  addComment: async (ticketId: number, content: string, files: File[] = []): Promise<TicketComment> => {
+    if (files.length > 0) {
+      const formData = new FormData();
+      formData.append('content', content);
+      files.forEach((file) => formData.append('files', file));
+      const response = await api.post<TicketComment>(
+        `/tickets/tickets/${ticketId}/comments/`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      return response.data;
+    }
+
     const response = await api.post<TicketComment>(`/tickets/tickets/${ticketId}/comments/`, { content });
     return response.data;
   },

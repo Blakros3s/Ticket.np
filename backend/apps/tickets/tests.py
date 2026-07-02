@@ -178,16 +178,17 @@ class TicketAPITestCase(TestCase):
         self.assertIn('created_by', response.data)
     
     def test_delete_ticket(self):
-        """Test deleting a ticket"""
+        """Managers cannot delete tickets they did not create."""
         self.client.force_authenticate(user=self.manager_user)
-        response = self.client.delete(f'/api/tickets/{self.ticket.id}/')
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Ticket.objects.filter(id=self.ticket.id).exists())
-    
+        response = self.client.delete(f'/api/tickets/tickets/{self.ticket.id}/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("can't delete", response.data['error'].lower())
+        self.assertTrue(Ticket.objects.filter(id=self.ticket.id).exists())
+
     def test_creator_can_delete_own_ticket(self):
         """Test that ticket creators can delete their own tickets"""
         self.client.force_authenticate(user=self.employee_user)
-        response = self.client.delete(f'/api/tickets/{self.ticket.id}/')
+        response = self.client.delete(f'/api/tickets/tickets/{self.ticket.id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
 

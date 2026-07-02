@@ -45,6 +45,12 @@ def validate_file(file):
         raise ValidationError(f"File type '{name.rsplit('.', 1)[-1]}' is not supported.")
 
 
+def validate_image_file(file):
+    validate_file(file)
+    if get_file_type(file.name) != 'image':
+        raise ValidationError('Only image files can be attached to comments.')
+
+
 def get_file_type(filename: str) -> str:
     """Return a canonical media-type label for the given filename."""
     name = filename.lower()
@@ -74,18 +80,6 @@ def _build_assignee_dict(user) -> dict:
 # Serializers
 # ---------------------------------------------------------------------------
 
-class TicketCommentSerializer(serializers.ModelSerializer):
-    user_name     = serializers.SerializerMethodField()
-
-    class Meta:
-        model  = Comment
-        fields = ['id', 'author', 'user_name', 'content', 'created_at', 'updated_at']
-        read_only_fields = ['author', 'created_at', 'updated_at']
-
-    def get_user_name(self, obj):
-        return obj.author.get_full_name() or obj.author.username
-
-
 class TicketMediaSerializer(serializers.ModelSerializer):
     uploaded_by_username = serializers.StringRelatedField(source='uploaded_by', read_only=True)
 
@@ -100,8 +94,9 @@ class TicketMediaSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get('request')
-        if request and instance.file:
-            data['file'] = build_protected_media_url(request, instance.file.name)
+        if instance.file and instance.file.name:
+            signed_url = build_protected_media_url(request, instance.file.name) if request else None
+            data['file'] = signed_url or instance.file.name
         return data
 
     def create(self, validated_data):
@@ -113,15 +108,29 @@ class TicketMediaSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class TicketCommentSerializer(serializers.ModelSerializer):
+    user_name     = serializers.SerializerMethodField()
+    media_files   = TicketMediaSerializer(many=True, read_only=True)
+
+    class Meta:
+        model  = Comment
+        fields = ['id', 'author', 'user_name', 'content', 'media_files', 'created_at', 'updated_at']
+        read_only_fields = ['author', 'created_at', 'updated_at']
+
+    def get_user_name(self, obj):
+        return obj.author.get_full_name() or obj.author.username
+
+
 class TicketSerializer(serializers.ModelSerializer):
     created_by   = serializers.SerializerMethodField()
+    created_by_id = serializers.IntegerField(source='created_by.id', read_only=True)
 
     def get_created_by(self, obj):
         return obj.created_by.get_full_name() or obj.created_by.username
     assignees    = serializers.SerializerMethodField()
     assignees_list = serializers.SerializerMethodField()
     project_name = serializers.StringRelatedField(source='project', read_only=True)
-    media_files  = TicketMediaSerializer(many=True, read_only=True)
+    media_files  = serializers.SerializerMethodField()
     comments     = TicketCommentSerializer(many=True, read_only=True)
 
     class Meta:
@@ -129,13 +138,21 @@ class TicketSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'ticket_id', 'title', 'description', 'type', 'priority', 'status',
             'project', 'project_name', 'assignees', 'assignees_list', 'created_by',
-            'created_at', 'updated_at', 'media_files', 'comments',
+            'created_by_id', 'created_at', 'updated_at', 'media_files', 'comments',
             'in_progress_at', 'qa_at', 'closed_at',
         ]
         read_only_fields = [
-            'ticket_id', 'created_by', 'created_at', 'updated_at',
+            'ticket_id', 'created_by', 'created_by_id', 'created_at', 'updated_at',
             'in_progress_at', 'qa_at', 'closed_at',
         ]
+
+    def get_media_files(self, obj):
+        attachments = obj.media_files.filter(comment__isnull=True)
+        return TicketMediaSerializer(
+            attachments,
+            many=True,
+            context=self.context,
+        ).data
 
     def get_assignees(self, obj):
         """Return list of assignee IDs for API compatibility."""

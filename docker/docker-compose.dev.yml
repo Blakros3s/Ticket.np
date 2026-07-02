@@ -29,6 +29,19 @@ services:
           cpus: '1'
           memory: 1G
 
+  celery_worker:
+    build:
+      dockerfile: docker/backend/Dockerfile.dev
+    env_file:
+      - ../backend/.env
+    volumes:
+      - ../backend:/app
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
   # ============================================================================
   # Next.js Frontend - Dev overrides
   # ============================================================================

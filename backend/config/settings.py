@@ -176,3 +176,49 @@ RATELIMIT_ENABLE = True
 RATELIMIT_USE_CACHE = 'default'
 DEFAULT_RATE_LIMIT = '100/minute'
 AUTH_RATE_LIMIT = '10/minute'
+
+# Frontend (deep links in emails)
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+
+# Email — disabled by default; auto-enabled when all three credentials are set.
+# Defaults to Gmail SMTP (smtp.gmail.com). Override EMAIL_HOST for other providers.
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='').strip()
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='').strip()
+_tls_raw = os.environ.get('EMAIL_TLS', os.environ.get('EMAIL_USE_TLS', 'true'))
+EMAIL_USE_TLS = str(_tls_raw).lower() in ('true', '1', 'yes')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='').strip()
+
+_email_credentials_complete = bool(
+    EMAIL_HOST_USER and EMAIL_HOST_PASSWORD and DEFAULT_FROM_EMAIL
+)
+if os.environ.get('EMAIL_ENABLED') is not None:
+    EMAIL_ENABLED = config('EMAIL_ENABLED', cast=bool)
+else:
+    EMAIL_ENABLED = _email_credentials_complete
+
+if EMAIL_ENABLED:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
+
+# Celery — disabled by default; set CELERY_BROKER_URL to use Redis + worker.
+# Without a broker, tasks run inline (CELERY_TASK_ALWAYS_EAGER=True).
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='').strip()
+CELERY_ENABLED = bool(CELERY_BROKER_URL)
+
+if CELERY_ENABLED:
+    CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default=CELERY_BROKER_URL)
+else:
+    CELERY_RESULT_BACKEND = None
+
+if os.environ.get('CELERY_TASK_ALWAYS_EAGER') is not None:
+    CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', cast=bool)
+else:
+    CELERY_TASK_ALWAYS_EAGER = not CELERY_ENABLED
+
+CELERY_TASK_TRACK_STARTED = True
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'

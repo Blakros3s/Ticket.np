@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.5; color: #1e293b;">
+  <p>Hello {{ assignee_name }},</p>
+  <p>
+    <strong>{{ assigner_name }}</strong> assigned you to ticket
+    <strong>{{ ticket_id }}</strong>: {{ ticket_title }}
+  </p>
+  <p>
+    Project: {{ project_name }}<br>
+    Priority: {{ priority }}
+  </p>
+  <p>
+    <a href="{{ ticket_url }}" style="color: #0ea5e9;">View ticket</a>
+  </p>
+  <p style="color: #64748b; font-size: 12px;">— TicketHub</p>
+</body>
+</html>
