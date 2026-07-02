@@ -9,7 +9,7 @@ from django.db.models import Q, Count
 from django.utils import timezone
 
 from apps.users.models import User
-from apps.notifications.models import Notification
+from apps.notifications.services import notify_ticket_assigned
 from apps.comments.models import Comment
 from apps.comments.utils import notify_comment_mentions
 from apps.timelogs.models import WorkLog
@@ -25,6 +25,8 @@ from .serializers import (
     TicketCommentSerializer,
     TicketMediaSerializer,
     validate_file,
+    validate_image_file,
+    get_file_type,
 )
 
 
@@ -81,7 +83,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         return TicketSerializer
 
     def get_permissions(self):
-        if self.action in ['update', 'partial_update', 'destroy']:
+        if self.action in ['update', 'partial_update']:
             return [IsAuthenticated(), IsCreatorOrManagerOrAdmin()]
         return [IsAuthenticated()]
 
@@ -111,7 +113,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         return (
             Ticket.objects
             .select_related('project', 'created_by')
-            .prefetch_related('assignees', 'media_files', 'comments__author')
+            .prefetch_related('assignees', 'media_files', 'comments__author', 'comments__media_files')
         )
 
     def filter_queryset(self, queryset):
@@ -178,36 +180,26 @@ class TicketViewSet(viewsets.ModelViewSet):
         except Exception:
             pass
         for assignee in ticket.assignees.all():
-            if assignee != self.request.user:
-                try:
-                    Notification.objects.create(
-                        user=assignee,
-                        message=f"You were assigned to ticket {ticket.ticket_id} by {self.request.user.get_full_name() or self.request.user.username}",
-                        ticket_id=ticket.id,
-                        ticket_title=ticket.title[:255],
-                    )
-                except Exception:
-                    pass
+            notify_ticket_assigned(
+                assignee=assignee,
+                ticket=ticket,
+                assigned_by=self.request.user,
+            )
 
     def perform_update(self, serializer):
         old = self.get_object()
+        old_ids = set(old.assignees.values_list('id', flat=True))
         ticket = serializer.save()
 
-        old_ids = set(old.assignees.values_list('id', flat=True))
         new_ids = set(ticket.assignees.values_list('id', flat=True))
         new_assignee_ids = new_ids - old_ids
         if new_assignee_ids:
             for assignee in User.objects.filter(id__in=new_assignee_ids):
-                if assignee != self.request.user:
-                    try:
-                        Notification.objects.create(
-                            user=assignee,
-                        message=f"You were assigned to ticket {ticket.ticket_id} by {self.request.user.get_full_name() or self.request.user.username}",
-                            ticket_id=ticket.id,
-                            ticket_title=ticket.title[:255],
-                        )
-                    except Exception:
-                        pass
+                notify_ticket_assigned(
+                    assignee=assignee,
+                    ticket=ticket,
+                    assigned_by=self.request.user,
+                )
 
         changes = []
         if old.title != ticket.title:
@@ -239,6 +231,15 @@ class TicketViewSet(viewsets.ModelViewSet):
             description=f"Deleted ticket {instance.ticket_id}: {instance.title}",
         )
         instance.delete()
+
+    def destroy(self, request, *args, **kwargs):
+        ticket = self.get_object()
+        if ticket.created_by_id != request.user.id:
+            return Response(
+                {'error': "You can't delete this ticket. Only the creator can delete it."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     # ------------------------------------------------------------------
     # Status management
@@ -416,6 +417,9 @@ class TicketViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if ticket.assignees.filter(id=target_user.id).exists():
+            return Response(TicketSerializer(ticket).data)
+
         ticket.assignees.add(target_user)
 
         log_activity(
@@ -425,13 +429,11 @@ class TicketViewSet(viewsets.ModelViewSet):
             description=f"Assigned ticket {ticket.ticket_id} to {target_user.username}",
         )
 
-        if target_user.id != user.id:
-            Notification.objects.create(
-                user=target_user,
-                message=f"You were assigned to ticket {ticket.ticket_id} by {user.get_full_name() or user.username}",
-                ticket_id=ticket.id,
-                ticket_title=ticket.title[:255],
-            )
+        notify_ticket_assigned(
+            assignee=target_user,
+            ticket=ticket,
+            assigned_by=user,
+        )
 
         return Response(TicketSerializer(ticket).data)
 
@@ -532,6 +534,7 @@ class TicketViewSet(viewsets.ModelViewSet):
             ticket=ticket,
             file=file,
             file_name=file.name,
+            file_type=get_file_type(file.name),
             file_size=file.size,
             uploaded_by=user,
         )
@@ -543,7 +546,10 @@ class TicketViewSet(viewsets.ModelViewSet):
             description=f"Uploaded attachment: {file.name}",
         )
 
-        return Response(TicketMediaSerializer(media).data, status=status.HTTP_201_CREATED)
+        return Response(
+            TicketMediaSerializer(media, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=['delete'], url_path=r'media/(?P<media_id>\d+)')
     def delete_media(self, request, id=None, media_id=None):
@@ -585,16 +591,48 @@ class TicketViewSet(viewsets.ModelViewSet):
         ticket = self.get_object()
 
         if request.method == 'GET':
-            comments   = Comment.objects.filter(ticket=ticket).order_by('created_at')
-            serializer = TicketCommentSerializer(comments, many=True)
+            comments = (
+                Comment.objects.filter(ticket=ticket)
+                .prefetch_related('media_files')
+                .order_by('created_at')
+            )
+            serializer = TicketCommentSerializer(
+                comments,
+                many=True,
+                context=self.get_serializer_context(),
+            )
             return Response(serializer.data)
 
-        # POST
-        content = request.data.get('content')
-        if not content:
-            return Response({'error': 'Content is required'}, status=status.HTTP_400_BAD_REQUEST)
+        content = (request.data.get('content') or '').strip()
+        files = request.FILES.getlist('files')
+        if not content and not files:
+            return Response(
+                {'error': 'Comment text or at least one image is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        comment = Comment.objects.create(ticket=ticket, author=request.user, content=content)
+        comment = Comment.objects.create(
+            ticket=ticket,
+            author=request.user,
+            content=content,
+        )
+
+        for file in files:
+            try:
+                validate_image_file(file)
+            except ValidationError as exc:
+                comment.delete()
+                return Response({'error': exc.detail[0]}, status=status.HTTP_400_BAD_REQUEST)
+
+            TicketMedia.objects.create(
+                ticket=ticket,
+                comment=comment,
+                file=file,
+                file_name=file.name,
+                file_size=file.size,
+                file_type=get_file_type(file.name),
+                uploaded_by=request.user,
+            )
 
         log_activity(
             action='update',
@@ -603,6 +641,11 @@ class TicketViewSet(viewsets.ModelViewSet):
             description="Added a comment",
         )
 
-        notify_comment_mentions(request.user, ticket, content)
+        if content:
+            notify_comment_mentions(request.user, ticket, content)
 
-        return Response(TicketCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+        comment = Comment.objects.prefetch_related('media_files').get(pk=comment.pk)
+        return Response(
+            TicketCommentSerializer(comment, context=self.get_serializer_context()).data,
+            status=status.HTTP_201_CREATED,
+        )

@@ -1,8 +1,8 @@
 """Signed URLs for authenticated media delivery."""
 
+from urllib.parse import quote
+
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
-from django.urls import reverse
-from django.conf import settings
 
 MEDIA_SIGNATURE_MAX_AGE = 60 * 60 * 24  # 24 hours
 _SIGNER = TimestampSigner(salt='protected-media')
@@ -24,13 +24,18 @@ def verify_media_signature(file_name: str, signature: str) -> None:
         raise PermissionDenied('Invalid media link.')
 
 
+def _encoded_media_path(file_name: str) -> str:
+    return '/'.join(quote(part, safe='') for part in file_name.split('/'))
+
+
 def build_protected_media_url(request, file_name: str | None) -> str | None:
     if not file_name or not request:
         return None
 
     try:
         signature = sign_media_path(file_name)
-        path = reverse('protected-media', kwargs={'path': file_name})
-        return request.build_absolute_uri(f'{path}?sig={signature}')
+        relative_url = f'/api/media/{_encoded_media_path(file_name)}'
+        return request.build_absolute_uri(f'{relative_url}?sig={signature}')
     except Exception:
-        return request.build_absolute_uri(f'{settings.MEDIA_URL}{file_name}')
+        relative_url = f'/api/media/{_encoded_media_path(file_name)}'
+        return request.build_absolute_uri(relative_url)

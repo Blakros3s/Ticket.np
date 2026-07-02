@@ -11,6 +11,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import * as mammoth from 'mammoth';
 import { FileUploadZone } from '@/components/file-upload-zone';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -51,12 +52,40 @@ export default function ProjectDetailPage() {
   const [showRemoveMember, setShowRemoveMember] = useState(false);
   const [memberToRemove, setMemberToRemove] = useState<{ id: number; name: string } | null>(null);
   const [isRemovingMember, setIsRemovingMember] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingProject, setDeletingProject] = useState(false);
 
   const isManager = user?.role === 'manager' || user?.role === 'admin';
 
   const showToastMessage = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleDeleteProjectClick = () => {
+    if (!project) return;
+    if (project.created_by.id !== user?.id) {
+      showToastMessage("You can't delete this project. Only the creator can delete it.", 'error');
+      return;
+    }
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDeleteProject = async () => {
+    try {
+      setDeletingProject(true);
+      await projectsApi.deleteProject(projectId);
+      showToastMessage('Project deleted successfully', 'success');
+      router.push('/protected/dashboard/projects');
+    } catch (error: any) {
+      showToastMessage(
+        error.response?.data?.error || error.response?.data?.detail || 'Failed to delete project',
+        'error',
+      );
+    } finally {
+      setDeletingProject(false);
+      setShowDeleteConfirm(false);
+    }
   };
 
   const fetchData = async () => {
@@ -347,14 +376,25 @@ export default function ProjectDetailPage() {
                   </div>
                 </div>
               </div>
-              {isManager && (
+              <div className="flex items-center gap-2">
+                {isManager && (
+                  <button
+                    onClick={() => setShowEditProject(true)}
+                    className="p-2.5 rounded-xl bg-slate-700/50 hover:bg-slate-700 text-slate-400 hover:text-white transition-all border border-slate-600/50 hover:border-slate-500"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                  </button>
+                )}
                 <button
-                  onClick={() => setShowEditProject(true)}
-                  className="p-2.5 rounded-xl bg-slate-700/50 hover:bg-slate-700 text-slate-400 hover:text-white transition-all border border-slate-600/50 hover:border-slate-500"
+                  onClick={handleDeleteProjectClick}
+                  className="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all border border-red-500/30"
+                  title="Delete project"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                 </button>
-              )}
+              </div>
             </div>
           </div>
 
@@ -1031,6 +1071,17 @@ export default function ProjectDetailPage() {
           </div>
         )
       }
+
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete project?"
+        message={`This will permanently delete "${project?.name}". This action cannot be undone.`}
+        confirmText={deletingProject ? 'Deleting...' : 'Delete'}
+        cancelText="Cancel"
+        isDestructive
+        onConfirm={handleConfirmDeleteProject}
+        onCancel={() => !deletingProject && setShowDeleteConfirm(false)}
+      />
     </div >
   );
 }

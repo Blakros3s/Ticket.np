@@ -36,12 +36,21 @@ class ProjectViewSet(viewsets.ModelViewSet):
         ).distinct()
     
     def get_permissions(self):
-        if self.action in ['create', 'update', 'partial_update', 'destroy', 'add_member', 'remove_member']:
+        if self.action in ['create', 'update', 'partial_update', 'add_member', 'remove_member']:
             return [IsAuthenticated(), IsManagerOrAdmin()]
         return [IsAuthenticated()]
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        project = self.get_object()
+        if project.created_by_id != request.user.id:
+            return Response(
+                {'error': "You can't delete this project. Only the creator can delete it."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().destroy(request, *args, **kwargs)
     
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsManagerOrAdmin])
     def add_member(self, request, pk=None):

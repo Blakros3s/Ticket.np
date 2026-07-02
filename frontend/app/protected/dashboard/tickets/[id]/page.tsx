@@ -13,14 +13,274 @@ import { timelogsApi, TicketActiveSession } from '@/lib/timelogs';
 import Markdown from '@/components/Markdown';
 import { FileUploadZone } from '@/components/file-upload-zone';
 import { CommentMentionInput, renderCommentContent } from '@/components/comment-mentions';
+import { ConfirmDialog } from '@/components/confirm-dialog';
+import api from '@/lib/api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:8000';
+const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '');
 
-const getMediaUrl = (url: string) => {
+const resolveMediaUrl = (url: string) => {
   if (!url) return '';
-  if (url.startsWith('http')) return url;
-  return `${API_URL}${url}`;
+
+  let resolved = url;
+  if (resolved.startsWith('http://backend:') || resolved.startsWith('http://backend/')) {
+    resolved = resolved.replace(/^http:\/\/backend(?::\d+)?/, API_ORIGIN);
+  }
+
+  if (resolved.startsWith('http')) {
+    return resolved;
+  }
+
+  const normalized = resolved.startsWith('/') ? resolved : `/${resolved}`;
+  if (normalized.startsWith('/api/')) {
+    return `${API_ORIGIN}${normalized}`;
+  }
+  if (normalized.startsWith('/media/')) {
+    return `${API_ORIGIN}/api${normalized}`;
+  }
+  return `${API_ORIGIN}/api/media/${resolved.replace(/^\//, '')}`;
 };
+
+const toMediaFetchPath = (fileValue: string) => {
+  if (!fileValue) return '';
+
+  if (fileValue.startsWith('http')) {
+    const parsed = new URL(resolveMediaUrl(fileValue));
+    return `${parsed.pathname.replace(/^\/api/, '')}${parsed.search}`;
+  }
+
+  if (fileValue.startsWith('/api/')) {
+    return `${fileValue.slice('/api'.length)}`;
+  }
+  if (fileValue.startsWith('/media/')) {
+    return fileValue;
+  }
+  if (fileValue.startsWith('media/')) {
+    return `/${fileValue}`;
+  }
+  return `/media/${fileValue.replace(/^\//, '')}`;
+};
+
+const fetchMediaBlobUrl = async (fileValue: string): Promise<string> => {
+  const path = toMediaFetchPath(fileValue);
+  const response = await api.get(path, { responseType: 'blob' });
+  return URL.createObjectURL(response.data);
+};
+
+const isImageMedia = (media: TicketMedia) => {
+  if (media.file_type === 'image') return true;
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(media.file_name);
+};
+
+type ViewingMedia = {
+  fileName: string;
+  file: string;
+  kind: 'image' | 'pdf' | 'video' | 'file';
+};
+
+const resolveMediaKind = (media: TicketMedia): ViewingMedia['kind'] => {
+  if (isImageMedia(media)) return 'image';
+  if (media.file_type === 'video') return 'video';
+  if (media.file_name.toLowerCase().endsWith('.pdf')) return 'pdf';
+  return 'file';
+};
+
+interface MediaPreviewDialogProps {
+  media: ViewingMedia;
+  onClose: () => void;
+}
+
+function MediaPreviewDialog({ media, onClose }: MediaPreviewDialogProps) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    let blobUrl: string | null = null;
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        blobUrl = await fetchMediaBlobUrl(media.file);
+        if (!cancelled) {
+          setSrc(blobUrl);
+          setLoadError(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setSrc(null);
+          setLoadError(true);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+  }, [media.file]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [onClose]);
+
+  const handleDownload = () => {
+    if (!src) return;
+    const link = document.createElement('a');
+    link.href = src;
+    link.download = media.fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-4 border-b border-slate-800 gap-3">
+          <h3 className="text-sm font-medium text-white truncate flex-1">{media.fileName}</h3>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={!src}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-300 hover:text-white text-xs font-medium rounded-lg transition-all"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Download
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors"
+              aria-label="Close preview"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto p-4 bg-slate-950/50 flex items-center justify-center min-h-[200px]">
+          {loading ? (
+            <div className="w-10 h-10 border-2 border-sky-500/30 border-t-sky-500 rounded-full animate-spin" />
+          ) : loadError ? (
+            <p className="text-slate-400 text-sm">Failed to load preview.</p>
+          ) : media.kind === 'image' ? (
+            <img
+              src={src!}
+              alt={media.fileName}
+              className="max-h-[75vh] max-w-full object-contain rounded-lg"
+            />
+          ) : media.kind === 'pdf' ? (
+            <iframe
+              src={src!}
+              title={media.fileName}
+              className="w-full h-[75vh] rounded-lg border-none bg-white"
+            />
+          ) : media.kind === 'video' ? (
+            <video
+              src={src!}
+              controls
+              className="max-h-[75vh] max-w-full rounded-lg"
+            />
+          ) : (
+            <div className="text-center py-8">
+              <svg className="w-16 h-16 mx-auto mb-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p className="text-slate-400 text-sm">Preview not available for this file type.</p>
+              <p className="text-slate-500 text-xs mt-1">Use Download to save the file.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ProtectedImageThumbnailProps {
+  media: TicketMedia;
+  onView: (media: TicketMedia) => void;
+  className?: string;
+}
+
+function ProtectedImageThumbnail({ media, onView, className }: ProtectedImageThumbnailProps) {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        objectUrl = await fetchMediaBlobUrl(media.file);
+        if (!cancelled) {
+          setSrc(objectUrl);
+        }
+      } catch {
+        if (!cancelled) {
+          setSrc(resolveMediaUrl(media.file));
+        }
+      }
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [media.file, media.id]);
+
+  if (!src) {
+    return <div className={`bg-slate-700/50 animate-pulse ${className || 'w-28 h-28 rounded-lg border border-slate-600'}`} aria-hidden="true" />;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onView(media)}
+      className="block w-full"
+      aria-label={`View ${media.file_name}`}
+    >
+      <img
+        src={src}
+        alt={media.file_name}
+        className={className || 'w-28 h-28 object-cover rounded-lg border border-slate-600 hover:border-sky-500/50 transition-colors'}
+      />
+    </button>
+  );
+}
 
 const statusConfig: Record<TicketStatus, { label: string; color: string; bgColor: string; borderColor: string }> = {
   new: { label: 'New', color: 'text-blue-400', bgColor: 'bg-blue-500/10', borderColor: 'border-blue-500/30' },
@@ -46,11 +306,16 @@ export default function TicketDetailPage() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [commentImages, setCommentImages] = useState<File[]>([]);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingTicket, setDeletingTicket] = useState(false);
+  const [viewingMedia, setViewingMedia] = useState<ViewingMedia | null>(null);
   const [showAssignDropdown, setShowAssignDropdown] = useState(false);
   const [activeSession, setActiveSession] = useState<TicketActiveSession | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const commentFileInputRef = useRef<HTMLInputElement>(null);
 
   const [editData, setEditData] = useState({
     title: '',
@@ -62,7 +327,13 @@ export default function TicketDetailPage() {
   });
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<string, string | string[]>>>({});
 
-  const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'manager';
+  const openMediaPreview = (media: TicketMedia) => {
+    setViewingMedia({
+      fileName: media.file_name,
+      file: media.file,
+      kind: resolveMediaKind(media),
+    });
+  };
 
   const showToastMessage = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -226,19 +497,62 @@ export default function TicketDetailPage() {
     }
   };
 
+  const handleOpenAttachment = (media: TicketMedia) => {
+    openMediaPreview(media);
+  };
+
   const handleAddComment = async () => {
-    if (!newComment.trim()) return;
+    if (!newComment.trim() && commentImages.length === 0) return;
 
     try {
       setSubmittingComment(true);
-      const comment = await ticketsApi.addComment(ticketId, newComment);
+      const comment = await ticketsApi.addComment(ticketId, newComment.trim(), commentImages);
       setTicket(prev => prev ? { ...prev, comments: [...prev.comments, comment] } : null);
       setNewComment('');
+      setCommentImages([]);
+      if (commentFileInputRef.current) commentFileInputRef.current.value = '';
       showToastMessage('Comment added', 'success');
     } catch (error: any) {
       showToastMessage(error.response?.data?.detail || error.response?.data?.error || 'Failed to add comment', 'error');
     } finally {
       setSubmittingComment(false);
+    }
+  };
+
+  const handleCommentImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    if (selected.length === 0) return;
+    setCommentImages((prev) => [...prev, ...selected]);
+    e.target.value = '';
+  };
+
+  const handleRemoveCommentImage = (index: number) => {
+    setCommentImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDeleteTicketClick = () => {
+    if (!ticket) return;
+    if (ticket.created_by_id !== user?.id) {
+      showToastMessage("You can't delete this ticket. Only the creator can delete it.", 'error');
+      return;
+    }
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDeleteTicket = async () => {
+    try {
+      setDeletingTicket(true);
+      await ticketsApi.deleteTicket(ticketId);
+      showToastMessage('Ticket deleted successfully', 'success');
+      router.push('/protected/dashboard/tickets');
+    } catch (error: any) {
+      showToastMessage(
+        error.response?.data?.error || error.response?.data?.detail || 'Failed to delete ticket',
+        'error',
+      );
+    } finally {
+      setDeletingTicket(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -339,9 +653,10 @@ export default function TicketDetailPage() {
   const isAssignee = ticket?.assignees?.includes(Number(user?.id));
   const canViewStopwatch = user?.role === 'admin' || user?.role === 'manager' || isAssignee;
 
-  const canEdit = user?.role === 'admin' || user?.role === 'manager' || ticket?.created_by === user?.username;
+  const canEdit = user?.role === 'admin' || user?.role === 'manager' || ticket?.created_by_id === user?.id;
   const canChangeStatus = isAssignee || user?.role === 'admin' || user?.role === 'manager';
-  const isCreator = ticket?.created_by === user?.username;
+  const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'manager';
+  const isCreator = ticket?.created_by_id === user?.id;
   const canViewActivity = user?.role === 'admin' || user?.role === 'manager';
   const isProjectMember = projectMembers.some(m => m.id === user?.id);
   const canAssign = user?.role === 'admin' || user?.role === 'manager' || isCreator || isProjectMember;
@@ -432,11 +747,19 @@ export default function TicketDetailPage() {
                     <h1 className="text-2xl font-bold text-white">{ticket.title}</h1>
                     <p className="text-sm text-slate-500 mt-1">{ticket.ticket_id}</p>
                   </div>
-                  {canEdit && (
-                    <button onClick={() => setIsEditing(true)} className="px-3 py-1.5 bg-slate-700 text-white text-sm rounded-lg hover:bg-slate-600">
-                      Edit
+                  <div className="flex items-center gap-2">
+                    {canEdit && (
+                      <button onClick={() => setIsEditing(true)} className="px-3 py-1.5 bg-slate-700 text-white text-sm rounded-lg hover:bg-slate-600">
+                        Edit
+                      </button>
+                    )}
+                    <button
+                      onClick={handleDeleteTicketClick}
+                      className="px-3 py-1.5 bg-red-500/10 text-red-400 text-sm rounded-lg hover:bg-red-500/20 border border-red-500/30"
+                    >
+                      Delete
                     </button>
-                  )}
+                  </div>
                 </div>
                 <div className="prose prose-invert max-w-none">
                   <Markdown content={ticket.description || '*No description provided*'} />
@@ -477,36 +800,42 @@ export default function TicketDetailPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {ticket.media_files.map((media) => (
                   <div key={media.id} className="bg-slate-700/50 rounded-lg p-3 hover:bg-slate-700 transition-colors group">
-                    <a
-                      href={getMediaUrl(media.file)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block"
-                    >
-                      {media.file_type === 'image' ? (
-                        <div className="relative aspect-video bg-slate-600 rounded-lg overflow-hidden mb-2">
-                          <Image src={getMediaUrl(media.file)} alt={media.file_name} fill className="object-cover" unoptimized />
-                        </div>
-                      ) : media.file_type === 'video' ? (
-                        <div className="aspect-video bg-slate-600 rounded-lg overflow-hidden mb-2 flex items-center justify-center">
-                          <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </div>
-                      ) : (
-                        <div className="aspect-video bg-slate-600 rounded-lg overflow-hidden mb-2 flex items-center justify-center">
-                          <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                        </div>
-                      )}
-                      <p className="text-xs text-slate-300 truncate">{media.file_name}</p>
-                      <p className="text-xs text-slate-500">{formatFileSize(media.file_size)}</p>
-                    </a>
+                    {isImageMedia(media) ? (
+                      <div className="relative aspect-video bg-slate-600 rounded-lg overflow-hidden mb-2">
+                        <ProtectedImageThumbnail
+                          media={media}
+                          onView={openMediaPreview}
+                          className="w-full h-full object-cover rounded-lg hover:opacity-90 transition-opacity"
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAttachment(media)}
+                        className="block w-full text-left"
+                        aria-label={`Open ${media.file_name}`}
+                      >
+                        {media.file_type === 'video' ? (
+                          <div className="aspect-video bg-slate-600 rounded-lg overflow-hidden mb-2 flex items-center justify-center hover:bg-slate-500/80 transition-colors">
+                            <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                        ) : (
+                          <div className="aspect-video bg-slate-600 rounded-lg overflow-hidden mb-2 flex items-center justify-center hover:bg-slate-500/80 transition-colors">
+                            <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                        )}
+                      </button>
+                    )}
+                    <p className="text-xs text-slate-300 truncate">{media.file_name}</p>
+                    <p className="text-xs text-slate-500">{formatFileSize(media.file_size)}</p>
                     {canEdit && (
                       <button
-                        onClick={(e) => { e.preventDefault(); handleDeleteMedia(media.id); }}
+                        onClick={() => handleDeleteMedia(media.id)}
                         className="mt-2 w-full py-1 text-xs text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         Remove
@@ -534,10 +863,49 @@ export default function TicketDetailPage() {
                 mentionableUsers={mentionableUsers}
                 disabled={submittingComment}
               />
-              <div className="flex justify-end mt-2">
+              <input
+                ref={commentFileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleCommentImageSelect}
+              />
+              {commentImages.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {commentImages.map((file, index) => (
+                    <div key={`${file.name}-${index}`} className="relative group">
+                      <Image
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        width={80}
+                        height={80}
+                        className="w-20 h-20 object-cover rounded-lg border border-slate-600"
+                        unoptimized
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCommentImage(index)}
+                        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex justify-between items-center mt-2">
+                <button
+                  type="button"
+                  onClick={() => commentFileInputRef.current?.click()}
+                  disabled={submittingComment}
+                  className="px-3 py-1.5 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                >
+                  Attach images
+                </button>
                 <button
                   onClick={handleAddComment}
-                  disabled={submittingComment || !newComment.trim()}
+                  disabled={submittingComment || (!newComment.trim() && commentImages.length === 0)}
                   className="btn-primary px-4 py-2 text-sm"
                 >
                   {submittingComment ? 'Posting...' : 'Add Comment'}
@@ -561,8 +929,19 @@ export default function TicketDetailPage() {
                       <span className="text-slate-500 text-xs ml-auto">{formatDateTime(comment.created_at)}</span>
                     </div>
                     <p className="text-slate-300 text-sm whitespace-pre-wrap break-words">
-                      {renderCommentContent(comment.content)}
+                      {comment.content ? renderCommentContent(comment.content) : null}
                     </p>
+                    {comment.media_files && comment.media_files.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {comment.media_files.map((media) => (
+                          <ProtectedImageThumbnail
+                            key={media.id}
+                            media={media}
+                            onView={openMediaPreview}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -866,6 +1245,21 @@ export default function TicketDetailPage() {
 
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete ticket?"
+        message={`This will permanently delete ${ticket.ticket_id}. This action cannot be undone.`}
+        confirmText={deletingTicket ? 'Deleting...' : 'Delete'}
+        cancelText="Cancel"
+        isDestructive
+        onConfirm={handleConfirmDeleteTicket}
+        onCancel={() => !deletingTicket && setShowDeleteConfirm(false)}
+      />
+
+      {viewingMedia && (
+        <MediaPreviewDialog media={viewingMedia} onClose={() => setViewingMedia(null)} />
+      )}
     </div>
   );
 }

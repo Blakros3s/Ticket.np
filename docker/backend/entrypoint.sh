@@ -26,5 +26,5 @@ log "Database is ready!"
 log "Applying database migrations..."
 python manage.py migrate --noinput
 
-log "Starting development server..."
+log "Running: $@"
 exec "$@"

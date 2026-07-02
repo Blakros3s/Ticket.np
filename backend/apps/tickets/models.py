@@ -71,6 +71,13 @@ class TicketMedia(models.Model):
     ]
     
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='media_files')
+    comment = models.ForeignKey(
+        'comments.Comment',
+        on_delete=models.CASCADE,
+        related_name='media_files',
+        null=True,
+        blank=True,
+    )
     file = models.FileField(upload_to=ticket_media_upload_path)
     file_name = models.CharField(max_length=255)
     file_type = models.CharField(max_length=20, choices=MEDIA_TYPES, default='other')

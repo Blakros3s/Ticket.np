@@ -74,3 +74,4 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 
 # Use production entrypoint script
 ENTRYPOINT ["/app/entrypoint.prod.sh"]
+CMD ["python", "-m", "gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "config.wsgi:application"]

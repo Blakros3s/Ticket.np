@@ -29,14 +29,5 @@ python manage.py collectstatic --noinput --clear || log "Warning: collectstatic 
 log "Applying database migrations..."
 python manage.py migrate --noinput
 
-# Start the application server
-# Using gunicorn for production
-log "Starting Gunicorn server..."
-python -m gunicorn --bind 0.0.0.0:8000 --workers 3 config.wsgi:application
-
-#log "Starting Uvicorn server..."
-#exec uvicorn backend.asgi:application \
-#    --host 0.0.0.0 \
-#    --port 8000 \
-#    --workers ${UVICORN_WORKERS:-2} \
-#    --timeout-keep-alive ${UVICORN_TIMEOUT:-30}
+log "Starting application: $@"
+exec "$@"
