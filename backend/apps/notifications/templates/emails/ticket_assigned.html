@@ -1,0 +1,46 @@
+{% extends "emails/base_email.html" %}
+
+{% block title %}{{ assigner_name }} assigned you to {{ ticket_id }}{% endblock %}
+
+{% block headline %}You've got a new assignment{% endblock %}
+
+{% block content %}
+    <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">Hi {{ assignee_greeting }},</p>
+
+    <p style="margin:0 0 20px;font-size:16px;line-height:1.6;">
+        <strong>{{ assigner_name }}</strong> just assigned you a ticket on
+        <strong>{{ project_name }}</strong>.
+    </p>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+        <tr>
+            <td style="padding:16px 18px;">
+                <p style="margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;">Ticket</p>
+                <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#0f172a;">{{ ticket_id }}</p>
+                <p style="margin:0 0 14px;font-size:16px;line-height:1.5;color:#334155;">{{ ticket_title }}</p>
+                <p style="margin:0;font-size:14px;color:#64748b;">
+                    Priority: <strong style="color:#334155;">{{ priority }}</strong>
+                </p>
+            </td>
+        </tr>
+    </table>
+
+    {% if ticket_url %}
+    <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 20px;">
+        <tr>
+            <td style="border-radius:8px;background-color:#0ea5e9;">
+                <a href="{{ ticket_url }}" style="display:inline-block;padding:12px 22px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">Open ticket</a>
+            </td>
+        </tr>
+    </table>
+    {% else %}
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#475569;">
+        Sign in to TicketHub when you're ready — the ticket will be waiting for you there.
+    </p>
+    {% endif %}
+
+    <p style="margin:0;font-size:14px;line-height:1.6;color:#64748b;">
+        Thanks,<br>
+        The TicketHub team
+    </p>
+{% endblock %}

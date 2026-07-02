@@ -5,27 +5,18 @@ from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
+from .email_utils import build_assignment_email_context
+
 logger = logging.getLogger(__name__)
 
 
-def _build_assignment_context(assignee, ticket, assigned_by):
-    ticket_url = (
-        f"{settings.FRONTEND_URL.rstrip('/')}"
-        f"/protected/dashboard/tickets/{ticket.id}"
-    )
-    assigner_name = assigned_by.get_full_name().strip() or assigned_by.username
-    return {
-        'assignee_name': assignee.get_full_name().strip() or assignee.username,
-        'assigner_name': assigner_name,
-        'ticket_id': ticket.ticket_id,
-        'ticket_title': ticket.title,
-        'project_name': ticket.project.name,
-        'priority': ticket.get_priority_display(),
-        'ticket_url': ticket_url,
-    }
-
-
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+@shared_task(
+    bind=True,
+    max_retries=3,
+    default_retry_delay=10,
+    acks_late=True,
+    autoretry_for=(Exception,),
+)
 def send_ticket_assignment_email(self, assignee_id, ticket_id, assigned_by_id):
     from apps.tickets.models import Ticket
     from apps.users.models import User
@@ -50,16 +41,14 @@ def send_ticket_assignment_email(self, assignee_id, ticket_id, assigned_by_id):
         )
         return
 
-    context = _build_assignment_context(assignee, ticket, assigned_by)
-    subject = f"You were assigned to {ticket.ticket_id}: {ticket.title}"
-    text_body = render_to_string(
-        'notifications/emails/ticket_assigned.txt',
-        context,
+    context = build_assignment_email_context(
+        assignee=assignee,
+        ticket=ticket,
+        assigned_by=assigned_by,
     )
-    html_body = render_to_string(
-        'notifications/emails/ticket_assigned.html',
-        context,
-    )
+    html_body = render_to_string('emails/ticket_assigned.html', context)
+    text_body = render_to_string('emails/ticket_assigned.txt', context)
+    subject = f'{context["assigner_name"]} assigned you to {ticket.ticket_id}'
 
     try:
         message = EmailMultiAlternatives(

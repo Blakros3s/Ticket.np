@@ -1,0 +1,18 @@
+Hi {{ assignee_greeting }},
+
+{{ assigner_name }} just assigned you a ticket on {{ project_name }}.
+
+Ticket: {{ ticket_id }}
+{{ ticket_title }}
+Priority: {{ priority }}
+
+{% if ticket_url %}Open ticket: {{ ticket_url }}
+
+{% else %}Sign in to TicketHub when you're ready — the ticket will be waiting for you there.
+
+{% endif %}Thanks,
+The TicketHub team
+
+—
+Technest Innovations
+{{ website_url }}

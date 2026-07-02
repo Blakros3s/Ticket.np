@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}TicketHub{% endblock %}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#1e293b;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9;padding:32px 16px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
+                    <tr>
+                        <td style="padding:28px 32px 16px;background:linear-gradient(135deg,#0ea5e9,#6366f1);">
+                            <p style="margin:0;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.85);">TicketHub</p>
+                            <h1 style="margin:8px 0 0;font-size:22px;font-weight:700;color:#ffffff;">{% block headline %}Ticket update{% endblock %}</h1>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:28px 32px;">
+                            {% block content %}{% endblock %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:20px 32px 28px;border-top:1px solid #e2e8f0;background-color:#f8fafc;">
+                            <p style="margin:0 0 8px;font-size:13px;color:#64748b;">
+                                Sent by <strong style="color:#334155;">Technest Innovations</strong>
+                            </p>
+                            <p style="margin:0;font-size:13px;">
+                                <a href="{{ website_url }}" style="color:#0ea5e9;text-decoration:none;">technestinnovations.com.np</a>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

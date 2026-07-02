@@ -71,11 +71,42 @@ class TicketAssignmentEmailTestCase(TestCase):
         self.assertEqual(Notification.objects.filter(user=self.assignee, ticket_id=ticket.id).count(), 1)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [self.assignee.email])
-        self.assertIn(ticket.ticket_id, mail.outbox[0].subject)
+        self.assertEqual(
+            mail.outbox[0].subject,
+            f'assigner assigned you to {ticket.ticket_id}',
+        )
+        self.assertIn(ticket.ticket_id, mail.outbox[0].body)
         self.assertIn(
             f'/protected/dashboard/tickets/{ticket.id}',
-            mail.outbox[0].body,
+            mail.outbox[0].alternatives[0][0],
         )
+        self.assertEqual(mail.outbox[0].content_subtype, 'plain')
+        self.assertEqual(len(mail.outbox[0].alternatives), 1)
+
+    @override_settings(
+        FRONTEND_URL='http://localhost:3000',
+        WEBSITE_URL='https://technestinnovations.com.np',
+    )
+    def test_create_ticket_email_uses_website_url_in_dev(self):
+        mail.outbox.clear()
+        self.client.force_authenticate(user=self.assigner)
+        response = self.client.post(
+            '/api/tickets/tickets/',
+            {
+                'title': 'Dev Environment Ticket',
+                'description': 'Use public website link in email body',
+                'type': 'bug',
+                'priority': 'medium',
+                'project': self.project.id,
+                'assignees': [self.assignee.id],
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertNotIn('localhost', mail.outbox[0].body.lower())
+        self.assertIn('technestinnovations.com.np', mail.outbox[0].body)
+        self.assertIn("Sign in to TicketHub when you're ready", mail.outbox[0].body)
 
     def test_patch_adds_assignee_email(self):
         mail.outbox.clear()
