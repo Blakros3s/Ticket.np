@@ -10,8 +10,11 @@ def generate_ticket_id():
     return f"TKT-{timezone.now().strftime('%Y%m%d')}-{''.join(random.choices(string.digits, k=4))}"
 
 
+from apps.core.media_paths import tenant_scoped_upload_path
+
+
 def ticket_media_upload_path(instance, filename):
-    return f'ticket_media/{instance.ticket.id}/{filename}'
+    return tenant_scoped_upload_path(f'ticket_media/{instance.ticket.id}/{filename}')
 
 
 class Ticket(models.Model):

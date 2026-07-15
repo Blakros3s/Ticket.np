@@ -15,25 +15,33 @@ The `populate.py` script creates:
 ## Prerequisites
 
 - Docker containers must be running (`docker-compose up -d`)
-- Database migrations must be applied
+- Database migrations must be applied (handled by backend entrypoint)
+- `populate_db` runs inside a **tenant schema** (default: `main`) — it creates the tenant automatically if missing
 
 ## Usage
 
 ### Running the Populate Script
 
 ```bash
-# Add data (keeps existing data)
+# Add data (keeps existing data) — default tenant schema: main
 python manage.py populate_db
 
-# Clear all data and repopulate (recommended for fresh start)
+# Clear tenant data and repopulate
 python manage.py populate_db --clear
 
-# With Docker (replace container name with your backend container)
-docker exec -it ticketnp_backend python manage.py populate_db --clear
+# Use a different tenant schema
+python manage.py populate_db --clear --schema=main
 
 # With Docker Compose
 docker compose -f docker/docker-compose.base.yml -f docker/docker-compose.dev.yml exec backend python manage.py populate_db --clear
 ```
+
+### Login after populate
+
+- **Login address:** `admin@technest.com` (local username + `@` + tenant login domain)
+- **Password (all users):** `technest2026`
+
+Tenant admins can change the login domain at `PATCH /api/auth/organization/` — all user login addresses update automatically (e.g. `admin@technest.com` → `admin@tech.com`).
 
 ### What Gets Created
 
@@ -41,17 +49,17 @@ docker compose -f docker/docker-compose.base.yml -f docker/docker-compose.dev.ym
 
 The script creates the following users:
 
+**All users (admin, managers, employees):**
+- Password: `technest2026`
+
 **Admin:**
 - Username: `admin`
-- Password: `admin123`
 
 **Managers:**
 - Username: `manager1` - `manager3`
-- Password: `manager123`
 
 **Employees:**
 - Username: `employee1` - `employee6`
-- Password: `employee123`
 
 All users have realistic names and email addresses like `john.smith@tickethub.com`.
 
@@ -164,7 +172,7 @@ ActivityLog.objects.all().delete()
 ### Access Django Admin
 
 1. Go to http://localhost:8000/admin/
-2. Login with admin credentials (admin/admin123)
+2. Login with admin credentials (admin / technest2026)
 3. View and manage all created data
 
 ### API Access

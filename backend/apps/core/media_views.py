@@ -3,10 +3,11 @@ import os
 from django.conf import settings
 from django.http import FileResponse, Http404
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import AllowAny
 
 from apps.core.access import user_can_access_project, user_can_access_ticket
+from apps.core.media_paths import assert_media_schema_access, parse_scoped_media_path
 from apps.core.media_utils import verify_media_signature
 from apps.projects.models import Project
 from apps.tickets.models import Ticket
@@ -30,32 +31,25 @@ def _authorize_media_access(request, path: str) -> None:
     if not user or not user.is_authenticated:
         raise PermissionDenied('Authentication required.')
 
-    if path.startswith('ticket_media/'):
-        parts = path.split('/')
-        if len(parts) < 2:
-            raise PermissionDenied('Invalid ticket media path.')
+    try:
+        schema_name, media_type, resource_id = parse_scoped_media_path(path)
+    except ValueError as exc:
+        raise PermissionDenied('Invalid media path.') from exc
+
+    assert_media_schema_access(schema_name)
+
+    if media_type == 'ticket_media':
         try:
-            ticket_id = int(parts[1])
-        except ValueError as exc:
-            raise PermissionDenied('Invalid ticket media path.') from exc
-        try:
-            ticket = Ticket.objects.select_related('project').get(pk=ticket_id)
+            ticket = Ticket.objects.select_related('project').get(pk=resource_id)
         except Ticket.DoesNotExist as exc:
             raise Http404('Media not found.') from exc
         if not user_can_access_ticket(user, ticket):
             raise PermissionDenied('You do not have access to this file.')
         return
 
-    if path.startswith('project_documents/'):
-        parts = path.split('/')
-        if len(parts) < 2:
-            raise PermissionDenied('Invalid project document path.')
+    if media_type == 'project_documents':
         try:
-            project_id = int(parts[1])
-        except ValueError as exc:
-            raise PermissionDenied('Invalid project document path.') from exc
-        try:
-            project = Project.objects.get(pk=project_id)
+            project = Project.objects.get(pk=resource_id)
         except Project.DoesNotExist as exc:
             raise Http404('Media not found.') from exc
         if not user_can_access_project(user, project):

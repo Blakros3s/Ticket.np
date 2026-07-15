@@ -54,12 +54,14 @@ class TodoItem(models.Model):
         return f"{self.title} ({self.get_priority_display()})"
     
     def save(self, *args, **kwargs):
-        # Auto-update status based on completion
-        if self.is_completed and not self.completed_at:
-            from django.utils import timezone
-            self.completed_at = timezone.now()
-            self.status = 'completed'
-        elif not self.is_completed and self.status == 'completed':
+        from django.utils import timezone
+
+        if self.status == 'completed':
+            self.is_completed = True
+            if not self.completed_at:
+                self.completed_at = timezone.now()
+        else:
+            self.is_completed = False
             self.completed_at = None
-            self.status = 'pending'
+
         super().save(*args, **kwargs)

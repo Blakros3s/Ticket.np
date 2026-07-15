@@ -20,7 +20,6 @@ export default function SettingsPage() {
     office_start_time: '10:00',
     office_end_time: '17:00',
     auto_mark_absent: true,
-    user_terminology: 'employee' as 'employee' | 'developer',
     weekend_holidays: 'saturday' as 'saturday' | 'sunday' | 'both',
   });
 
@@ -50,7 +49,6 @@ export default function SettingsPage() {
         office_start_time: data.office_start_time,
         office_end_time: data.office_end_time,
         auto_mark_absent: data.auto_mark_absent,
-        user_terminology: data.user_terminology,
         weekend_holidays: data.weekend_holidays ?? 'saturday',
       });
     } catch (error) {
@@ -90,7 +88,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div className="page-container">
       {toast && (
         <div className={`fixed top-20 right-4 z-50 px-6 py-3 rounded-lg shadow-lg ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
           } text-white`}>
@@ -100,17 +98,17 @@ export default function SettingsPage() {
 
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-2">
-          <Link href="/protected/dashboard" className="text-slate-400 hover:text-white">Dashboard</Link>
+          <Link href="/protected/dashboard" className="breadcrumb">Dashboard</Link>
           <span className="text-slate-500">/</span>
           <span className="text-white">Settings</span>
         </div>
-        <h1 className="text-3xl font-bold text-white">Office Settings</h1>
-        <p className="text-slate-400 mt-1">Configure office hours and attendance policies</p>
+        <h1 className="page-title text-3xl font-bold">Office Settings</h1>
+        <p className="page-subtitle mt-1">Configure office hours and attendance policies</p>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: 'var(--accent)' }}></div>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -131,7 +129,7 @@ export default function SettingsPage() {
                     className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                   <p className="text-xs text-slate-500 mt-1">
-                    Employees can start marking attendance from this time
+                    Developers can start marking attendance from this time
                   </p>
                 </div>
                 <div>
@@ -162,24 +160,6 @@ export default function SettingsPage() {
                 <label htmlFor="auto_mark_absent" className="text-slate-300 cursor-pointer text-sm">
                   Automatically mark absent after office hours end
                 </label>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  User Terminology Preference
-                </label>
-                <select
-                  value={formData.user_terminology}
-                  onChange={(e) => setFormData({ ...formData, user_terminology: e.target.value as 'employee' | 'developer' })}
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
-                >
-                  <option value="employee">Employee (Standard)</option>
-                  <option value="developer">Developer (IT Focused)</option>
-                </select>
-                <p className="text-xs text-slate-500 mt-2">
-                  Choose how staff are referred to throughout the application. 
-                  Currently using: <span className="text-sky-400 font-medium">{terminology.label}</span>
-                </p>
               </div>
 
               <div>
@@ -232,7 +212,7 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <div className="p-4 bg-slate-900/50 rounded-lg">
                   <p className="text-slate-400 text-sm mb-1">Office Hours</p>
-                  <p className="text-2xl font-bold text-white">
+                  <p className="page-title text-2xl font-bold">
                     {formatTime(settings.office_start_time)} - {formatTime(settings.office_end_time)}
                   </p>
                 </div>
@@ -269,7 +249,7 @@ export default function SettingsPage() {
                     )}
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    When enabled, employees who haven&apos;t marked attendance by end of office hours will be automatically marked absent
+                    When enabled, developers who haven&apos;t marked attendance by end of office hours will be automatically marked absent
                   </p>
                 </div>
 

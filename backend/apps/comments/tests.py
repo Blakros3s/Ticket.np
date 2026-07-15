@@ -23,7 +23,9 @@ class CommentAPITestCase(TestCase):
             username='employee2',
             email='employee2@test.com',
             password='employeepass123',
-            role='employee'
+            role='employee',
+            first_name='Jane',
+            last_name='Reviewer',
         )
         
         # Create project and ticket
@@ -161,4 +163,23 @@ class CommentAPITestCase(TestCase):
         )
         self.assertFalse(
             Notification.objects.filter(user=self.employee_user).exists()
+        )
+
+    def test_mention_by_full_name_creates_notification(self):
+        """Mentioning @Full Name notifies that project member."""
+        self.client.force_authenticate(user=self.employee_user)
+        response = self.client.post(
+            '/api/comments/',
+            {
+                'ticket': self.ticket.id,
+                'content': 'Hey @Jane Reviewer please review this fix.',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.another_employee,
+                ticket_id=self.ticket.id,
+            ).exists()
         )

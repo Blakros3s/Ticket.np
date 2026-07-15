@@ -115,7 +115,7 @@ function TicketsList() {
   const totalPages = Math.ceil(totalCount / 20);
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div className="page-container">
       {/* Toast */}
       {toast && (
         <div className={`fixed top-20 right-4 z-50 px-6 py-3 rounded-lg shadow-lg ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white`}>
@@ -124,55 +124,118 @@ function TicketsList() {
       )}
 
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <div className="flex items-center gap-2 mb-2">
-          <Link href="/protected/dashboard" className="text-slate-400 hover:text-white">Dashboard</Link>
+          <Link href="/protected/dashboard" className="breadcrumb">Dashboard</Link>
           <span className="text-slate-500">/</span>
           <span className="text-white">Tickets</span>
         </div>
-        <h1 className="text-3xl font-bold text-white">Tickets</h1>
-        <p className="text-slate-400 mt-1">Track and manage issues, tasks, and features</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="page-title text-3xl font-bold">Tickets</h1>
+            <p className="page-subtitle mt-1">Track and manage issues, tasks, and features</p>
+          </div>
+          <nav className="ticket-view-nav" aria-label="Ticket views">
+            <Link href="/protected/dashboard/tickets" className="ticket-view-nav__link ticket-view-nav__link--active">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              All Tickets
+            </Link>
+            <Link href="/protected/dashboard/my-tickets" className="ticket-view-nav__link">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              My Tickets
+            </Link>
+          </nav>
+        </div>
       </div>
 
-      {/* Search and New Ticket */}
-      <div className="mb-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1 search-input flex items-center">
-            <div className="pl-4 flex items-center pointer-events-none">
-              <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <input
-              type="text"
-              placeholder="Search tickets by title, ID, or description..."
-              className="w-full bg-transparent border-0 pl-3 pr-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-0"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="pr-4 text-slate-400 hover:text-white"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
+      {/* Search, filters, and new ticket — single row */}
+      <div className="filter-bar ticket-toolbar mb-6">
+        <div className="relative ticket-toolbar__search search-input flex items-center">
+          <div className="pl-3 flex items-center pointer-events-none">
+            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
           </div>
-          {projects.length > 0 && (
-            <Link
-              href="/protected/dashboard/tickets/new"
-              className="btn-primary flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg whitespace-nowrap font-medium"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          <input
+            type="text"
+            placeholder="Search tickets..."
+            className="w-full bg-transparent border-0 pl-2 pr-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-0"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="pr-3 text-slate-400 hover:text-white">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
-              New Ticket
-            </Link>
+            </button>
           )}
         </div>
+
+        <select
+          className="input-field ticket-filter-select"
+          value={priorityFilter}
+          onChange={(e) => setPriorityFilter(e.target.value as TicketPriority)}
+          aria-label="Filter by priority"
+        >
+          <option value="">All Priority</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+
+        <select
+          className="input-field ticket-filter-select"
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value as TicketType)}
+          aria-label="Filter by type"
+        >
+          <option value="">All Types</option>
+          <option value="bug">Bug</option>
+          <option value="task">Task</option>
+          <option value="feature">Feature</option>
+        </select>
+
+        <select
+          className="input-field ticket-filter-select"
+          value={projectFilter}
+          onChange={(e) => setProjectFilter(e.target.value ? Number(e.target.value) : '')}
+          aria-label="Filter by project"
+        >
+          <option value="">All Projects</option>
+          {projects.map(p => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+
+        {(statusFilter || priorityFilter || typeFilter || projectFilter || searchQuery) && (
+          <button
+            onClick={clearFilters}
+            className="px-2 py-2 text-slate-400 hover:text-white transition-colors flex items-center gap-1 text-sm flex-shrink-0"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Clear
+          </button>
+        )}
+
+        {projects.length > 0 && (
+          <Link
+            href="/protected/dashboard/tickets/new"
+            className="btn-primary flex items-center gap-1.5 px-4 py-2 rounded-lg whitespace-nowrap text-sm font-medium flex-shrink-0"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New
+          </Link>
+        )}
       </div>
 
       {/* Status Tabs */}
@@ -204,57 +267,6 @@ function TicketsList() {
         })}
       </div>
 
-      {/* Additional Filters */}
-      <div className="filter-bar mb-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <select
-              className="input-field min-w-[130px]"
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value as TicketPriority)}
-            >
-              <option value="">All Priority</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
-
-            <select
-              className="input-field min-w-[120px]"
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as TicketType)}
-            >
-              <option value="">All Types</option>
-              <option value="bug">Bug</option>
-              <option value="task">Task</option>
-              <option value="feature">Feature</option>
-            </select>
-
-            <select
-              className="input-field min-w-[140px]"
-              value={projectFilter}
-              onChange={(e) => setProjectFilter(e.target.value ? Number(e.target.value) : '')}
-            >
-              <option value="">All Projects</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-
-            {(statusFilter || priorityFilter || typeFilter || projectFilter || searchQuery) && (
-              <button
-                onClick={clearFilters}
-                className="px-3 py-2 text-slate-400 hover:text-white transition-colors flex items-center gap-1.5 text-sm"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                Clear
-              </button>
-            )}
-        </div>
-      </div>
-
       {/* Tickets List */}
       <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
         {loading && tickets.length === 0 ? (
@@ -280,11 +292,9 @@ function TicketsList() {
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Ticket</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Priority</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Type</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Priority · Type · Project</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Created By</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Assignee</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Project</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
@@ -304,12 +314,17 @@ function TicketsList() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${priorityColors[ticket.priority]}`}>
-                        {ticket.priority.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-slate-300 capitalize">{ticket.type}</span>
+                      <div className="ticket-meta-line">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${priorityColors[ticket.priority]}`}>
+                          {ticket.priority.toUpperCase()}
+                        </span>
+                        <span className="ticket-meta-line__sep">·</span>
+                        <span className="text-xs text-slate-300 capitalize">{ticket.type}</span>
+                        <span className="ticket-meta-line__sep">·</span>
+                        <span className="text-xs text-slate-400 truncate max-w-[10rem]" title={ticket.project_name}>
+                          {ticket.project_name}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-slate-300">{ticket.created_by}</span>
@@ -333,9 +348,6 @@ function TicketsList() {
                       ) : (
                         <span className="text-sm text-slate-500 italic">Unassigned</span>
                       )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-slate-300">{ticket.project_name}</span>
                     </td>
                   </tr>
                 ))}

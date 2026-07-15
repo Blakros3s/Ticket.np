@@ -21,7 +21,7 @@ class UserRole(models.Model):
 class User(AbstractUser):
     ROLE_CHOICES = [
         ('admin', 'Admin'),
-        ('employee', 'Employee'),
+        ('employee', 'Developer'),
         ('manager', 'Manager'),
     ]
     

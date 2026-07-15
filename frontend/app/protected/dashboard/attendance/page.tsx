@@ -198,7 +198,7 @@ export default function AttendancePage() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div className="page-container">
       {toast && (
         <div className={`fixed top-20 right-4 z-50 px-6 py-3 rounded-lg shadow-lg ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white`}>
           {toast.message}
@@ -208,19 +208,19 @@ export default function AttendancePage() {
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-2">
-          <Link href="/protected/dashboard" className="text-slate-400 hover:text-white">Dashboard</Link>
+          <Link href="/protected/dashboard" className="breadcrumb">Dashboard</Link>
           <span className="text-slate-500">/</span>
           <span className="text-white">Attendance</span>
         </div>
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white">Attendance</h1>
-            <p className="text-slate-400 mt-1">Manage your availability and view team status</p>
+            <h1 className="page-title text-3xl font-bold">Attendance</h1>
+            <p className="page-subtitle mt-1">Manage your availability and view team status</p>
           </div>
           {officeSettings && (
             <div className="text-right">
               <p className="text-sm text-slate-400">Office Hours</p>
-              <p className="text-lg font-semibold text-white">
+              <p className="surface-panel-title">
                 {formatTime(officeSettings.office_start_time)} - {formatTime(officeSettings.office_end_time)}
               </p>
               {officeHoursEnded && <span className="text-xs text-red-400 block">Office hours have ended</span>}
@@ -232,7 +232,7 @@ export default function AttendancePage() {
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: 'var(--accent)' }}></div>
         </div>
       ) : (myAttendance as any)?.is_working_day === false ? (
         <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-12 text-center">
@@ -258,7 +258,7 @@ export default function AttendancePage() {
                   <div className={`w-4 h-4 rounded-full ${getStatusColor(myAttendance?.current_availability || 'neutral')}`}></div>
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-white">My Status Today</h2>
+                  <h2 className="dashboard-section-title">My Status Today</h2>
                   <div className="flex items-center gap-2 mt-1">
                     {isAvailable ? (
                       <span className="text-green-400 flex items-center gap-1">
@@ -447,7 +447,7 @@ export default function AttendancePage() {
               <div className="bg-slate-800/30 rounded-xl border border-slate-700/50 p-5">
                 <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Working Days</p>
                 <div className="flex items-baseline gap-2">
-                  <p className="text-3xl font-bold text-white">{attendanceStats.total_working_days}</p>
+                  <p className="page-title text-3xl font-bold">{attendanceStats.total_working_days}</p>
                   <p className="text-xs text-slate-500">days</p>
                 </div>
                 <p className="text-[10px] text-slate-600 mt-1">Scheduled working days (excl. weekends & holidays)</p>
@@ -487,7 +487,7 @@ export default function AttendancePage() {
             <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 mb-8 overflow-hidden">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-xl font-semibold text-white">Team Performance Report</h2>
+                  <h2 className="dashboard-section-title">Team Performance Report</h2>
                   <p className="text-xs text-slate-500 mt-1">Aggregated attendance metrics across the selected period</p>
                 </div>
                 <span className="px-3 py-1 bg-sky-500/10 text-sky-400 text-[10px] uppercase tracking-widest font-bold rounded-full border border-sky-500/20">Administrative View</span>

@@ -33,7 +33,9 @@ class RateLimitMiddleware:
             window = 60  # per 60 seconds
         
         # Check rate limit
-        cache_key = f'ratelimit:{client_id}:{request.path}'
+        schema = getattr(request, 'tenant', None)
+        schema_name = getattr(schema, 'schema_name', 'public') if schema else 'public'
+        cache_key = f'ratelimit:{schema_name}:{client_id}:{request.path}'
         current = cache.get(cache_key, 0)
         
         if current >= limit:

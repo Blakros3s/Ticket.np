@@ -1,11 +1,16 @@
-from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from apps.core.views import health_check
+from apps.platform.admin_site import platform_admin_site
+
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('admin/', platform_admin_site.urls),
+    path('health/', health_check, name='health_check'),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='docs'),
     path('api/auth/', include('apps.users.urls')),
+    path('api/server/auth/', include('apps.platform.urls')),
+    path('api/server/', include('apps.customers.urls')),
     path('api/projects/', include('apps.projects.urls')),
     path('api/tickets/', include('apps.tickets.urls')),
     path('api/timelogs/', include('apps.timelogs.urls')),

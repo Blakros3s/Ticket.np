@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 export default function HomePage() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -17,7 +18,7 @@ export default function HomePage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-950">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: 'var(--accent)' }}></div>
       </div>
     );
   }
@@ -37,7 +38,8 @@ export default function HomePage() {
               </div>
               <span className="text-xl font-bold gradient-text">TechnestHub</span>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
               <Link
                 href="/auth/login"
                 className="btn-primary px-5 py-2 rounded-lg text-sm font-medium text-white shadow-lg"

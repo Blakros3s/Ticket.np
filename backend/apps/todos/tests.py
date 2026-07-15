@@ -69,6 +69,45 @@ class TodoItemAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.todo.refresh_from_db()
         self.assertEqual(self.todo.title, 'Updated Todo')
+
+    def test_update_status(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.patch(
+            f'/api/todos/todos/{self.todo.id}/',
+            {'status': 'in_progress'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.todo.refresh_from_db()
+        self.assertEqual(self.todo.status, 'in_progress')
+        self.assertFalse(self.todo.is_completed)
+
+    def test_update_status_to_completed(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.patch(
+            f'/api/todos/todos/{self.todo.id}/',
+            {'status': 'completed'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.todo.refresh_from_db()
+        self.assertEqual(self.todo.status, 'completed')
+        self.assertTrue(self.todo.is_completed)
+        self.assertIsNotNone(self.todo.completed_at)
+
+    def test_update_status_from_completed(self):
+        self.client.force_authenticate(user=self.user)
+        self.todo.is_completed = True
+        self.todo.status = 'completed'
+        self.todo.save()
+
+        response = self.client.patch(
+            f'/api/todos/todos/{self.todo.id}/',
+            {'status': 'in_progress'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.todo.refresh_from_db()
+        self.assertEqual(self.todo.status, 'in_progress')
+        self.assertFalse(self.todo.is_completed)
+        self.assertIsNone(self.todo.completed_at)
     
     def test_cannot_update_other_user_todo(self):
         self.client.force_authenticate(user=self.user)

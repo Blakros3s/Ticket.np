@@ -26,8 +26,11 @@ log "Collecting static files..."
 python manage.py collectstatic --noinput --clear || log "Warning: collectstatic failed"
 
 # Run database migrations
-log "Applying database migrations..."
-python manage.py migrate --noinput
+log "Applying shared schema migrations..."
+python manage.py migrate_schemas --shared --noinput
+
+log "Applying tenant schema migrations..."
+python manage.py migrate_schemas --noinput
 
 log "Starting application: $@"
 exec "$@"

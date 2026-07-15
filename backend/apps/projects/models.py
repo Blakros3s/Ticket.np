@@ -42,8 +42,11 @@ class ProjectMember(models.Model):
         return f"{self.user.username} - {self.project.name}"
 
 
+from apps.core.media_paths import tenant_scoped_upload_path
+
+
 def upload_to(instance, filename):
-    return f'project_documents/{instance.project.id}/{filename}'
+    return tenant_scoped_upload_path(f'project_documents/{instance.project.id}/{filename}')
 
 
 class ProjectDocument(models.Model):

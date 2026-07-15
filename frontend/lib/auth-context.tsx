@@ -2,8 +2,9 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { User } from './auth';
+import { User, TenantInfo } from './auth';
 import { authApi } from './auth';
+import { TENANT_SCHEMA_KEY } from './api';
 
 interface AuthContextType {
   user: User | null;
@@ -45,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (statusCode === 401 || statusCode === 403) {
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
+          localStorage.removeItem(TENANT_SCHEMA_KEY);
         }
       }
     }
@@ -53,9 +55,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (username: string, password: string) => {
     try {
-      const response = await authApi.login({ username, password });
+      const response = await authApi.login({
+        username: username.trim(),
+        password: password.trim(),
+      });
       localStorage.setItem('access_token', response.access);
       localStorage.setItem('refresh_token', response.refresh);
+      localStorage.setItem(TENANT_SCHEMA_KEY, response.tenant.schema_name);
       setUser(response.user);
     } catch (error: any) {
       console.error('Login error:', error);

@@ -125,7 +125,7 @@ export function AttendanceMonthCalendar() {
     <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 mb-8">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-white">Attendance History</h2>
+          <h2 className="dashboard-section-title">Attendance History</h2>
           <p className="text-xs text-slate-500 mt-1">Monthly calendar view with present/absent status</p>
         </div>
 

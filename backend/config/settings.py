@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
+from corsheaders.defaults import default_headers
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -15,23 +16,30 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOW_PUBLIC_REGISTRATION = config('ALLOW_PUBLIC_REGISTRATION', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,.localhost').split(',')
 
-INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
+SHARED_APPS = [
+    'django_tenants',
+    'apps.customers',
+    'apps.platform',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
+    'django.contrib.admin',
     'rest_framework',
-    'rest_framework_simplejwt',
     'corsheaders',
     'drf_spectacular',
     'django_filters',
+    'whitenoise',
+]
+
+TENANT_APPS = [
+    'django.contrib.contenttypes',
+    'django.contrib.auth',
+    'django.contrib.admin',
+    'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
-    
     'apps.users',
     'apps.projects',
     'apps.tickets',
@@ -46,7 +54,12 @@ INSTALLED_APPS = [
     'apps.notifications',
 ]
 
+INSTALLED_APPS = list(SHARED_APPS) + [
+    app for app in TENANT_APPS if app not in SHARED_APPS
+]
+
 MIDDLEWARE = [
+    'apps.customers.middleware.TenantResolutionMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -59,6 +72,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'config.urls'
+PUBLIC_SCHEMA_URLCONF = 'config.urls_public'
 
 TEMPLATES = [
     {
@@ -80,7 +94,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
+        'ENGINE': 'django_tenants.postgresql_backend',
         'NAME': config('POSTGRES_DB'),
         'USER': config('POSTGRES_USER'),
         'PASSWORD': config('POSTGRES_PASSWORD'),
@@ -89,6 +103,14 @@ DATABASES = {
         'ATOMIC_REQUESTS': True,
     }
 }
+
+DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
+
+TENANT_MODEL = 'customers.Client'
+TENANT_DOMAIN_MODEL = 'customers.Domain'
+PUBLIC_SCHEMA_NAME = 'public'
+SHOW_PUBLIC_IF_NO_TENANT_FOUND = config('SHOW_PUBLIC_IF_NO_TENANT_FOUND', default=True, cast=bool)
+SHARED_APP_DOMAIN = config('SHARED_APP_DOMAIN', default='localhost')
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -117,9 +139,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.User'
 
+AUTHENTICATION_BACKENDS = [
+    'apps.platform.backends.PlatformAdminBackend',
+    'apps.platform.backends.TenantAwareModelBackend',
+]
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'apps.users.authentication.TenantJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -148,6 +175,10 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000,http://localhost:3001').split(',')
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = (
+    *default_headers,
+    'x-tenant-schema',
+)
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'TicketHub API',

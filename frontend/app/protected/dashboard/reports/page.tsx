@@ -93,7 +93,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div className="page-container">
       {error && (
         <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
           <p className="text-red-400">{error}</p>
@@ -108,8 +108,8 @@ export default function ReportsPage() {
             <span className="text-slate-500">/</span>
             <span className="text-white">Reports & Analytics</span>
           </div>
-          <h1 className="text-3xl font-bold text-white">Reports & Analytics</h1>
-          <p className="text-slate-400 mt-1">Detailed insights and performance metrics</p>
+          <h1 className="page-title text-3xl font-bold">Reports & Analytics</h1>
+          <p className="page-subtitle mt-1">Detailed insights and performance metrics</p>
         </div>
         
         <div className="flex items-center gap-2">

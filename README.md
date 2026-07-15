@@ -21,6 +21,6 @@ docker-compose up -d
 # Run migrations
 docker-compose exec backend python manage.py migrate
 
-# Create superuser
+# Create platform server admin (public schema — manages tenants & subscriptions)
 docker-compose exec backend python manage.py createsuperuser
 ```

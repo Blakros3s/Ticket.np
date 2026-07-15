@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { attendanceApi, LeaveRequest } from '@/lib/attendance';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
+import { useSettings } from '@/lib/settings-context';
 
 export default function LeavePage() {
   const { user, isLoading: authLoading } = useAuth();
+  const { terminology } = useSettings();
   const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager';
 
   const [loading, setLoading] = useState(true);
@@ -166,7 +168,7 @@ export default function LeavePage() {
   const myPendingCount = leaveRequests.filter(r => r.status === 'pending' && r.employee.id === user?.id).length;
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div className="page-container">
       {toast && (
         <div className={`fixed top-20 right-4 z-50 px-6 py-3 rounded-lg shadow-lg ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
           } text-white`}>
@@ -176,12 +178,12 @@ export default function LeavePage() {
 
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-2">
-          <Link href="/protected/dashboard" className="text-slate-400 hover:text-white">Dashboard</Link>
+          <Link href="/protected/dashboard" className="breadcrumb">Dashboard</Link>
           <span className="text-slate-500">/</span>
           <span className="text-white">Leave Management</span>
         </div>
-        <h1 className="text-3xl font-bold text-white">Leave Management</h1>
-        <p className="text-slate-400 mt-1">
+        <h1 className="page-title text-3xl font-bold">Leave Management</h1>
+        <p className="page-subtitle mt-1">
           {isAdminOrManager
             ? 'Review and approve leave requests from your team'
             : 'Apply for leave and track your leave requests'}
@@ -190,7 +192,7 @@ export default function LeavePage() {
 
       {loading ? (
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: 'var(--accent)' }}></div>
         </div>
       ) : (
         <>
@@ -208,7 +210,7 @@ export default function LeavePage() {
                 </div>
                 <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
                   <p className="text-slate-400 text-sm">Total Requests</p>
-                  <p className="text-3xl font-bold text-white">{leaveRequests.length}</p>
+                  <p className="page-title text-3xl font-bold">{leaveRequests.length}</p>
                 </div>
               </>
             ) : (
@@ -225,7 +227,7 @@ export default function LeavePage() {
                 </div>
                 <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
                   <p className="text-slate-400 text-sm">Total Requests</p>
-                  <p className="text-3xl font-bold text-white">{leaveRequests.length}</p>
+                  <p className="page-title text-3xl font-bold">{leaveRequests.length}</p>
                 </div>
               </>
             )}
@@ -259,7 +261,7 @@ export default function LeavePage() {
                 <thead className="bg-slate-700/50">
                   <tr>
                     {isAdminOrManager && (
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Employee</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">{terminology.label}</th>
                     )}
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Dates</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-400">Days</th>
@@ -369,12 +371,12 @@ export default function LeavePage() {
           <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-md">
             <div className="p-6 border-b border-slate-700">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white">
+                <h2 className="dashboard-section-title">
                   {isEditing ? 'Edit Leave Request' : 'Apply for Leave'}
                 </h2>
                 <button
                   onClick={() => setShowLeaveModal(false)}
-                  className="text-slate-400 hover:text-white"
+                  className="breadcrumb"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

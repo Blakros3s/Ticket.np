@@ -48,20 +48,20 @@ export function ErrorModal({
       ></div>
       
       {/* Modal Content */}
-      <div className="relative bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl transform transition-all animate-in fade-in zoom-in duration-200">
+      <div className="relative modal-panel p-6 max-w-md w-full shadow-2xl transform transition-all">
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
-            <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--danger-muted)', color: 'var(--danger)' }}>
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h3 className="text-xl font-bold text-white">{title}</h3>
+          <h3 className="modal-title">{title}</h3>
         </div>
         
         {/* Error Message */}
         <div className="mb-6">
-          <p className="text-slate-300 text-base leading-relaxed">
+          <p className="page-subtitle text-base leading-relaxed">
             {message}
           </p>
         </div>
@@ -70,7 +70,7 @@ export function ErrorModal({
         <div className="flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 py-3 px-4 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold transition-colors"
+            className="btn-secondary flex-1 py-3 px-4 rounded-xl font-semibold"
           >
             Close
           </button>
@@ -80,7 +80,7 @@ export function ErrorModal({
                 onClose();
                 onRetry();
               }}
-              className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-sky-500 to-violet-500 hover:from-sky-600 hover:to-violet-600 text-white font-semibold transition-all shadow-lg shadow-sky-500/25"
+              className="btn-primary flex-1 py-3 px-4 rounded-xl font-semibold"
             >
               {retryText}
             </button>
@@ -89,9 +89,9 @@ export function ErrorModal({
         
         {/* Status Code Badge */}
         {statusCode && (
-          <div className="mt-4 pt-4 border-t border-slate-700">
+          <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--border-subtle)' }}>
             <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-500">Status</span>
+              <span className="meta-text">Status</span>
               <span className={`px-2 py-1 rounded font-mono text-xs ${getStatusColor(statusCode)}`}>
                 {getStatusLabel(statusCode)}
               </span>
@@ -105,6 +105,13 @@ export function ErrorModal({
 
 // Helper function to extract error messages from API responses
 export function extractErrorMessage(error: any): { message: string; statusCode?: number } {
+  if (error?.name === 'ApiError' || typeof error?.statusCode === 'number') {
+    return {
+      message: error.message || 'An unexpected error occurred. Please try again.',
+      statusCode: error.statusCode,
+    };
+  }
+
   let message = 'An unexpected error occurred. Please try again.';
   let statusCode: number | undefined;
 
@@ -114,7 +121,7 @@ export function extractErrorMessage(error: any): { message: string; statusCode?:
 
     // Check for {detail: "message"} format
     if (data?.detail) {
-      message = data.detail;
+      message = Array.isArray(data.detail) ? data.detail[0] : data.detail;
     }
     // Check for {non_field_errors: ["message"]} format
     else if (data?.non_field_errors && Array.isArray(data.non_field_errors)) {
@@ -149,8 +156,6 @@ export function extractErrorMessage(error: any): { message: string; statusCode?:
       message = message || 'The requested resource was not found.';
     } else if (statusCode === 500) {
       message = message || 'Server error. Please try again later.';
-    } else if (statusCode === 0 || !statusCode) {
-      message = 'Network error. Please check your internet connection.';
     }
   } else if (error?.request) {
     // Request was made but no response
