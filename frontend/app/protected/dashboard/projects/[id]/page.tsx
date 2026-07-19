@@ -9,7 +9,6 @@ import { projectsApi, Project, ProjectDocument } from '@/lib/projects';
 import { authApi, User } from '@/lib/auth';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import * as mammoth from 'mammoth';
 import { FileUploadZone } from '@/components/file-upload-zone';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 
@@ -245,6 +244,7 @@ export default function ProjectDetailPage() {
       try {
         const response = await fetch(getFileUrl(doc.file));
         const arrayBuffer = await response.arrayBuffer();
+        const mammoth = await import('mammoth');
         const result = await mammoth.convertToHtml({ arrayBuffer });
         setViewingContent(result.value);
       } catch (error) {
@@ -299,10 +299,10 @@ export default function ProjectDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[70vh]">
-        <div className="relative">
-          <div className="w-16 h-16 border-4 border-slate-700 rounded-full"></div>
-          <div className="absolute top-0 left-0 w-16 h-16 border-4 border-transparent border-t-sky-500 rounded-full animate-spin"></div>
-        </div>
+        <div
+          className="animate-spin rounded-full h-8 w-8 border-2"
+          style={{ borderColor: 'var(--border-default)', borderTopColor: 'var(--accent)' }}
+        />
       </div>
     );
   }
@@ -315,41 +315,33 @@ export default function ProjectDetailPage() {
   );
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+    <div className="page-container max-w-6xl">
       {toast && (
-        <div className={`fixed top-6 right-4 z-[9999] px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 ${toast.type === 'success' ? 'bg-emerald-600 border border-emerald-500' : 'bg-red-600 border border-red-500'} text-white shadow-xl`}>
-          {toast.type === 'success' ? (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-          ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-          )}
-          <span className="text-sm font-medium">{toast.message}</span>
+        <div className={`toast ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
+          {toast.message}
         </div>
       )}
 
-      <nav className="flex items-center gap-2 text-sm mb-6">
-        <Link href="/protected/dashboard" className="text-slate-500 hover:text-sky-400 transition-colors">Dashboard</Link>
-        <span className="text-slate-600">›</span>
-        <Link href="/protected/dashboard/projects" className="text-slate-500 hover:text-sky-400 transition-colors">Projects</Link>
-        <span className="text-slate-600">›</span>
-        <span className="text-slate-300 truncate max-w-[150px]">{project.name}</span>
+      <nav className="breadcrumb mb-6">
+        <Link href="/protected/dashboard">Dashboard</Link>
+        <span className="breadcrumb-sep">›</span>
+        <Link href="/protected/dashboard/projects">Projects</Link>
+        <span className="breadcrumb-sep">›</span>
+        <span className="truncate max-w-[150px]">{project.name}</span>
       </nav>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-800 to-slate-900 border border-slate-700/50 p-6">
-            <div className="absolute top-0 right-0 w-40 h-40 bg-sky-500/10 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl"></div>
-
-            <div className="relative flex items-start justify-between">
+          <div className="project-hero">
+            <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-3">
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">{project.name}</h1>
-                  <span className={`px-3 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider ${project.status === 'active' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'}`}>
+                  <h1 className="project-hero-title">{project.name}</h1>
+                  <span className={`badge ${project.status === 'active' ? 'badge-success' : 'badge-warning'}`}>
                     {project.status}
                   </span>
                 </div>
-                <p className="text-slate-400 text-sm leading-relaxed mb-4 max-w-xl">
+                <p className="project-hero-desc mb-4">
                   {project.description || 'No description provided.'}
                 </p>
                 {project.github_repo && (
@@ -357,7 +349,8 @@ export default function ProjectDetailPage() {
                     href={project.github_repo}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 border border-slate-600/50 rounded-lg text-sm text-sky-400 transition-all mb-4"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm mb-4 transition-colors"
+                    style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}
                   >
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
@@ -365,13 +358,13 @@ export default function ProjectDetailPage() {
                     View Repository
                   </a>
                 )}
-                <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
+                <div className="flex flex-wrap items-center gap-4 meta-text">
                   <div className="flex items-center gap-1.5">
-                    <svg className="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                     <span>By {project.created_by.first_name} {project.created_by.last_name}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                     <span>{new Date(project.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
@@ -380,15 +373,17 @@ export default function ProjectDetailPage() {
                 {isManager && (
                   <button
                     onClick={() => setShowEditProject(true)}
-                    className="p-2.5 rounded-xl bg-slate-700/50 hover:bg-slate-700 text-slate-400 hover:text-white transition-all border border-slate-600/50 hover:border-slate-500"
+                    className="icon-btn"
+                    type="button"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                   </button>
                 )}
                 <button
                   onClick={handleDeleteProjectClick}
-                  className="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all border border-red-500/30"
+                  className="icon-btn icon-btn-danger"
                   title="Delete project"
+                  type="button"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -398,17 +393,17 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <svg className="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          <div className="surface-panel">
+            <div className="surface-panel-header">
+              <h2 className="surface-panel-title">
                 Team Members
-                <span className="text-xs font-medium text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full">{project.member_count}</span>
+                <span className="badge badge-neutral">{project.member_count}</span>
               </h2>
               {isManager && (
                 <button
                   onClick={() => setShowAddMember(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white text-xs font-semibold rounded-lg transition-all shadow-lg shadow-sky-500/20"
+                  className="btn-primary px-3 py-1.5 text-xs"
+                  type="button"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                   Add
@@ -417,33 +412,27 @@ export default function ProjectDetailPage() {
             </div>
 
             {project.members.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-slate-700/50 flex items-center justify-center">
-                  <svg className="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                </div>
-                <p className="text-slate-400 text-sm">No members yet</p>
+              <div className="empty-state py-8">
+                <p>No members yet</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+              <div className="space-y-2">
                 {project.members.map((member) => (
-                  <div
-                    key={member.id}
-                    className="group relative flex items-center gap-4 bg-slate-700/30 hover:bg-slate-700/60 border border-slate-600/30 hover:border-slate-500/50 rounded-2xl px-4 py-3 transition-all"
-                  >
+                  <div key={member.id} className="member-row group">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="text-sm font-bold text-white truncate">
+                        <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
                           {member.user.first_name} {member.user.last_name}
                         </p>
                         <div className="flex flex-wrap gap-1">
                           {member.user.department_roles && member.user.department_roles.length > 0 ? (
-                            member.user.department_roles.map(role => (
-                              <span key={role.id} className="text-[10px] text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-lg border border-sky-500/20">
+                            member.user.department_roles.map((role) => (
+                              <span key={role.id} className="badge badge-accent">
                                 {role.display_name}
                               </span>
                             ))
                           ) : (
-                            <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700 capitalize">
+                            <span className="badge badge-neutral capitalize">
                               {member.user.role}
                             </span>
                           )}
@@ -453,8 +442,9 @@ export default function ProjectDetailPage() {
                     {isManager && member.user.id !== project.created_by.id && (
                       <button
                         onClick={() => openRemoveMemberModal(member.user.id, member.user.username)}
-                        className="p-2 rounded-xl hover:bg-red-500/20 text-slate-500 hover:text-red-400 transition-all"
+                        className="icon-btn icon-btn-danger opacity-0 group-hover:opacity-100"
                         title="Remove member"
+                        type="button"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"></path></svg>
                       </button>
@@ -465,64 +455,57 @@ export default function ProjectDetailPage() {
             )}
           </div>
 
-          <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                Documents
-                <span className="text-xs font-medium text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full">{documents.length}</span>
+          <div className="surface-panel">
+            <div className="surface-panel-header">
+              <h2 className="surface-panel-title">
+                Files
+                <span className="badge badge-neutral">{documents.length}</span>
               </h2>
-              <button
+              <div className="flex items-center gap-2">
+                <Link href={`/protected/dashboard/docs?project=${projectId}`} className="btn-secondary px-3 py-1.5 text-xs">
+                  Docs
+                </Link>
+                <Link href={`/protected/dashboard/whiteboards?project=${projectId}`} className="btn-secondary px-3 py-1.5 text-xs">
+                  Whiteboards
+                </Link>
+                <button
                 onClick={() => setShowUploadDoc(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold rounded-lg transition-all shadow-lg shadow-amber-500/20"
+                className="btn-secondary px-3 py-1.5 text-xs"
+                type="button"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                 Upload
               </button>
+              </div>
             </div>
 
             {documents.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-slate-700/50 flex items-center justify-center">
-                  <svg className="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                </div>
-                <p className="text-slate-400 text-sm mb-2">No documents yet</p>
-                <p className="text-slate-500 text-xs">Upload PDF, Word, Markdown, or image files</p>
+              <div className="empty-state py-8">
+                <p className="mb-1">No documents yet</p>
+                <p className="meta-text">Upload PDF, Word, Markdown, or image files</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {documents.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="group flex items-center gap-3 p-3 bg-slate-700/30 hover:bg-slate-700/50 border border-slate-600/30 hover:border-slate-500/50 rounded-xl transition-all"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center shrink-0">
+                  <div key={doc.id} className="doc-row group">
+                    <div
+                      className="w-10 h-10 rounded-md flex items-center justify-center shrink-0"
+                      style={{ background: 'var(--bg-muted)' }}
+                    >
                       {getFileIcon(doc.file_type)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{doc.title}</p>
-                      <p className="text-xs text-slate-500">{formatFileSize(doc.file_size)} • {new Date(doc.created_at).toLocaleDateString()}</p>
+                      <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{doc.title}</p>
+                      <p className="meta-text">{formatFileSize(doc.file_size)} • {new Date(doc.created_at).toLocaleDateString()}</p>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => handleViewDoc(doc)}
-                        className="p-2 rounded-lg hover:bg-sky-500/20 text-slate-400 hover:text-sky-400 transition-colors"
-                        title="View"
-                      >
+                      <button onClick={() => handleViewDoc(doc)} className="icon-btn" title="View" type="button">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                       </button>
-                      <button
-                        onClick={() => handleDownload(doc)}
-                        className="p-2 rounded-lg hover:bg-green-500/20 text-slate-400 hover:text-green-400 transition-colors"
-                        title="Download"
-                      >
+                      <button onClick={() => handleDownload(doc)} className="icon-btn" title="Download" type="button">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                       </button>
-                      <button
-                        onClick={() => handleDeleteDocument(doc.id)}
-                        className="p-2 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors"
-                        title="Delete"
-                      >
+                      <button onClick={() => handleDeleteDocument(doc.id)} className="icon-btn icon-btn-danger" title="Delete" type="button">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                       </button>
                     </div>
@@ -534,94 +517,82 @@ export default function ProjectDetailPage() {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-gradient-to-br from-sky-500/20 to-purple-500/20 border border-sky-500/20 rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wider">Project Stats</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-400">Members</span>
-                <span className="text-lg font-bold text-white">{project.member_count}</span>
+          <div className="stats-sidebar">
+            <h3 className="stats-sidebar-title">Project Stats</h3>
+            <div className="space-y-1">
+              <div className="stats-row">
+                <span className="stats-row-label">Members</span>
+                <span className="stats-row-value">{project.member_count}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-400">Tickets</span>
-                <span className="text-lg font-bold text-white">{project.ticket_count || 0}</span>
+              <div className="stats-row">
+                <span className="stats-row-label">Tickets</span>
+                <span className="stats-row-value">{project.ticket_count || 0}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-400">Documents</span>
-                <span className="text-lg font-bold text-white">{documents.length}</span>
+              <div className="stats-row">
+                <span className="stats-row-label">Documents</span>
+                <span className="stats-row-value">{documents.length}</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-400">Status</span>
-                <span className={`text-xs font-semibold px-2 py-1 rounded-md ${project.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+              <div className="stats-row">
+                <span className="stats-row-label">Status</span>
+                <span className={`badge ${project.status === 'active' ? 'badge-success' : 'badge-warning'}`}>
                   {project.status}
                 </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-400">Created</span>
-                <span className="text-xs text-slate-300">{new Date(project.created_at).toLocaleDateString()}</span>
+              <div className="stats-row">
+                <span className="stats-row-label">Created</span>
+                <span className="meta-text">{new Date(project.created_at).toLocaleDateString()}</span>
               </div>
             </div>
           </div>
 
           {project.github_repo && (
-            <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5">
-              <h3 className="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wider">Repository</h3>
+            <div className="surface-panel">
+              <h3 className="stats-sidebar-title">Repository</h3>
               <a
                 href={project.github_repo}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 p-3 bg-slate-700/30 hover:bg-slate-700/50 border border-slate-600/30 rounded-xl transition-all group"
+                className="member-row group"
+                style={{ textDecoration: 'none' }}
               >
-                <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center">
+                <div
+                  className="w-10 h-10 rounded-md flex items-center justify-center shrink-0"
+                  style={{ background: 'var(--bg-muted)' }}
+                >
                   <svg className="w-5 h-5 text-slate-300" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.303-.535-221-.124-.1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate group-hover:text-sky-400 transition-colors">GitHub Repository</p>
-                  <p className="text-xs text-slate-500 truncate">{project.github_repo.replace('https://github.com/', '')}</p>
+                  <p className="text-sm font-medium truncate group-hover:underline" style={{ color: 'var(--text-primary)' }}>GitHub Repository</p>
+                  <p className="meta-text truncate">{project.github_repo.replace('https://github.com/', '')}</p>
                 </div>
-                <svg className="w-4 h-4 text-slate-500 group-hover:text-sky-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
               </a>
             </div>
           )}
 
-          <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wider">Actions</h3>
-            <div className="space-y-2">
-              <button
-                onClick={() => setShowAddMember(true)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white text-sm font-medium rounded-xl transition-all"
-              >
+          <div className="surface-panel">
+            <h3 className="stats-sidebar-title">Actions</h3>
+            <div className="action-stack">
+              <button onClick={() => setShowAddMember(true)} className="action-btn action-btn-secondary" type="button">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
                 Add Members
               </button>
-              <button
-                onClick={() => setShowUploadDoc(true)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-white text-sm font-medium rounded-xl transition-all"
-              >
+              <button onClick={() => setShowUploadDoc(true)} className="action-btn action-btn-secondary" type="button">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                 Upload Doc
               </button>
               {isManager && (
-                <button
-                  onClick={() => setShowEditProject(true)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-xl transition-all border border-slate-600"
-                >
+                <button onClick={() => setShowEditProject(true)} className="action-btn action-btn-secondary" type="button">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                   Edit Project
                 </button>
               )}
-              <Link
-                href={`/protected/dashboard/tickets/new?project=${projectId}`}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white text-sm font-medium rounded-xl transition-all shadow-lg shadow-sky-500/20"
-              >
+              <Link href={`/protected/dashboard/tickets/new?project=${projectId}`} className="action-btn action-btn-primary">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                 Create Ticket
               </Link>
-              <Link
-                href={`/protected/dashboard/tickets?project=${projectId}`}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-xl transition-all border border-slate-600"
-              >
+              <Link href={`/protected/dashboard/tickets?project=${projectId}`} className="action-btn action-btn-secondary">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"></path></svg>
                 View Tickets
               </Link>

@@ -1,16 +1,19 @@
 """
 Populate TicketHub with realistic dummy data for testing and demo purposes.
 
+Runs inside a tenant schema via `manage.py populate_db` (not directly on public).
+
 Usage:
     python manage.py populate_db              # Add data (keeps existing)
-    python manage.py populate_db --clear       # Clear all data, then populate
+    python manage.py populate_db --clear      # Clear tenant data, then populate
+    python manage.py populate_db --schema=main
 
     With Docker:
-    docker exec -it <backend_container> python manage.py populate_db --clear
+    docker compose exec backend python manage.py populate_db --clear
 """
 
 from django.utils import timezone
-from datetime import timedelta, datetime
+from datetime import timedelta
 import random
 
 from apps.users.models import User
@@ -23,8 +26,14 @@ from apps.notifications.models import Notification
 from django.contrib.contenttypes.models import ContentType
 
 
+DEFAULT_PASSWORD = 'technest2026'
+DEFAULT_TENANT_SCHEMA = 'main'
+
+
 def clear_data():
-    """Clear all populated data (keeps admin user)."""
+    """Clear populated tenant data (keeps admin user)."""
+    Comment.objects.all().delete()
+    WorkLog.objects.all().delete()
     ActivityLog.objects.all().delete()
     Notification.objects.all().delete()
     Ticket.objects.all().delete()
@@ -142,7 +151,7 @@ WORK_LOG_NOTES = [
 ]
 
 
-def create_user(username, email, password, role, first_name, last_name):
+def create_user(username, email, role, first_name, last_name):
     """Create or update a user."""
     user, created = User.objects.get_or_create(
         username=username,
@@ -154,7 +163,7 @@ def create_user(username, email, password, role, first_name, last_name):
             'is_active': True,
         }
     )
-    user.set_password(password)
+    user.set_password(DEFAULT_PASSWORD)
     user.save()
     print(f"{'Created' if created else 'Updated'} user: {username} ({role})")
     return user
@@ -169,39 +178,40 @@ def create_users():
     # Admin user
     admin_user = create_user(
         username='admin',
-        email='admin@tickethub.com',
-        password='admin123',
+        email='admin@technest.com',
         role='admin',
         first_name='System',
         last_name='Administrator'
     )
     users['admin'] = admin_user
     
-    # Manager users
+    # Manager users — username is the email local part; login = username@technest.com
     manager_data = [
-        ('manager1', 'john.smith@tickethub.com', 'John', 'Smith'),
-        ('manager2', 'sarah.johnson@tickethub.com', 'Sarah', 'Johnson'),
-        ('manager3', 'david.williams@tickethub.com', 'David', 'Williams'),
+        ('john.smith@technest.com', 'John', 'Smith'),
+        ('sarah.johnson@technest.com', 'Sarah', 'Johnson'),
+        ('david.williams@technest.com', 'David', 'Williams'),
     ]
     
     users['managers'] = []
-    for username, email, first_name, last_name in manager_data:
-        manager = create_user(username, email, 'manager123', 'manager', first_name, last_name)
+    for email, first_name, last_name in manager_data:
+        username = email.split('@')[0]
+        manager = create_user(username, email, 'manager', first_name, last_name)
         users['managers'].append(manager)
     
-    # Employee users
+    # Developer users
     employee_data = [
-        ('employee1', 'mike.brown@tickethub.com', 'Mike', 'Brown'),
-        ('employee2', 'emily.jones@tickethub.com', 'Emily', 'Jones'),
-        ('employee3', 'robert.garcia@tickethub.com', 'Robert', 'Garcia'),
-        ('employee4', 'lisa.miller@tickethub.com', 'Lisa', 'Miller'),
-        ('employee5', 'james.davis@tickethub.com', 'James', 'Davis'),
-        ('employee6', 'maria.wilson@tickethub.com', 'Maria', 'Wilson'),
+        ('mike.brown@technest.com', 'Mike', 'Brown'),
+        ('emily.jones@technest.com', 'Emily', 'Jones'),
+        ('robert.garcia@technest.com', 'Robert', 'Garcia'),
+        ('lisa.miller@technest.com', 'Lisa', 'Miller'),
+        ('james.davis@technest.com', 'James', 'Davis'),
+        ('maria.wilson@technest.com', 'Maria', 'Wilson'),
     ]
     
     users['employees'] = []
-    for username, email, first_name, last_name in employee_data:
-        employee = create_user(username, email, 'employee123', 'employee', first_name, last_name)
+    for email, first_name, last_name in employee_data:
+        username = email.split('@')[0]
+        employee = create_user(username, email, 'employee', first_name, last_name)
         users['employees'].append(employee)
     
     return users
@@ -400,6 +410,22 @@ def create_activity_logs(tickets_data, projects, users):
 
 def print_summary(users, projects):
     """Print a summary of created data."""
+    from django.db import connection
+    from django_tenants.utils import get_public_schema_name, schema_context
+
+    from apps.customers.models import Client
+    from apps.customers.services.login_accounts import build_login_identifier
+
+    schema_name = getattr(connection, 'schema_name', DEFAULT_TENANT_SCHEMA)
+    primary_domain = f'{schema_name}.localhost'
+
+    with schema_context(get_public_schema_name()):
+        client = Client.objects.filter(schema_name=schema_name).first()
+    login_domain = client.login_domain if client else 'local'
+
+    def login_id(user):
+        return build_login_identifier(local_username=user.username, login_domain=login_domain)
+
     print("\n" + "="*50)
     print("POPULATION SUMMARY")
     print("="*50)
@@ -407,7 +433,7 @@ def print_summary(users, projects):
     print(f"\nUsers created:")
     print(f"  Admin: 1")
     print(f"  Managers: {len(users['managers'])}")
-    print(f"  Employees: {len(users['employees'])}")
+    print(f"  Developers: {len(users['employees'])}")
     print(f"  Total: {1 + len(users['managers']) + len(users['employees'])}")
     
     print(f"\nProjects created: {Project.objects.count()}")
@@ -419,20 +445,22 @@ def print_summary(users, projects):
     print("\n" + "="*50)
     print("LOGIN CREDENTIALS")
     print("="*50)
+    print(f"\nTenant schema: {schema_name}")
+    print(f"Login domain: @{login_domain}")
+    print(f"API host/domain: {primary_domain}")
+    print(f"Dev header fallback: X-Tenant-Schema: {schema_name}")
+    print(f"\nAll users share the same password: {DEFAULT_PASSWORD}")
     
     print("\nAdmin:")
-    print("  Username: admin")
-    print("  Password: admin123")
+    print(f"  Login: {login_id(users['admin'])}")
     
     print("\nManagers:")
     for manager in users['managers']:
-        print(f"  Username: {manager.username}")
-        print("  Password: manager123")
+        print(f"  Login: {login_id(manager)}")
     
-    print("\nEmployees (first 3):")
-    for i, employee in enumerate(users['employees'][:3]):
-        print(f"  Username: {employee.username}")
-        print("  Password: employee123")
+    print("\nDevelopers:")
+    for employee in users['employees']:
+        print(f"  Login: {login_id(employee)}")
     
     print("\n" + "="*50)
     print("Database population completed successfully!")
@@ -440,9 +468,19 @@ def print_summary(users, projects):
 
 
 def main(clear=False):
-    """Main function to populate the database."""
+    """Populate the current tenant schema. Use manage.py populate_db to set schema context."""
+    from django.db import connection
+
+    schema_name = getattr(connection, 'schema_name', None)
+    if not schema_name or schema_name == 'public':
+        raise RuntimeError(
+            'populate.main() must run inside a tenant schema. '
+            'Use: python manage.py populate_db'
+        )
+
     print("\nStarting TicketHub database population...")
     print("="*50)
+    print(f"Tenant schema: {schema_name}")
 
     if clear:
         print("\nClearing existing data...")

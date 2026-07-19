@@ -52,13 +52,13 @@ export function ConfirmDialog({
       />
       
       {/* Dialog */}
-      <div className="relative bg-slate-800 rounded-xl border border-slate-700/50 shadow-2xl max-w-md w-full p-6 transform transition-all">
+      <div className="relative modal-panel shadow-2xl max-w-md w-full p-6 transform transition-all">
         {/* Icon */}
         <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${
-          isDestructive ? 'bg-red-500/20' : 'bg-amber-500/20'
-        }`}>
+          isDestructive ? 'badge-neutral' : 'badge-warning'
+        }`} style={isDestructive ? { color: 'var(--danger)', background: 'var(--danger-muted)' } : undefined}>
           <svg 
-            className={`w-6 h-6 ${isDestructive ? 'text-red-400' : 'text-amber-400'}`} 
+            className={`w-6 h-6 ${isDestructive ? 'dashboard-stat-accent-red' : 'dashboard-stat-accent-amber'}`} 
             fill="none" 
             stroke="currentColor" 
             viewBox="0 0 24 24"
@@ -72,26 +72,23 @@ export function ConfirmDialog({
         </div>
 
         {/* Title */}
-        <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
+        <h3 className="modal-title mb-2">{title}</h3>
         
         {/* Message */}
-        <p className="text-slate-400 mb-6">{message}</p>
+        <p className="page-subtitle mb-6">{message}</p>
 
         {/* Buttons */}
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
-            className="px-4 py-2 rounded-lg bg-slate-700 text-white hover:bg-slate-600 transition-colors"
+            className="btn-secondary px-4 py-2 rounded-lg"
           >
             {cancelText}
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              isDestructive 
-                ? 'bg-red-500 text-white hover:bg-red-600' 
-                : 'bg-sky-500 text-white hover:bg-sky-600'
-            }`}
+            className="btn-primary px-4 py-2 rounded-lg font-medium"
+            style={isDestructive ? { background: 'var(--danger)' } : undefined}
           >
             {confirmText}
           </button>

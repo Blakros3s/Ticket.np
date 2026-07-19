@@ -10,13 +10,19 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
     user_id = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(),
         source='user',
-        write_only=True
+        write_only=True,
     )
-    
+
     class Meta:
         model = ProjectMember
         fields = ['id', 'user', 'user_id', 'joined_at']
         read_only_fields = ['joined_at']
+
+
+class ProjectSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = ['id', 'name']
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -36,13 +42,13 @@ class ProjectSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_by', 'created_at', 'updated_at']
     
     def get_member_count(self, obj):
-        return obj.members.count()
+        return getattr(obj, 'member_count', obj.members.count())
     
     def get_ticket_count(self, obj):
-        return obj.tickets.count()
+        return getattr(obj, 'ticket_count', obj.tickets.count())
     
     def get_document_count(self, obj):
-        return obj.documents.count()
+        return getattr(obj, 'document_count', obj.documents.count())
 
 
 class ProjectCreateSerializer(serializers.ModelSerializer):

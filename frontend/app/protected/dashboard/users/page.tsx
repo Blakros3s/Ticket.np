@@ -23,6 +23,7 @@ interface User {
   last_name?: string;
   role: UserSystemRole;
   department_roles: UserRole[];
+  login_address?: string | null;
   is_active: boolean;
 }
 
@@ -43,6 +44,9 @@ export default function UsersManagementPage() {
   }, [departmentRoles]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loginDomain, setLoginDomain] = useState('');
+  const [loginDomainDraft, setLoginDomainDraft] = useState('');
+  const [isSavingLoginDomain, setIsSavingLoginDomain] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -92,12 +96,9 @@ export default function UsersManagementPage() {
     try {
       setLoading(true);
       const data = await authApi.getUsers();
-      console.log('Fetched users:', data);
-      // Ensure it's an array
       if (Array.isArray(data)) {
         setUsers(data);
       } else {
-        console.error('Users data is not an array:', data);
         setUsers([]);
       }
     } catch (error) {
@@ -107,6 +108,51 @@ export default function UsersManagementPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchOrganization = async () => {
+    try {
+      const org = await authApi.getOrganization();
+      setLoginDomain(org.login_domain);
+      setLoginDomainDraft(org.login_domain);
+    } catch (error) {
+      console.error('Failed to load organization settings:', error);
+    }
+  };
+
+  const handleSaveLoginDomain = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const normalized = loginDomainDraft.trim().replace(/^@+/, '').toLowerCase();
+    if (!normalized) {
+      showToastMessage('Login domain cannot be empty', 'error');
+      return;
+    }
+    if (normalized === loginDomain) {
+      showToastMessage('No changes to save', 'error');
+      return;
+    }
+
+    setIsSavingLoginDomain(true);
+    try {
+      const org = await authApi.updateOrganization({ login_domain: normalized });
+      setLoginDomain(org.login_domain);
+      setLoginDomainDraft(org.login_domain);
+      showToastMessage('Login domain updated. All sign-in addresses were refreshed.', 'success');
+      fetchUsers();
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.detail ||
+        error.response?.data?.login_domain?.[0] ||
+        'Failed to update login domain';
+      showToastMessage(errorMessage, 'error');
+    } finally {
+      setIsSavingLoginDomain(false);
+    }
+  };
+
+  const formatLoginAddress = (user: User) => {
+    if (user.login_address) return user.login_address;
+    if (!loginDomain) return user.username;
+    return `${user.username}@${loginDomain}`;
   };
 
   const fetchDepartmentRoles = async () => {
@@ -215,6 +261,7 @@ export default function UsersManagementPage() {
   useEffect(() => {
     fetchUsers();
     fetchDepartmentRoles();
+    fetchOrganization();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -398,7 +445,7 @@ export default function UsersManagementPage() {
   const totalDepartmentRoles = departmentRoles.length;
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div className="page-container">
       {/* Toast Notification */}
       {toast && (
         <div className={`fixed top-20 right-4 z-50 px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white`}>
@@ -415,8 +462,8 @@ export default function UsersManagementPage() {
           <span className="text-slate-500">/</span>
           <span className="text-white">{terminology.label} Management</span>
         </div>
-        <h1 className="text-3xl font-bold text-white">{terminology.label} Management</h1>
-        <p className="text-slate-400 mt-1">Manage system users, roles and permissions</p>
+        <h1 className="page-title text-3xl font-bold">{terminology.label} Management</h1>
+        <p className="page-subtitle mt-1">Manage system users, roles and permissions</p>
       </div>
 
       {/* Stats Cards */}
@@ -492,11 +539,48 @@ export default function UsersManagementPage() {
         </div>
       </div>
 
+      {/* Login domain */}
+      <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 mb-6">
+        <div className="mb-4">
+          <h2 className="dashboard-section-title">Sign-in Domain</h2>
+          <p className="text-slate-400 text-sm mt-1">
+            Users sign in as <span className="text-slate-300">username@domain</span>. The domain is set when your organization is created and can be updated here (e.g. technest → technest.com).
+          </p>
+        </div>
+        <form onSubmit={handleSaveLoginDomain} className="flex flex-col sm:flex-row gap-3 sm:items-end">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-slate-300 mb-1">Login domain postfix</label>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500 text-sm shrink-0">username@</span>
+              <input
+                type="text"
+                className="input-field flex-1"
+                value={loginDomainDraft}
+                onChange={(e) => setLoginDomainDraft(e.target.value)}
+                placeholder="technest.com"
+              />
+            </div>
+            {loginDomain && (
+              <p className="text-xs text-slate-500 mt-2">
+                Example: admin@{loginDomainDraft || loginDomain}
+              </p>
+            )}
+          </div>
+          <button
+            type="submit"
+            disabled={isSavingLoginDomain || loginDomainDraft.trim().replace(/^@+/, '').toLowerCase() === loginDomain}
+            className="btn-primary px-5 py-2.5 rounded-lg disabled:opacity-50"
+          >
+            {isSavingLoginDomain ? 'Saving…' : 'Save Domain'}
+          </button>
+        </form>
+      </div>
+
       {/* Department Roles Management */}
       <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-xl font-semibold text-white">Department Roles</h2>
+            <h2 className="dashboard-section-title">Department Roles</h2>
             <p className="text-slate-400 text-sm mt-1">Manage department roles like Frontend, Backend, DevOps, etc.</p>
           </div>
           <button
@@ -622,6 +706,7 @@ export default function UsersManagementPage() {
               <thead className="bg-slate-700/50">
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">User</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Sign-in Address</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Email</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">System Role</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Department Roles</th>
@@ -642,6 +727,9 @@ export default function UsersManagementPage() {
                           <div className="text-sm text-slate-400">{user.first_name} {user.last_name}</div>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-sky-300 font-mono">{formatLoginAddress(user)}</div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-slate-300">{user.email}</div>
@@ -760,7 +848,7 @@ export default function UsersManagementPage() {
           <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-700">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white">Add New {terminology.label}</h2>
+                <h2 className="dashboard-section-title">Add New {terminology.label}</h2>
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
@@ -784,6 +872,11 @@ export default function UsersManagementPage() {
                     onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
                     placeholder="johndoe"
                   />
+                  {loginDomain && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Will sign in as {newUser.username || 'username'}@{loginDomain}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Email *</label>
@@ -932,7 +1025,7 @@ export default function UsersManagementPage() {
           <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-lg">
             <div className="p-6 border-b border-slate-700">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white">Edit User</h2>
+                <h2 className="dashboard-section-title">Edit User</h2>
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
@@ -954,6 +1047,11 @@ export default function UsersManagementPage() {
                     value={selectedUser.username}
                     onChange={(e) => setSelectedUser({ ...selectedUser, username: e.target.value })}
                   />
+                  {loginDomain && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Sign-in address: {selectedUser.username}@{loginDomain}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Email</label>
@@ -1077,7 +1175,7 @@ export default function UsersManagementPage() {
           <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-md">
             <div className="p-6 border-b border-slate-700">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white">User Details</h2>
+                <h2 className="dashboard-section-title">User Details</h2>
                 <button
                   type="button"
                   onClick={() => setShowViewModal(false)}
@@ -1095,8 +1193,9 @@ export default function UsersManagementPage() {
                   {selectedUser.username.charAt(0).toUpperCase()}
                 </div>
                 <div className="ml-4">
-                  <h3 className="text-lg font-semibold text-white">{selectedUser.username}</h3>
+                  <h3 className="surface-panel-title">{selectedUser.username}</h3>
                   <p className="text-slate-400">{selectedUser.email}</p>
+                  <p className="text-sky-300 text-sm font-mono mt-1">{formatLoginAddress(selectedUser)}</p>
                 </div>
               </div>
               <div className="space-y-3">
@@ -1161,7 +1260,7 @@ export default function UsersManagementPage() {
           <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-md">
             <div className="p-6 border-b border-slate-700">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white">
+                <h2 className="dashboard-section-title">
                   {isEditingRole ? 'Edit Department Role' : 'Add Department Role'}
                 </h2>
                 <button
@@ -1264,7 +1363,7 @@ export default function UsersManagementPage() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-white">
+                  <h3 className="surface-panel-title">
                     Delete {deleteTarget.type === 'role' ? 'Department Role' : 'User'}
                   </h3>
                   <p className="text-slate-400 text-sm mt-1">
@@ -1316,7 +1415,7 @@ export default function UsersManagementPage() {
             <div className="p-6 border-b border-slate-700">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold text-white">Reset Password</h2>
+                  <h2 className="dashboard-section-title">Reset Password</h2>
                   <p className="text-sm text-slate-400 mt-1">Reset password for {selectedUser.username}</p>
                 </div>
                 <button

@@ -10,8 +10,11 @@ def generate_ticket_id():
     return f"TKT-{timezone.now().strftime('%Y%m%d')}-{''.join(random.choices(string.digits, k=4))}"
 
 
+from apps.core.media_paths import tenant_scoped_upload_path
+
+
 def ticket_media_upload_path(instance, filename):
-    return f'ticket_media/{instance.ticket.id}/{filename}'
+    return tenant_scoped_upload_path(f'ticket_media/{instance.ticket.id}/{filename}')
 
 
 class Ticket(models.Model):
@@ -51,12 +54,17 @@ class Ticket(models.Model):
     in_progress_at = models.DateTimeField(null=True, blank=True)
     qa_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
+    due_date = models.DateField(null=True, blank=True)
     
     class Meta:
         db_table = 'tickets'
         verbose_name = 'Ticket'
         verbose_name_plural = 'Tickets'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['due_date']),
+            models.Index(fields=['project', 'status']),
+        ]
     
     def __str__(self):
         return f"{self.ticket_id} - {self.title}"

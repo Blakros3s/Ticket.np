@@ -1,19 +1,28 @@
 from django.db import models
 from django.utils import timezone
+from datetime import time, datetime
+
 from apps.users.models import User
+
+
+def _coerce_time(value) -> time:
+    """Normalize TimeField values — legacy rows may have stored strings."""
+    if isinstance(value, time):
+        return value
+    if isinstance(value, str):
+        for fmt in ('%H:%M:%S', '%H:%M'):
+            try:
+                return datetime.strptime(value, fmt).time()
+            except ValueError:
+                continue
+    raise ValueError(f'Invalid time value: {value!r}')
 
 
 class OfficeSettings(models.Model):
     """Global office settings - only one record should exist"""
-    office_start_time = models.TimeField(default='10:00', help_text="Office start time (e.g., 10:00)")
-    office_end_time = models.TimeField(default='17:00', help_text="Office end time (e.g., 17:00)")
+    office_start_time = models.TimeField(default=time(10, 0), help_text="Office start time (e.g., 10:00)")
+    office_end_time = models.TimeField(default=time(17, 0), help_text="Office end time (e.g., 17:00)")
     auto_mark_absent = models.BooleanField(default=True, help_text="Automatically mark absent after office hours end")
-    user_terminology = models.CharField(
-        max_length=20, 
-        choices=[('employee', 'Employee'), ('developer', 'Developer')],
-        default='employee',
-        help_text="Terminology to use for staff (Employee or Developer)"
-    )
     WEEKEND_CHOICES = [
         ('saturday', 'Saturday only'),
         ('sunday', 'Sunday only'),
@@ -44,34 +53,44 @@ class OfficeSettings(models.Model):
     @classmethod
     def get_settings(cls):
         """Get or create the singleton settings instance"""
-        settings, _created = cls.objects.get_or_create(
+        settings, created = cls.objects.get_or_create(
             pk=1,
             defaults={
-                'office_start_time': '10:00',
-                'office_end_time': '17:00',
+                'office_start_time': time(10, 0),
+                'office_end_time': time(17, 0),
                 'auto_mark_absent': True,
-                'user_terminology': 'employee',
                 'weekend_holidays': 'saturday',
             }
         )
+        dirty = []
+        for field_name in ('office_start_time', 'office_end_time'):
+            raw = getattr(settings, field_name)
+            if isinstance(raw, str):
+                setattr(settings, field_name, _coerce_time(raw))
+                dirty.append(field_name)
         if not settings.weekend_holidays:
             settings.weekend_holidays = 'saturday'
-            settings.save(update_fields=['weekend_holidays'])
+            dirty.append('weekend_holidays')
+        if dirty:
+            settings.save(update_fields=dirty)
         return settings
-    
+
     @property
     def is_within_office_hours(self):
         """Check if current time is within office hours"""
         now = timezone.localtime()
         current_time = now.time()
-        return self.office_start_time <= current_time <= self.office_end_time
-    
+        start = _coerce_time(self.office_start_time)
+        end = _coerce_time(self.office_end_time)
+        return start <= current_time <= end
+
     @property
     def has_office_hours_ended(self):
         """Check if office hours have ended for today"""
         now = timezone.localtime()
         current_time = now.time()
-        return current_time > self.office_end_time
+        end = _coerce_time(self.office_end_time)
+        return current_time > end
 
 
 class LeaveRequest(models.Model):

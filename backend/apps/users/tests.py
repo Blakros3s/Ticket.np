@@ -1,33 +1,65 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django_tenants.utils import get_tenant_model, schema_context
 from rest_framework.test import APIClient
 from rest_framework import status
+
+from apps.customers.models import Domain
+from apps.customers.services.login_accounts import register_login_account
+from apps.customers.tenant_resolution import internal_domain_for
 from .models import User
 
 User = get_user_model()
 
 
 class AuthenticationTestCase(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        Tenant = get_tenant_model()
+        cls.tenant = Tenant.objects.filter(schema_name='test').first()
+        if cls.tenant is None:
+            cls.tenant = Tenant(
+                schema_name='test',
+                name='Test Organization',
+                slug='test',
+                login_domain='test.local',
+                is_active=True,
+            )
+            cls.tenant.save()
+            Domain.objects.create(
+                domain=internal_domain_for('test'),
+                tenant=cls.tenant,
+                is_primary=True,
+            )
+        elif not cls.tenant.login_domain:
+            cls.tenant.login_domain = 'test.local'
+            cls.tenant.save(update_fields=['login_domain'])
+
     def setUp(self):
         self.client = APIClient()
-        self.admin_user = User.objects.create_user(
-            username='admin',
-            email='admin@test.com',
-            password='adminpass123',
-            role='admin'
-        )
-        self.manager_user = User.objects.create_user(
-            username='manager',
-            email='manager@test.com',
-            password='managerpass123',
-            role='manager'
-        )
-        self.employee_user = User.objects.create_user(
-            username='employee',
-            email='employee@test.com',
-            password='employeepass123',
-            role='employee'
-        )
+        with schema_context(self.tenant.schema_name):
+            self.admin_user = User.objects.create_user(
+                username='admin',
+                email='admin@test.com',
+                password='adminpass123',
+                role='admin'
+            )
+            register_login_account(client=self.tenant, user=self.admin_user)
+            self.manager_user = User.objects.create_user(
+                username='manager',
+                email='manager@test.com',
+                password='managerpass123',
+                role='manager'
+            )
+            register_login_account(client=self.tenant, user=self.manager_user)
+            self.employee_user = User.objects.create_user(
+                username='employee',
+                email='employee@test.com',
+                password='employeepass123',
+                role='employee'
+            )
+            register_login_account(client=self.tenant, user=self.employee_user)
     
     def test_user_registration(self):
         self.client.force_authenticate(user=self.admin_user)
@@ -59,7 +91,7 @@ class AuthenticationTestCase(TestCase):
     
     def test_user_login(self):
         data = {
-            'username': 'admin',
+            'username': 'admin@test.local',
             'password': 'adminpass123'
         }
         response = self.client.post('/api/auth/login/', data, format='json')
@@ -71,7 +103,7 @@ class AuthenticationTestCase(TestCase):
     
     def test_token_refresh(self):
         login_response = self.client.post('/api/auth/login/', {
-            'username': 'admin',
+            'username': 'admin@test.local',
             'password': 'adminpass123'
         }, format='json')
         refresh_token = login_response.data['refresh']

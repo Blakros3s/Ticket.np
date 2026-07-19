@@ -142,7 +142,7 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div className="page-container">
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-2">
           <Link href="/protected/dashboard" className="text-slate-400 hover:text-white transition-colors">
@@ -154,8 +154,8 @@ export default function NotificationsPage() {
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white">Notifications</h1>
-            <p className="text-slate-400 mt-1">
+            <h1 className="page-title text-3xl font-bold">Notifications</h1>
+            <p className="page-subtitle mt-1">
               {hasNotifications
                 ? `${unreadCount} unread · ${notifications.length} total`
                 : 'Stay updated on tickets and projects'}

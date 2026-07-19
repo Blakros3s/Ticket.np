@@ -2,7 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Q
+from django.db.models import Count, Q
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,13 @@ from apps.users.permissions import IsManagerOrAdmin
 from apps.core.access import get_accessible_project
 from apps.core.media_utils import build_protected_media_url
 from .models import Project, ProjectMember, ProjectDocument
-from .serializers import ProjectSerializer, ProjectCreateSerializer, ProjectMemberSerializer, ProjectDocumentSerializer
+from .serializers import (
+    ProjectSerializer,
+    ProjectCreateSerializer,
+    ProjectMemberSerializer,
+    ProjectDocumentSerializer,
+    ProjectSummarySerializer,
+)
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -26,14 +32,31 @@ class ProjectViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
+        base = Project.objects.select_related('created_by').prefetch_related(
+            'projectmember_set__user__department_roles',
+            'members',
+        ).annotate(
+            member_count=Count('members', distinct=True),
+            ticket_count=Count('tickets', distinct=True),
+            document_count=Count('documents', distinct=True),
+        )
 
         if user.role == 'admin':
-            return Project.objects.all()
+            return base
 
-        # Managers and employees both see projects they created or are members of
-        return Project.objects.filter(
-            Q(created_by=user) | Q(members=user)
+        return base.filter(
+            Q(created_by=user) | Q(members=user),
         ).distinct()
+
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        user = self.request.user
+        if user.role == 'admin':
+            queryset = Project.objects.all()
+        else:
+            queryset = Project.objects.filter(Q(created_by=user) | Q(members=user)).distinct()
+        serializer = ProjectSummarySerializer(queryset.only('id', 'name').order_by('name'), many=True)
+        return Response(serializer.data)
     
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'add_member', 'remove_member']:

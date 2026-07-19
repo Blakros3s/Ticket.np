@@ -19,6 +19,13 @@ interface SettingsContextType {
   refreshSettings: () => Promise<void>;
 }
 
+const DEVELOPER_TERMINOLOGY: Terminology = {
+  label: 'Developer',
+  labelPlural: 'Developers',
+  labelLower: 'developer',
+  labelPluralLower: 'developers',
+};
+
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
@@ -50,12 +57,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, fetchSettings]);
 
-  const terminology: Terminology = {
-    label: settings?.user_terminology === 'developer' ? 'Developer' : 'Employee',
-    labelPlural: settings?.user_terminology === 'developer' ? 'Developers' : 'Employees',
-    labelLower: settings?.user_terminology === 'developer' ? 'developer' : 'employee',
-    labelPluralLower: settings?.user_terminology === 'developer' ? 'developers' : 'employees',
-  };
+  const terminology = DEVELOPER_TERMINOLOGY;
 
   return (
     <SettingsContext.Provider

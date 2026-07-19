@@ -2,25 +2,29 @@
 
 import { useEffect, useState } from 'react';
 import { attendanceApi, OfficeSettings } from '@/lib/attendance';
+import { integrationsApi, GitHubStatusResponse } from '@/lib/integrations';
 import { useSettings } from '@/lib/settings-context';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function SettingsPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isAdmin = user?.role === 'admin';
   const { terminology, refreshSettings } = useSettings();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<OfficeSettings | null>(null);
+  const [githubStatus, setGithubStatus] = useState<GitHubStatusResponse | null>(null);
+  const [githubLoading, setGithubLoading] = useState(false);
+  const [githubConnecting, setGithubConnecting] = useState(false);
   const [formData, setFormData] = useState({
     office_start_time: '10:00',
     office_end_time: '17:00',
     auto_mark_absent: true,
-    user_terminology: 'employee' as 'employee' | 'developer',
     weekend_holidays: 'saturday' as 'saturday' | 'sunday' | 'both',
   });
 
@@ -38,8 +42,66 @@ export default function SettingsPage() {
       return;
     }
     fetchSettings();
+    fetchGitHubStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, router]);
+
+  useEffect(() => {
+    const githubParam = searchParams.get('github');
+    if (!githubParam) return;
+    if (githubParam === 'connected') {
+      showToastMessage('GitHub connected successfully', 'success');
+      fetchGitHubStatus();
+    } else if (githubParam === 'error') {
+      showToastMessage('GitHub connection failed. Please try again.', 'error');
+    }
+    router.replace('/protected/dashboard/settings');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, router]);
+
+  const fetchGitHubStatus = async () => {
+    try {
+      setGithubLoading(true);
+      const data = await integrationsApi.getGitHubStatus();
+      setGithubStatus(data);
+    } catch (error: any) {
+      const detail = error.response?.data?.detail;
+      setGithubStatus({
+        connected: false,
+        configured: true,
+        feature_enabled: false,
+        feature_detail: typeof detail === 'string' ? detail : 'Failed to load GitHub integration status.',
+      });
+    } finally {
+      setGithubLoading(false);
+    }
+  };
+
+  const handleConnectGitHub = async () => {
+    try {
+      setGithubConnecting(true);
+      const authorizeUrl = await integrationsApi.connectGitHub();
+      window.location.href = authorizeUrl;
+    } catch (error: any) {
+      const message = error.response?.data?.detail || 'Failed to start GitHub connection';
+      showToastMessage(message, 'error');
+      setGithubConnecting(false);
+    }
+  };
+
+  const handleDisconnectGitHub = async () => {
+    try {
+      setGithubConnecting(true);
+      await integrationsApi.disconnectGitHub();
+      setGithubStatus({ connected: false, configured: githubStatus?.configured ?? true });
+      showToastMessage('GitHub disconnected', 'success');
+    } catch (error: any) {
+      const message = error.response?.data?.detail || 'Failed to disconnect GitHub';
+      showToastMessage(message, 'error');
+    } finally {
+      setGithubConnecting(false);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -50,7 +112,6 @@ export default function SettingsPage() {
         office_start_time: data.office_start_time,
         office_end_time: data.office_end_time,
         auto_mark_absent: data.auto_mark_absent,
-        user_terminology: data.user_terminology,
         weekend_holidays: data.weekend_holidays ?? 'saturday',
       });
     } catch (error) {
@@ -90,7 +151,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div className="page-container">
       {toast && (
         <div className={`fixed top-20 right-4 z-50 px-6 py-3 rounded-lg shadow-lg ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
           } text-white`}>
@@ -100,17 +161,83 @@ export default function SettingsPage() {
 
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-2">
-          <Link href="/protected/dashboard" className="text-slate-400 hover:text-white">Dashboard</Link>
+          <Link href="/protected/dashboard" className="breadcrumb">Dashboard</Link>
           <span className="text-slate-500">/</span>
           <span className="text-white">Settings</span>
         </div>
-        <h1 className="text-3xl font-bold text-white">Office Settings</h1>
-        <p className="text-slate-400 mt-1">Configure office hours and attendance policies</p>
+        <h1 className="page-title text-3xl font-bold">Settings</h1>
+        <p className="page-subtitle mt-1">Configure office hours, attendance policies, and integrations</p>
+      </div>
+
+      <div className="mb-8 bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-xl font-semibold text-white">GitHub Integration</h2>
+            <p className="text-sm text-slate-400 mt-1">
+              Connect your organization GitHub account to create issues from tickets and sync closed/reopened status.
+            </p>
+          </div>
+          {githubStatus?.connected && (
+            <span className="badge badge-success shrink-0">Connected</span>
+          )}
+        </div>
+
+        {githubLoading ? (
+          <div className="h-16 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--accent)' }} />
+          </div>
+        ) : !githubStatus?.configured ? (
+          <p className="text-sm text-amber-400">
+            GitHub OAuth is not configured on the server. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in the backend environment.
+          </p>
+        ) : githubStatus.feature_enabled === false ? (
+          <p className="text-sm text-amber-400">
+            {githubStatus.feature_detail || 'Your subscription plan does not include GitHub integration. Ask your platform admin to enable it on your plan.'}
+          </p>
+        ) : githubStatus.connected && githubStatus.connection ? (
+          <div className="space-y-4">
+            <div className="p-4 bg-slate-900/50 rounded-lg">
+              <p className="text-slate-400 text-sm mb-1">Connected account</p>
+              <p className="text-white font-medium">@{githubStatus.connection.github_login}</p>
+              {githubStatus.connection.connected_by_name && (
+                <p className="text-xs text-slate-500 mt-1">
+                  Connected by {githubStatus.connection.connected_by_name}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleDisconnectGitHub}
+              disabled={githubConnecting}
+              className="btn-secondary px-4 py-2"
+            >
+              {githubConnecting ? 'Disconnecting...' : 'Disconnect GitHub'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-400">
+              Link tickets to GitHub issues (one-way creation). Closing or reopening a ticket updates the linked issue, and vice versa.
+            </p>
+            <button
+              type="button"
+              onClick={handleConnectGitHub}
+              disabled={githubConnecting || githubStatus.feature_enabled === false}
+              className="btn-primary px-4 py-2"
+            >
+              {githubConnecting ? 'Redirecting...' : 'Connect GitHub'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="mb-4">
+        <h2 className="text-xl font-semibold text-white">Office Hours</h2>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: 'var(--accent)' }}></div>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -131,7 +258,7 @@ export default function SettingsPage() {
                     className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                   <p className="text-xs text-slate-500 mt-1">
-                    Employees can start marking attendance from this time
+                    Developers can start marking attendance from this time
                   </p>
                 </div>
                 <div>
@@ -162,24 +289,6 @@ export default function SettingsPage() {
                 <label htmlFor="auto_mark_absent" className="text-slate-300 cursor-pointer text-sm">
                   Automatically mark absent after office hours end
                 </label>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  User Terminology Preference
-                </label>
-                <select
-                  value={formData.user_terminology}
-                  onChange={(e) => setFormData({ ...formData, user_terminology: e.target.value as 'employee' | 'developer' })}
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
-                >
-                  <option value="employee">Employee (Standard)</option>
-                  <option value="developer">Developer (IT Focused)</option>
-                </select>
-                <p className="text-xs text-slate-500 mt-2">
-                  Choose how staff are referred to throughout the application. 
-                  Currently using: <span className="text-sky-400 font-medium">{terminology.label}</span>
-                </p>
               </div>
 
               <div>
@@ -232,7 +341,7 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <div className="p-4 bg-slate-900/50 rounded-lg">
                   <p className="text-slate-400 text-sm mb-1">Office Hours</p>
-                  <p className="text-2xl font-bold text-white">
+                  <p className="page-title text-2xl font-bold">
                     {formatTime(settings.office_start_time)} - {formatTime(settings.office_end_time)}
                   </p>
                 </div>
@@ -269,7 +378,7 @@ export default function SettingsPage() {
                     )}
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    When enabled, employees who haven&apos;t marked attendance by end of office hours will be automatically marked absent
+                    When enabled, developers who haven&apos;t marked attendance by end of office hours will be automatically marked absent
                   </p>
                 </div>
 

@@ -1,7 +1,33 @@
-﻿'use client';
+'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { todosApi, TodoItem, TodoItemInput, TodoPriority, TodoStatus, TodoStats } from '@/lib/todos';
+import { ConfirmDialog } from '@/components/confirm-dialog';
+
+type ViewFilter = '' | 'pending' | 'in_progress' | 'completed';
+
+function formatDueDate(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function statusBadgeClass(status: TodoItem['status']): string {
+  switch (status) {
+    case 'completed':
+      return 'todo-status-badge badge-success';
+    case 'in_progress':
+      return 'todo-status-badge badge-accent';
+    case 'cancelled':
+      return 'todo-status-badge badge-neutral';
+    default:
+      return 'todo-status-badge badge-warning';
+  }
+}
 
 export default function TodosPage() {
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -10,21 +36,17 @@ export default function TodosPage() {
   const [stats, setStats] = useState<TodoStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({ status: '', priority: '' });
+  const [viewFilter, setViewFilter] = useState<ViewFilter>('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedTodo, setSelectedTodo] = useState<TodoItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-
   const [deleteTarget, setDeleteTarget] = useState<'single' | 'bulk' | null>(null);
   const [todoToDelete, setTodoToDelete] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const showToastMessage = (message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  // Form state
   const [formData, setFormData] = useState<TodoItemInput>({
     title: '',
     description: '',
@@ -32,6 +54,11 @@ export default function TodosPage() {
     status: 'pending',
     due_date: '',
   });
+
+  const showToastMessage = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     fetchTodos();
@@ -44,7 +71,7 @@ export default function TodosPage() {
   const fetchTodos = async () => {
     try {
       setLoading(true);
-      const filters: any = {};
+      const filters: { status?: string; priority?: string } = {};
       if (filter.status) filters.status = filter.status;
       if (filter.priority) filters.priority = filter.priority;
 
@@ -52,6 +79,7 @@ export default function TodosPage() {
       setTodos(data);
     } catch (error) {
       console.error('Error fetching todos:', error);
+      showToastMessage('Failed to load tasks', 'error');
     } finally {
       setLoading(false);
     }
@@ -84,7 +112,18 @@ export default function TodosPage() {
     }
   };
 
-  // Modal handlers
+  const displayedTodos = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return todos.filter((todo) => {
+      if (viewFilter && todo.status !== viewFilter) return false;
+      if (!query) return true;
+      return (
+        todo.title.toLowerCase().includes(query) ||
+        (todo.description || '').toLowerCase().includes(query)
+      );
+    });
+  }, [todos, searchQuery, viewFilter]);
+
   const openAddModal = () => {
     setFormData({
       title: '',
@@ -117,20 +156,40 @@ export default function TodosPage() {
     setIsEditing(false);
   };
 
-  // Form handlers
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const buildPayload = (): Partial<TodoItemInput> => {
+    const payload: Partial<TodoItemInput> = {
+      title: formData.title.trim(),
+      description: formData.description?.trim() || '',
+      priority: formData.priority,
+      status: formData.status,
+    };
+
+    if (formData.due_date) {
+      payload.due_date = formData.due_date;
+    }
+
+    return payload;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
 
     try {
+      setSubmitting(true);
+      const payload = buildPayload();
+
       if (isEditing && selectedTodo) {
-        await todosApi.updateTodo(selectedTodo.id, formData);
+        await todosApi.updateTodo(selectedTodo.id, payload);
+        showToastMessage('Task updated', 'success');
       } else {
-        await todosApi.createTodo(formData);
+        await todosApi.createTodo(payload as TodoItemInput);
+        showToastMessage('Task created', 'success');
       }
 
       closeModal();
@@ -138,7 +197,9 @@ export default function TodosPage() {
       fetchStats();
     } catch (error) {
       console.error('Error saving todo:', error);
-      alert('Error saving todo. Please try again.');
+      showToastMessage('Failed to save task', 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -156,7 +217,7 @@ export default function TodosPage() {
     if (deleteTarget === 'single' && todoToDelete !== null) {
       try {
         await todosApi.deleteTodo(todoToDelete);
-        showToastMessage('Task deleted successfully', 'success');
+        showToastMessage('Task deleted', 'success');
         fetchTodos();
         fetchStats();
       } catch (error) {
@@ -182,20 +243,24 @@ export default function TodosPage() {
   const handleComplete = async (id: number) => {
     try {
       await todosApi.completeTodo(id);
+      showToastMessage('Task completed', 'success');
       fetchTodos();
       fetchStats();
     } catch (error) {
       console.error('Error completing todo:', error);
+      showToastMessage('Failed to complete task', 'error');
     }
   };
 
   const handleReopen = async (id: number) => {
     try {
       await todosApi.reopenTodo(id);
+      showToastMessage('Task reopened', 'success');
       fetchTodos();
       fetchStats();
     } catch (error) {
       console.error('Error reopening todo:', error);
+      showToastMessage('Failed to reopen task', 'error');
     }
   };
 
@@ -204,426 +269,459 @@ export default function TodosPage() {
 
     try {
       await todosApi.bulkComplete(selectedIds);
+      showToastMessage(`${selectedIds.length} tasks completed`, 'success');
       setSelectedIds([]);
       fetchTodos();
       fetchStats();
     } catch (error) {
       console.error('Error bulk completing:', error);
+      showToastMessage('Failed to complete tasks', 'error');
     }
   };
 
-
-
   const toggleSelection = (id: number) => {
-    setSelectedIds(prev =>
-      prev.includes(id)
-        ? prev.filter(i => i !== id)
-        : [...prev, id]
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
   };
 
   const selectAll = () => {
-    if (selectedIds.length === todos.length) {
+    if (selectedIds.length === displayedTodos.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(todos.map(t => t.id));
+      setSelectedIds(displayedTodos.map((t) => t.id));
     }
   };
 
+  const handleViewFilter = (value: ViewFilter) => {
+    setViewFilter(value);
+    setFilter((prev) => ({ ...prev, status: value }));
+  };
+
+  const viewTabs: { id: ViewFilter; label: string }[] = [
+    { id: '', label: 'All' },
+    { id: 'pending', label: 'Pending' },
+    { id: 'in_progress', label: 'In progress' },
+    { id: 'completed', label: 'Completed' },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-900/50 py-8 relative">
+    <div className="page-container">
       {toast && (
-        <div className={`fixed top-20 right-4 z-50 px-6 py-3 rounded-lg shadow-lg ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white transition-all`}>
+        <div className={`toast ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
           {toast.message}
         </div>
       )}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Todo Task</h1>
-            <p className="text-slate-400">Manage your personal tasks and reminders</p>
-          </div>
 
-          <button
-            onClick={openAddModal}
-            className="px-4 py-2 bg-gradient-to-r from-sky-400 to-violet-500 text-white rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <header className="page-header">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <nav className="breadcrumb">
+              <Link href="/protected/dashboard">Dashboard</Link>
+              <span className="breadcrumb-sep">/</span>
+              <span>Todos</span>
+            </nav>
+            <h1 className="page-title">Todos</h1>
+            <p className="page-subtitle">Personal tasks and reminders</p>
+          </div>
+          <button type="button" onClick={openAddModal} className="btn-primary px-4 py-2.5 shrink-0 self-start sm:self-center">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Add Task
+            New task
           </button>
         </div>
+      </header>
 
-        {/* Stats Cards */}
-        {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div className="glass-card rounded-xl p-4">
-              <div className="text-2xl font-bold text-white">{stats.total}</div>
-              <div className="text-sm text-slate-400">Total Tasks</div>
+      {stats && (
+        <>
+          <div className="stat-grid">
+            <div className="stat-card">
+              <p className="stat-card-label">Total</p>
+              <p className="stat-card-value">{stats.total}</p>
             </div>
-            <div className="glass-card rounded-xl p-4">
-              <div className="text-2xl font-bold text-emerald-400">{stats.pending}</div>
-              <div className="text-sm text-slate-400">Pending</div>
+            <div className="stat-card">
+              <p className="stat-card-label">Pending</p>
+              <p className="stat-card-value dashboard-stat-accent-amber">{stats.pending}</p>
             </div>
-            <div className="glass-card rounded-xl p-4">
-              <div className="text-2xl font-bold text-sky-400">{stats.completed}</div>
-              <div className="text-sm text-slate-400">Completed</div>
+            <div className="stat-card">
+              <p className="stat-card-label">Completed</p>
+              <p className="stat-card-value dashboard-stat-accent-green">{stats.completed}</p>
             </div>
-            <div className="glass-card rounded-xl p-4">
-              <div className="text-2xl font-bold text-red-400">{stats.overdue}</div>
-              <div className="text-sm text-slate-400">Overdue</div>
+            <div className="stat-card">
+              <p className="stat-card-label">Overdue</p>
+              <p className="stat-card-value dashboard-stat-accent-red">{stats.overdue}</p>
             </div>
           </div>
-        )}
 
-        {/* Filters */}
-        <div className="glass-card rounded-xl p-4 mb-6">
-          <div className="flex flex-wrap gap-4 items-center">
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-slate-400">Status:</label>
-              <select
-                value={filter.status}
-                onChange={(e) => setFilter(prev => ({ ...prev, status: e.target.value }))}
-                className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-sky-500"
-              >
-                <option value="">All</option>
-                {statuses.map(s => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
+          <div className="todo-progress-panel">
+            <span className="meta-text text-xs whitespace-nowrap">Completion</span>
+            <div className="todo-progress-track">
+              <div
+                className="todo-progress-fill"
+                style={{ width: `${Math.min(100, stats.completion_rate)}%` }}
+              />
             </div>
-
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-slate-400">Priority:</label>
-              <select
-                value={filter.priority}
-                onChange={(e) => setFilter(prev => ({ ...prev, priority: e.target.value }))}
-                className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-sky-500"
-              >
-                <option value="">All</option>
-                {priorities.map(p => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {selectedIds.length > 0 && (
-              <div className="flex items-center gap-2 ml-auto">
-                <span className="text-sm text-slate-400">{selectedIds.length} selected</span>
-                <button
-                  onClick={handleBulkComplete}
-                  className="px-3 py-1.5 text-sm bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded-lg hover:bg-emerald-500/30 transition-colors"
-                >
-                  Complete
-                </button>
-                <button
-                  onClick={promptBulkDelete}
-                  className="px-3 py-1.5 text-sm bg-red-500/20 text-red-400 border border-red-500/50 rounded-lg hover:bg-red-500/30 transition-colors"
-                >
-                  Delete
-                </button>
-              </div>
-            )}
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {Math.round(stats.completion_rate)}%
+            </span>
           </div>
-        </div>
+        </>
+      )}
 
-        {/* Todos List */}
-        <div className="glass-card rounded-xl overflow-hidden">
-          {loading ? (
-            <div className="p-12 text-center text-slate-400">Loading tasks...</div>
-          ) : todos.length === 0 ? (
-            <div className="p-12 text-center">
-              <svg className="w-16 h-16 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <nav className="ticket-view-nav" aria-label="Task views">
+          {viewTabs.map((tab) => (
+            <button
+              key={tab.id || 'all'}
+              type="button"
+              onClick={() => handleViewFilter(tab.id)}
+              className={`ticket-view-nav__link${viewFilter === tab.id ? ' ticket-view-nav__link--active' : ''}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      <div className="surface-panel overflow-hidden p-0">
+        <div className="todo-toolbar">
+          <div className="relative flex-1 min-w-[12rem] max-w-sm">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="w-4 h-4" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              <h3 className="text-lg font-medium text-white mb-2">No tasks yet</h3>
-              <p className="text-slate-400 mb-4">Get started by creating your first task</p>
+            </div>
+            <input
+              type="text"
+              placeholder="Search tasks..."
+              className="input-field pl-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          <select
+            value={filter.priority}
+            onChange={(e) => setFilter((prev) => ({ ...prev, priority: e.target.value }))}
+            className="input-field ticket-filter-select w-auto min-w-[8rem]"
+            aria-label="Filter by priority"
+          >
+            <option value="">All priorities</option>
+            {priorities.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
+            ))}
+          </select>
+
+          {selectedIds.length > 0 && (
+            <div className="todo-bulk-actions">
+              <span className="meta-text text-xs">{selectedIds.length} selected</span>
+              <button type="button" onClick={handleBulkComplete} className="btn-secondary px-2.5 py-1 text-xs">
+                Complete
+              </button>
               <button
-                onClick={openAddModal}
-                className="px-4 py-2 bg-gradient-to-r from-sky-400 to-violet-500 text-white rounded-lg hover:opacity-90 transition-opacity"
+                type="button"
+                onClick={promptBulkDelete}
+                className="btn-secondary px-2.5 py-1 text-xs"
+                style={{ color: 'var(--danger)' }}
               >
-                Create Task
+                Delete
               </button>
             </div>
-          ) : (
-            <div className="divide-y divide-slate-700/50">
-              {/* Header */}
-              <div className="px-6 py-3 bg-slate-800/50 flex items-center gap-4">
+          )}
+        </div>
+
+        {loading ? (
+          <div className="empty-state py-16">
+            <div
+              className="animate-spin rounded-full h-8 w-8 border-2 mx-auto mb-4"
+              style={{ borderColor: 'var(--border-default)', borderTopColor: 'var(--accent)' }}
+            />
+            <p>Loading tasks...</p>
+          </div>
+        ) : displayedTodos.length === 0 ? (
+          <div className="empty-state py-16">
+            <svg className="w-10 h-10 mx-auto mb-3" style={{ color: 'var(--text-disabled)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+            <p className="font-medium mb-1" style={{ color: 'var(--text-primary)' }}>No tasks found</p>
+            <p className="meta-text text-sm mb-4">Create a task to get started</p>
+            <button type="button" onClick={openAddModal} className="btn-primary px-4 py-2">
+              New task
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="todo-list-header">
+              <span>
                 <input
                   type="checkbox"
-                  checked={selectedIds.length === todos.length && todos.length > 0}
+                  checked={selectedIds.length === displayedTodos.length && displayedTodos.length > 0}
                   onChange={selectAll}
-                  className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
+                  aria-label="Select all tasks"
                 />
-                <div className="flex-1 text-sm font-medium text-slate-400">Task</div>
-                <div className="w-24 text-sm font-medium text-slate-400">Priority</div>
-                <div className="w-24 text-sm font-medium text-slate-400">Status</div>
-                <div className="w-32 text-sm font-medium text-slate-400">Due Date</div>
-                <div className="w-32 text-right text-sm font-medium text-slate-400">Actions</div>
-              </div>
+              </span>
+              <span />
+              <span>Task</span>
+              <span>Priority</span>
+              <span>Status</span>
+              <span>Due</span>
+              <span className="text-right">Actions</span>
+            </div>
 
-              {/* Todos */}
-              {todos.map(todo => (
-                <div
-                  key={todo.id}
-                  className={`px-6 py-4 flex items-center gap-4 hover:bg-slate-800/30 transition-colors ${todo.is_completed ? 'opacity-60' : ''
-                    }`}
-                >
+            {displayedTodos.map((todo) => (
+              <div
+                key={todo.id}
+                className={`todo-row${todo.is_completed ? ' todo-row--completed' : ''}${todo.is_overdue && !todo.is_completed ? ' todo-row--overdue' : ''}`}
+              >
+                <div>
                   <input
                     type="checkbox"
                     checked={selectedIds.includes(todo.id)}
                     onChange={() => toggleSelection(todo.id)}
-                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
+                    aria-label={`Select ${todo.title}`}
                   />
+                </div>
 
-                  <div className="flex-1">
-                    <div className={`font-medium ${todo.is_completed ? 'line-through text-slate-500' : 'text-white'}`}>
-                      {todo.title}
-                    </div>
-                    {todo.description && (
-                      <div className="text-sm text-slate-400 mt-1 line-clamp-1">{todo.description}</div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => (todo.is_completed ? handleReopen(todo.id) : handleComplete(todo.id))}
+                    className={`todo-complete-btn${todo.is_completed ? ' todo-complete-btn--done' : ''}`}
+                    aria-label={todo.is_completed ? 'Reopen task' : 'Complete task'}
+                  >
+                    {todo.is_completed && (
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
                     )}
-                    {todo.is_overdue && !todo.is_completed && (
-                      <div className="text-xs text-red-400 mt-1">Overdue</div>
-                    )}
-                  </div>
+                  </button>
+                </div>
 
-                  <div className="w-24">
+                <div className="min-w-0">
+                  <p className="todo-row-title">{todo.title}</p>
+                  {todo.description && <p className="todo-row-desc">{todo.description}</p>}
+                  <div className="todo-row-meta">
                     <span
-                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                      className="todo-priority-badge"
                       style={{
-                        backgroundColor: `${todo.priority_color}20`,
+                        backgroundColor: `${todo.priority_color}18`,
                         color: todo.priority_color,
                       }}
                     >
                       {todo.priority_display}
                     </span>
-                  </div>
-
-                  <div className="w-24">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${todo.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' :
-                      todo.status === 'in_progress' ? 'bg-sky-500/20 text-sky-400' :
-                        todo.status === 'cancelled' ? 'bg-slate-500/20 text-slate-400' :
-                          'bg-amber-500/20 text-amber-400'
-                      }`}>
-                      {todo.status_display}
-                    </span>
-                  </div>
-
-                  <div className="w-32 text-sm text-slate-400">
-                    {todo.due_date ? (
-                      new Date(todo.due_date).toLocaleDateString()
-                    ) : (
-                      '-'
+                    <span className={statusBadgeClass(todo.status)}>{todo.status_display}</span>
+                    {todo.due_date && (
+                      <span className={`todo-due${todo.is_overdue && !todo.is_completed ? ' todo-due--overdue' : ''}`}>
+                        {formatDueDate(todo.due_date)}
+                      </span>
                     )}
-                  </div>
-
-                  <div className="w-32 flex items-center justify-end gap-2">
-                    {todo.is_completed ? (
-                      <button
-                        onClick={() => handleReopen(todo.id)}
-                        className="p-1.5 text-slate-400 hover:text-sky-400 transition-colors"
-                        title="Reopen"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleComplete(todo.id)}
-                        className="p-1.5 text-slate-400 hover:text-emerald-400 transition-colors"
-                        title="Complete"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => openEditModal(todo)}
-                      className="p-1.5 text-slate-400 hover:text-sky-400 transition-colors"
-                      title="Edit"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-
-                    <button
-                      onClick={() => promptDelete(todo.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-400 transition-colors"
-                      title="Delete"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+
+                <div className="todo-row-col">
+                  <span
+                    className="todo-priority-badge"
+                    style={{
+                      backgroundColor: `${todo.priority_color}18`,
+                      color: todo.priority_color,
+                    }}
+                  >
+                    {todo.priority_display}
+                  </span>
+                </div>
+
+                <div className="todo-row-col">
+                  <span className={statusBadgeClass(todo.status)}>{todo.status_display}</span>
+                </div>
+
+                <div className="todo-row-col">
+                  {todo.due_date ? (
+                    <span className={`todo-due${todo.is_overdue && !todo.is_completed ? ' todo-due--overdue' : ''}`}>
+                      {formatDueDate(todo.due_date)}
+                    </span>
+                  ) : (
+                    <span className="meta-text">—</span>
+                  )}
+                </div>
+
+                <div className="todo-row-actions">
+                  <button type="button" onClick={() => openEditModal(todo)} className="icon-btn" title="Edit">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                  <button type="button" onClick={() => promptDelete(todo.id)} className="icon-btn icon-btn-danger" title="Delete">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
 
-      {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="glass-card rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold text-white">
-                  {isEditing ? 'Edit Task' : 'Add Task'}
-                </h2>
-                <button
-                  onClick={closeModal}
-                  className="text-slate-400 hover:text-white transition-colors"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+        <div className="modal-overlay" onClick={closeModal}>
+          <div
+            className="modal-panel todo-form-modal max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <h2 className="modal-title">{isEditing ? 'Edit task' : 'New task'}</h2>
+                <p className="todo-form-subtitle">
+                  {isEditing ? 'Update details, priority, or status.' : 'Add a task to your personal list.'}
+                </p>
               </div>
+              <button type="button" onClick={closeModal} className="icon-btn" aria-label="Close">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body space-y-5">
+                <div className="todo-form-field">
+                  <label htmlFor="todo-title" className="todo-form-label">
                     Title *
                   </label>
                   <input
+                    id="todo-title"
                     type="text"
                     name="title"
                     value={formData.title}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-500"
-                    placeholder="e.g., Review project proposal"
+                    className="input-field todo-form-input-lg"
+                    placeholder="What needs to be done?"
+                    autoFocus
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                <div className="todo-form-field">
+                  <label htmlFor="todo-description" className="todo-form-label">
                     Description
                   </label>
                   <textarea
+                    id="todo-description"
                     name="description"
                     value={formData.description}
                     onChange={handleInputChange}
                     rows={3}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-500"
-                    placeholder="Add details about this task..."
+                    className="input-field resize-none"
+                    placeholder="Optional notes or context..."
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1">
-                      Priority *
-                    </label>
-                    <select
-                      name="priority"
-                      value={formData.priority}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-500"
-                    >
-                      {priorities.map(p => (
-                        <option key={p.value} value={p.value}>
+                <div className="todo-form-field">
+                  <span className="todo-form-label">Priority</span>
+                  <div className="todo-choice-row">
+                    {priorities.map((p) => {
+                      const isActive = formData.priority === p.value;
+                      return (
+                        <button
+                          key={p.value}
+                          type="button"
+                          className={`todo-choice-btn${isActive ? ' todo-choice-btn--active' : ''}`}
+                          style={
+                            isActive
+                              ? {
+                                  borderColor: p.color,
+                                  backgroundColor: `${p.color}18`,
+                                  color: p.color,
+                                  boxShadow: `0 0 0 1px ${p.color}40`,
+                                }
+                              : undefined
+                          }
+                          onClick={() => setFormData((prev) => ({ ...prev, priority: p.value as TodoItemInput['priority'] }))}
+                        >
                           {p.label}
-                        </option>
-                      ))}
-                    </select>
+                        </button>
+                      );
+                    })}
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1">
-                      Status *
-                    </label>
-                    <select
-                      name="status"
-                      value={formData.status}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-500"
-                    >
-                      {statuses.map(s => (
-                        <option key={s.value} value={s.value}>
+                <div className="todo-form-field">
+                  <span className="todo-form-label">Status</span>
+                  <div className="todo-choice-row">
+                    {statuses.map((s) => {
+                      const isActive = formData.status === s.value;
+                      return (
+                        <button
+                          key={s.value}
+                          type="button"
+                          className={`todo-choice-btn todo-choice-btn--status todo-choice-btn--${s.value}${isActive ? ' todo-choice-btn--active' : ''}`}
+                          onClick={() => setFormData((prev) => ({ ...prev, status: s.value as TodoItemInput['status'] }))}
+                        >
                           {s.label}
-                        </option>
-                      ))}
-                    </select>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Due Date
+                <div className="todo-form-field">
+                  <label htmlFor="todo-due-date" className="todo-form-label">
+                    Due date
                   </label>
-                  <input
-                    type="date"
-                    name="due_date"
-                    value={formData.due_date}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-500"
-                  />
+                  <div className="todo-date-row">
+                    <input
+                      id="todo-due-date"
+                      type="date"
+                      name="due_date"
+                      value={formData.due_date}
+                      onChange={handleInputChange}
+                      className="input-field"
+                    />
+                    {formData.due_date && (
+                      <button
+                        type="button"
+                        className="todo-date-clear"
+                        onClick={() => setFormData((prev) => ({ ...prev, due_date: '' }))}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
+              </div>
 
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 px-4 py-2 bg-gradient-to-r from-sky-400 to-violet-500 text-white rounded-lg hover:opacity-90 transition-opacity"
-                  >
-                    {isEditing ? 'Update Task' : 'Add Task'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-md">
-            <div className="p-6">
-              <h2 className="text-xl font-semibold text-white mb-4">Confirm Deletion</h2>
-              <p className="text-slate-400 mb-6">
-                Are you sure you want to delete {deleteTarget === 'bulk' ? `${selectedIds.length} selected tasks` : 'this task'}? This action cannot be undone.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setDeleteTarget(null);
-                    setTodoToDelete(null);
-                  }}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-                >
+              <div className="modal-footer">
+                <button type="button" onClick={closeModal} className="btn-secondary flex-1" disabled={submitting}>
                   Cancel
                 </button>
-                <button
-                  onClick={confirmDelete}
-                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-                >
-                  Confirm Delete
+                <button type="submit" className="btn-primary flex-1" disabled={submitting}>
+                  {submitting ? 'Saving…' : isEditing ? 'Save changes' : 'Create task'}
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        title="Delete task"
+        message={
+          deleteTarget === 'bulk'
+            ? `Delete ${selectedIds.length} selected task${selectedIds.length === 1 ? '' : 's'}? This cannot be undone.`
+            : 'Delete this task? This cannot be undone.'
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDestructive
+        onConfirm={confirmDelete}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setTodoToDelete(null);
+        }}
+      />
     </div>
   );
 }

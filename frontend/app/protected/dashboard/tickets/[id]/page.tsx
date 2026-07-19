@@ -310,8 +310,11 @@ export default function TicketDetailPage() {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingTicket, setDeletingTicket] = useState(false);
+  const [creatingGithubIssue, setCreatingGithubIssue] = useState(false);
   const [viewingMedia, setViewingMedia] = useState<ViewingMedia | null>(null);
   const [showAssignDropdown, setShowAssignDropdown] = useState(false);
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+  const assigneeDropdownRef = useRef<HTMLDivElement>(null);
   const [activeSession, setActiveSession] = useState<TicketActiveSession | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -324,6 +327,7 @@ export default function TicketDetailPage() {
     priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
     status: 'new' as TicketStatus,
     assignees: [] as number[],
+    due_date: '',
   });
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<string, string | string[]>>>({});
 
@@ -360,6 +364,7 @@ export default function TicketDetailPage() {
           priority: ticketData.priority,
           status: ticketData.status,
           assignees: ticketData.assignees || [],
+          due_date: ticketData.due_date || '',
         });
       } catch (error: any) {
         showToastMessage(error.response?.data?.detail || 'Failed to load ticket', 'error');
@@ -421,7 +426,10 @@ export default function TicketDetailPage() {
       setSaving(true);
       setFieldErrors({});
       const { assignees: _, status: _s, ...savePayload } = editData;
-      const updated = await ticketsApi.updateTicket(ticketId, savePayload);
+      const updated = await ticketsApi.updateTicket(ticketId, {
+        ...savePayload,
+        due_date: savePayload.due_date || null,
+      });
       setTicket({ ...ticket!, ...updated });
       setIsEditing(false);
       showToastMessage('Ticket updated successfully', 'success');
@@ -466,6 +474,19 @@ export default function TicketDetailPage() {
     }
   };
 
+  const handleCreateGithubIssue = async () => {
+    try {
+      setCreatingGithubIssue(true);
+      const updated = await ticketsApi.createGithubIssue(ticketId);
+      setTicket(updated);
+      showToastMessage('GitHub issue created and linked', 'success');
+    } catch (error: any) {
+      showToastMessage(error.response?.data?.detail || 'Failed to create GitHub issue', 'error');
+    } finally {
+      setCreatingGithubIssue(false);
+    }
+  };
+
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -474,7 +495,7 @@ export default function TicketDetailPage() {
       setUploadingMedia(true);
       for (const file of Array.from(files)) {
         const media = await ticketsApi.uploadMedia(ticketId, file);
-        setTicket(prev => prev ? { ...prev, media_files: [...prev.media_files, media] } : null);
+        setTicket(prev => prev ? { ...prev, media_files: [...(prev.media_files ?? []), media] } : null);
       }
       showToastMessage('Media uploaded successfully', 'success');
     } catch (error: any) {
@@ -490,7 +511,7 @@ export default function TicketDetailPage() {
   const handleDeleteMedia = async (mediaId: number) => {
     try {
       await ticketsApi.deleteMedia(ticketId, mediaId);
-      setTicket(prev => prev ? { ...prev, media_files: prev.media_files.filter(m => m.id !== mediaId) } : null);
+      setTicket(prev => prev ? { ...prev, media_files: (prev.media_files ?? []).filter(m => m.id !== mediaId) } : null);
       showToastMessage('Media deleted successfully', 'success');
     } catch (error: any) {
       showToastMessage(error.response?.data?.detail || 'Failed to delete media', 'error');
@@ -507,7 +528,7 @@ export default function TicketDetailPage() {
     try {
       setSubmittingComment(true);
       const comment = await ticketsApi.addComment(ticketId, newComment.trim(), commentImages);
-      setTicket(prev => prev ? { ...prev, comments: [...prev.comments, comment] } : null);
+      setTicket(prev => prev ? { ...prev, comments: [...(prev.comments ?? []), comment] } : null);
       setNewComment('');
       setCommentImages([]);
       if (commentFileInputRef.current) commentFileInputRef.current.value = '';
@@ -576,7 +597,6 @@ export default function TicketDetailPage() {
   const handleAssign = async (targetUserId: number) => {
     try {
       setSaving(true);
-      setShowAssignDropdown(false);
       const updated = await ticketsApi.assignTicket(ticketId, targetUserId);
       const assignees = updated.assignees || [];
       setTicket({ ...ticket!, assignees, assignees_list: updated.assignees_list });
@@ -591,6 +611,32 @@ export default function TicketDetailPage() {
     }
   };
 
+  const closeAssigneeDropdown = () => {
+    setShowAssignDropdown(false);
+    setAssigneeSearch('');
+  };
+
+  useEffect(() => {
+    if (!showAssignDropdown) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (assigneeDropdownRef.current && !assigneeDropdownRef.current.contains(event.target as Node)) {
+        closeAssigneeDropdown();
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeAssigneeDropdown();
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showAssignDropdown]);
+
   const projectMembers = users.filter(u =>
     ticket?.project && (
       projects.find(p => p.id === ticket.project)?.members?.some(m => m.user.id === u.id) ||
@@ -598,6 +644,127 @@ export default function TicketDetailPage() {
       u.role === 'manager'
     )
   );
+
+  const getMemberDisplayName = (member: User) => {
+    const fullName = `${member.first_name} ${member.last_name}`.trim();
+    return fullName || member.username;
+  };
+
+  const getMemberInitials = (member: User) => {
+    if (member.first_name && member.last_name) {
+      return `${member.first_name[0]}${member.last_name[0]}`.toUpperCase();
+    }
+    return member.username.slice(0, 2).toUpperCase();
+  };
+
+  const availableAssignees = useMemo(() => {
+    return projectMembers.filter((member) => !ticket?.assignees?.includes(member.id));
+  }, [projectMembers, ticket?.assignees]);
+
+  const filteredAssignees = useMemo(() => {
+    const query = assigneeSearch.trim().toLowerCase();
+    if (!query) return availableAssignees;
+
+    return availableAssignees.filter((member) => {
+      const fullName = getMemberDisplayName(member).toLowerCase();
+      return (
+        fullName.includes(query) ||
+        member.username.toLowerCase().includes(query) ||
+        member.email.toLowerCase().includes(query)
+      );
+    });
+  }, [availableAssignees, assigneeSearch]);
+
+  const renderAssigneeDropdown = () => {
+    if (!showAssignDropdown) return null;
+
+    const showSelfAssign = user?.id && !ticket?.assignees?.includes(Number(user.id));
+
+    return (
+      <div ref={assigneeDropdownRef} className="assignee-dropdown">
+        <div className="assignee-dropdown-header">
+          <span className="meta-text text-xs font-medium">Add assignee</span>
+          <button
+            type="button"
+            onClick={closeAssigneeDropdown}
+            className="assignee-dropdown-close"
+            aria-label="Close assignee picker"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="search-input flex items-center assignee-dropdown-search">
+          <div className="pl-3 flex items-center pointer-events-none">
+            <svg className="w-4 h-4" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder="Search by name..."
+            className="w-full bg-transparent border-0 pl-2 pr-3 py-2 text-sm focus:outline-none focus:ring-0"
+            style={{ color: 'var(--text-primary)' }}
+            value={assigneeSearch}
+            onChange={(e) => setAssigneeSearch(e.target.value)}
+          />
+          {assigneeSearch && (
+            <button
+              type="button"
+              onClick={() => setAssigneeSearch('')}
+              className="pr-3"
+              style={{ color: 'var(--text-muted)' }}
+              aria-label="Clear search"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        <div className="assignee-dropdown-list">
+          {showSelfAssign && !assigneeSearch.trim() && (
+            <button
+              type="button"
+              onClick={() => handleAssign(Number(user?.id))}
+              disabled={saving}
+              className="assignee-dropdown-item"
+            >
+              Self-assign (add me)
+            </button>
+          )}
+          {filteredAssignees.length === 0 ? (
+            <p className="meta-text text-xs px-2 py-2 text-center">
+              {availableAssignees.length === 0
+                ? 'All project members are already assigned'
+                : `No members match "${assigneeSearch}"`}
+            </p>
+          ) : (
+            filteredAssignees.map((member) => (
+              <button
+                key={member.id}
+                type="button"
+                onClick={() => handleAssign(member.id)}
+                disabled={saving}
+                className="assignee-dropdown-item"
+              >
+                <div
+                  className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                  style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}
+                >
+                  <span className="text-[10px] font-medium">{getMemberInitials(member)}</span>
+                </div>
+                <span className="truncate">{getMemberDisplayName(member)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const mentionableUsers = useMemo(() => {
     if (!ticket) return [];
@@ -660,10 +827,13 @@ export default function TicketDetailPage() {
   const canViewActivity = user?.role === 'admin' || user?.role === 'manager';
   const isProjectMember = projectMembers.some(m => m.id === user?.id);
   const canAssign = user?.role === 'admin' || user?.role === 'manager' || isCreator || isProjectMember;
+  const currentProject = projects.find((project) => project.id === ticket?.project);
+  const projectHasGithubRepo = Boolean(currentProject?.github_repo);
+  const canCreateGithubIssue = projectHasGithubRepo && !ticket?.github_link;
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <div className="page-container">
         <div className="animate-pulse space-y-6">
           <div className="h-8 bg-slate-700/30 rounded w-1/3"></div>
           <div className="h-96 bg-slate-700/30 rounded-xl"></div>
@@ -674,7 +844,7 @@ export default function TicketDetailPage() {
 
   if (!ticket) {
     return (
-      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <div className="page-container">
         <div className="form-card p-12 text-center">
           <h2 className="text-xl font-semibold text-white mb-2">Ticket Not Found</h2>
           <Link href="/protected/dashboard/tickets" className="btn-primary mt-4">Back to Tickets</Link>
@@ -684,7 +854,7 @@ export default function TicketDetailPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div className="page-container">
       {toast && (
         <div className={`fixed top-20 right-4 z-50 px-6 py-3 rounded-lg shadow-lg ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white`}>
           {toast.message}
@@ -734,6 +904,15 @@ export default function TicketDetailPage() {
                     </select>
                     {fieldErrors.priority && <p className="text-red-400 text-xs mt-1">{Array.isArray(fieldErrors.priority) ? fieldErrors.priority[0] : fieldErrors.priority}</p>}
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-200 mb-1">Due date</label>
+                    <input
+                      type="date"
+                      className="input-field w-full"
+                      value={editData.due_date || ''}
+                      onChange={(e) => setEditData({ ...editData, due_date: e.target.value })}
+                    />
+                  </div>
                 </div>
                 <div className="flex gap-2 pt-2">
                   <button onClick={handleSave} disabled={saving} className="btn-primary px-4 py-2">{saving ? 'Saving...' : 'Save'}</button>
@@ -744,7 +923,7 @@ export default function TicketDetailPage() {
               <div>
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h1 className="text-2xl font-bold text-white">{ticket.title}</h1>
+                    <h1 className="page-title text-2xl font-bold">{ticket.title}</h1>
                     <p className="text-sm text-slate-500 mt-1">{ticket.ticket_id}</p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -770,7 +949,7 @@ export default function TicketDetailPage() {
 
           <div className="form-card p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Attachments</h3>
+              <h3 className="surface-panel-title">Attachments</h3>
             </div>
             {(isProjectMember || canEdit) && (
               <div className="mb-6">
@@ -780,7 +959,7 @@ export default function TicketDetailPage() {
                       setUploadingMedia(true);
                       for (const file of files) {
                         const media = await ticketsApi.uploadMedia(ticketId, file);
-                        setTicket(prev => prev ? { ...prev, media_files: [...prev.media_files, media] } : null);
+                        setTicket(prev => prev ? { ...prev, media_files: [...(prev.media_files ?? []), media] } : null);
                       }
                       showToastMessage('Media uploaded successfully', 'success');
                     } catch (error: any) {
@@ -929,7 +1108,7 @@ export default function TicketDetailPage() {
                       <span className="text-slate-500 text-xs ml-auto">{formatDateTime(comment.created_at)}</span>
                     </div>
                     <p className="text-slate-300 text-sm whitespace-pre-wrap break-words">
-                      {comment.content ? renderCommentContent(comment.content) : null}
+                      {comment.content ? renderCommentContent(comment.content, users) : null}
                     </p>
                     {comment.media_files && comment.media_files.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-3">
@@ -993,13 +1172,16 @@ export default function TicketDetailPage() {
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-2">
                     {ticket.assignees_list.map((a) => (
-                      <div key={a.id} className="flex items-center gap-2 bg-slate-700/50 rounded-lg px-2 py-1.5 group">
-                        <div className="w-6 h-6 rounded-full bg-sky-500/20 flex items-center justify-center flex-shrink-0">
-                          <span className="text-[10px] font-medium text-sky-400">
+                      <div key={a.id} className="assignee-chip group">
+                        <div
+                          className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                          style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}
+                        >
+                          <span className="text-[10px] font-medium">
                             {(a.display_name || a.username).slice(0, 2).toUpperCase()}
                           </span>
                         </div>
-                        <span className="text-sm text-white truncate max-w-[100px]">{a.display_name || a.username}</span>
+                        <span className="assignee-chip-name">{a.display_name || a.username}</span>
                         {canAssign && ticket.status !== 'closed' && (isManagerOrAdmin || isCreator || a.id === user?.id) && (
                           <button
                             onClick={async () => {
@@ -1017,7 +1199,7 @@ export default function TicketDetailPage() {
                               }
                             }}
                             disabled={saving}
-                            className="text-slate-400 hover:text-red-400 text-xs p-0.5"
+                            className="assignee-chip-remove text-xs p-0.5"
                             title="Remove"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1031,50 +1213,17 @@ export default function TicketDetailPage() {
                   {canAssign && ticket.status !== 'closed' && (
                     <div className="relative">
                       <button
-                        onClick={() => setShowAssignDropdown(!showAssignDropdown)}
+                        type="button"
+                        onClick={() => setShowAssignDropdown((open) => !open)}
                         disabled={saving}
-                        className="text-sky-400 hover:text-sky-300 text-xs flex items-center gap-1"
+                        className="dashboard-link text-xs flex items-center gap-1"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                         </svg>
                         Add assignee
                       </button>
-                      {showAssignDropdown && (
-                        <div className="absolute left-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-10">
-                          <div className="p-2 max-h-48 overflow-y-auto">
-                            {!ticket.assignees?.includes(Number(user?.id)) && (
-                              <button
-                                onClick={() => handleAssign(Number(user?.id))}
-                                disabled={saving}
-                                className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded"
-                              >
-                                Self-assign (add me)
-                              </button>
-                            )}
-                            {projectMembers.filter(m => !ticket.assignees?.includes(m.id)).map(member => (
-                              <button
-                                key={member.id}
-                                onClick={() => handleAssign(member.id)}
-                                disabled={saving}
-                                className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded flex items-center gap-2"
-                              >
-                                <div className="w-5 h-5 rounded-full bg-sky-500/20 flex items-center justify-center flex-shrink-0">
-                                  <span className="text-[10px] font-medium text-sky-400">
-                                    {member.first_name && member.last_name
-                                      ? `${member.first_name[0]}${member.last_name[0]}`.toUpperCase()
-                                      : member.username.slice(0, 2).toUpperCase()}
-                                  </span>
-                                </div>
-                                <span className="truncate">{member.first_name && member.last_name ? `${member.first_name} ${member.last_name}` : member.username}</span>
-                              </button>
-                            ))}
-                            {projectMembers.filter(m => !ticket.assignees?.includes(m.id)).length === 0 && ticket.assignees?.includes(Number(user?.id)) && (
-                              <p className="text-xs text-slate-500 px-2 py-1">All project members assigned</p>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                      {renderAssigneeDropdown()}
                     </div>
                   )}
                 </div>
@@ -1086,43 +1235,14 @@ export default function TicketDetailPage() {
                       {canAssign ? (
                         <div className="relative">
                           <button
-                            onClick={() => setShowAssignDropdown(!showAssignDropdown)}
+                            type="button"
+                            onClick={() => setShowAssignDropdown((open) => !open)}
                             disabled={saving}
                             className="btn-primary px-3 py-1.5 text-sm"
                           >
                             Assign
                           </button>
-                          {showAssignDropdown && (
-                            <div className="absolute left-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-10">
-                              <div className="p-2">
-                                <button
-                                  onClick={() => handleAssign(Number(user?.id))}
-                                  disabled={saving}
-                                  className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded"
-                                >
-                                  Self-assign (add me)
-                                </button>
-                                <div className="border-t border-slate-700 my-1"></div>
-                                {projectMembers.filter(m => m.id !== user?.id).map(member => (
-                                  <button
-                                    key={member.id}
-                                    onClick={() => handleAssign(member.id)}
-                                    disabled={saving}
-                                    className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded flex items-center gap-2"
-                                  >
-                                    <div className="w-5 h-5 rounded-full bg-sky-500/20 flex items-center justify-center flex-shrink-0">
-                                      <span className="text-[10px] font-medium text-sky-400">
-                                        {member.first_name && member.last_name
-                                          ? `${member.first_name[0]}${member.last_name[0]}`.toUpperCase()
-                                          : member.username.slice(0, 2).toUpperCase()}
-                                      </span>
-                                    </div>
-                                    <span className="truncate">{member.first_name && member.last_name ? `${member.first_name} ${member.last_name}` : member.username}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                          {renderAssigneeDropdown()}
                         </div>
                       ) : (
                         <button
@@ -1167,6 +1287,43 @@ export default function TicketDetailPage() {
               )}
               {!canChangeStatus && ticket.status !== 'closed' && (
                 <p className="text-xs text-slate-500 mt-2">Only assignees can change status</p>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-700/50">
+              <label className="block text-sm font-medium text-slate-400 mb-2">GitHub</label>
+              {ticket.github_link ? (
+                <a
+                  href={ticket.github_link.issue_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between gap-2 w-full px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 hover:border-slate-600 transition-colors"
+                >
+                  <span className="text-sm text-white truncate">
+                    {ticket.github_link.repo_owner}/{ticket.github_link.repo_name}#{ticket.github_link.issue_number}
+                  </span>
+                  <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              ) : canCreateGithubIssue ? (
+                <button
+                  type="button"
+                  onClick={handleCreateGithubIssue}
+                  disabled={creatingGithubIssue}
+                  className="w-full py-2.5 px-4 rounded-xl border border-slate-600 text-sm font-semibold text-white bg-slate-800/50 hover:bg-slate-700/50 transition-colors"
+                >
+                  {creatingGithubIssue ? 'Creating issue...' : 'Create GitHub issue'}
+                </button>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  {projectHasGithubRepo
+                    ? 'GitHub issue not linked yet.'
+                    : 'Add a GitHub repository URL on the project to enable issue linking.'}
+                </p>
+              )}
+              {ticket.github_link?.sync_status === 'error' && ticket.github_link.last_sync_error && (
+                <p className="text-xs text-red-400 mt-2">{ticket.github_link.last_sync_error}</p>
               )}
             </div>
 

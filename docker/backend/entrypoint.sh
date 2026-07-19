@@ -23,8 +23,11 @@ done
 log "Database is ready!"
 
 # Run database migrations (dev only - no static collection for faster startup)
-log "Applying database migrations..."
-python manage.py migrate --noinput
+log "Applying shared schema migrations..."
+python manage.py migrate_schemas --shared --noinput
+
+log "Applying tenant schema migrations..."
+python manage.py migrate_schemas --noinput
 
 log "Running: $@"
 exec "$@"

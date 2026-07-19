@@ -2,6 +2,11 @@
 import { UserRole } from './auth';
 import { normalizeListResponse } from './http-utils';
 
+export interface ProjectSummary {
+  id: number;
+  name: string;
+}
+
 export interface Project {
   id: number;
   name: string;
@@ -47,6 +52,7 @@ export interface ProjectMember {
     first_name: string;
     last_name: string;
     role: string;
+    login_address?: string | null;
     department_roles?: UserRole[];
   };
   joined_at: string;
@@ -62,6 +68,11 @@ export interface CreateProjectData {
 export const projectsApi = {
   getProjects: async (): Promise<Project[]> => {
     const response = await api.get<Project[] | { results: Project[] }>('/projects/projects/');
+    return normalizeListResponse(response.data);
+  },
+
+  getProjectSummaries: async (): Promise<ProjectSummary[]> => {
+    const response = await api.get<ProjectSummary[] | { results: ProjectSummary[] }>('/projects/projects/summary/');
     return normalizeListResponse(response.data);
   },
 

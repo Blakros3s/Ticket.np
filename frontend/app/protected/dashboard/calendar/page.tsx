@@ -1,9 +1,43 @@
-﻿'use client';
+'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { calendarApi, CalendarEvent, CalendarEventInput, CalendarCategory } from '@/lib/calendar';
 import { attendanceApi, WeekendHolidays } from '@/lib/attendance';
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const WEEK_DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatEventDate(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function formatEventDateLong(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
 
 export default function CalendarPage() {
   const { user } = useAuth();
@@ -16,11 +50,10 @@ export default function CalendarPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showEventDetail, setShowEventDetail] = useState<CalendarEvent | null>(null);
   const [weekendHolidays, setWeekendHolidays] = useState<WeekendHolidays>('saturday');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // Form state
   const [formData, setFormData] = useState<CalendarEventInput>({
     title: '',
     description: '',
@@ -31,7 +64,11 @@ export default function CalendarPage() {
     end_time: '',
   });
 
-  // Fetch events for current month
+  const showToastMessage = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   useEffect(() => {
     fetchEvents();
     fetchCategories();
@@ -50,6 +87,7 @@ export default function CalendarPage() {
       setEvents(response.events);
     } catch (error) {
       console.error('Error fetching events:', error);
+      showToastMessage('Failed to load calendar events', 'error');
     } finally {
       setLoading(false);
     }
@@ -64,7 +102,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Calendar navigation
   const goToPreviousMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   };
@@ -77,38 +114,29 @@ export default function CalendarPage() {
     setCurrentDate(new Date());
   };
 
-  // Get calendar grid data
   const getCalendarDays = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
-    const startingDay = firstDay.getDay(); // 0 = Sunday
+    const startingDay = firstDay.getDay();
 
     const days: (Date | null)[] = [];
-
-    // Add empty cells for days before the first day of the month
     for (let i = 0; i < startingDay; i++) {
       days.push(null);
     }
-
-    // Add all days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       days.push(new Date(year, month, day));
     }
-
     return days;
   };
 
-  // Get events for a specific date
   const getEventsForDate = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0];
-    return events.filter(event => event.date === dateStr);
+    const dateStr = toDateKey(date);
+    return events.filter((event) => event.date === dateStr);
   };
 
-  // Check if date is today
   const isToday = (date: Date) => {
     const today = new Date();
     return date.toDateString() === today.toDateString();
@@ -121,16 +149,14 @@ export default function CalendarPage() {
     return day === 0 || day === 6;
   };
 
-  // Modal handlers
   const openAddModal = (date?: Date) => {
     if (!isAdmin) return;
 
     const selected = date || new Date();
-    setSelectedDate(selected);
     setFormData({
       title: '',
       description: '',
-      date: selected.toISOString().split('T')[0],
+      date: toDateKey(selected),
       category: 'other',
       is_full_day: true,
       start_time: '',
@@ -164,14 +190,13 @@ export default function CalendarPage() {
     setIsEditing(false);
   };
 
-  // Form handlers
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
-      setFormData(prev => ({ ...prev, [name]: checked }));
+      setFormData((prev) => ({ ...prev, [name]: checked }));
     } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+      setFormData((prev) => ({ ...prev, [name]: value }));
     }
   };
 
@@ -181,15 +206,17 @@ export default function CalendarPage() {
     try {
       if (isEditing && selectedEvent) {
         await calendarApi.updateEvent(selectedEvent.id, formData);
+        showToastMessage('Event updated successfully', 'success');
       } else {
         await calendarApi.createEvent(formData);
+        showToastMessage('Event created successfully', 'success');
       }
 
       closeModal();
       fetchEvents();
     } catch (error) {
       console.error('Error saving event:', error);
-      alert('Error saving event. Please try again.');
+      showToastMessage('Failed to save event', 'error');
     }
   };
 
@@ -199,197 +226,256 @@ export default function CalendarPage() {
     if (confirm('Are you sure you want to delete this event?')) {
       try {
         await calendarApi.deleteEvent(selectedEvent.id);
+        showToastMessage('Event deleted', 'success');
         closeModal();
         fetchEvents();
       } catch (error) {
         console.error('Error deleting event:', error);
-        alert('Error deleting event. Please try again.');
+        showToastMessage('Failed to delete event', 'error');
       }
     }
   };
 
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
+  const handleDeleteFromDetail = async (event: CalendarEvent) => {
+    if (!confirm('Are you sure you want to delete this event?')) return;
 
-  const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    try {
+      await calendarApi.deleteEvent(event.id);
+      setShowEventDetail(null);
+      showToastMessage('Event deleted', 'success');
+      fetchEvents();
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      showToastMessage('Failed to delete event', 'error');
+    }
+  };
+
   const calendarDays = getCalendarDays();
+  const todayKey = toDateKey(new Date());
+
+  const monthStats = useMemo(() => {
+    const holidays = events.filter((e) => e.category === 'holiday').length;
+    const upcoming = events.filter((e) => e.date >= todayKey).length;
+    return { total: events.length, holidays, upcoming };
+  }, [events, todayKey]);
+
+  const upcomingEvents = useMemo(() => {
+    return [...events]
+      .filter((e) => e.date >= todayKey)
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.start_time || '').localeCompare(b.start_time || ''))
+      .slice(0, 5);
+  }, [events, todayKey]);
+
+  const getCategoryLabel = (value: string) =>
+    categories.find((c) => c.value === value)?.label || value;
 
   return (
-    <div className="min-h-screen bg-slate-900/50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Calendar</h1>
-            <p className="text-slate-400">View company events, holidays, and important dates</p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {isAdmin && (
-              <button
-                onClick={() => openAddModal()}
-                className="px-4 py-2 bg-gradient-to-r from-sky-400 to-violet-500 text-white rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add Event
-              </button>
-            )}
-          </div>
+    <div className="page-container calendar-page">
+      {toast && (
+        <div className={`toast ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
+          {toast.message}
         </div>
+      )}
 
-        {/* Calendar Navigation */}
-        <div className="glass-card rounded-xl p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={goToPreviousMonth}
-                className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors text-slate-300"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <header className="page-header">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <nav className="breadcrumb">
+              <Link href="/protected/dashboard">Dashboard</Link>
+              <span className="breadcrumb-sep">/</span>
+              <span>Calendar</span>
+            </nav>
+            <h1 className="page-title">Calendar</h1>
+          </div>
+          {isAdmin && (
+            <button type="button" onClick={() => openAddModal()} className="btn-primary px-3 py-1.5 text-sm shrink-0 self-start sm:self-center">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add event
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div className="calendar-page-layout">
+        <div className="surface-panel overflow-hidden p-0">
+          <div className="calendar-toolbar">
+            <div className="calendar-toolbar-nav">
+              <button type="button" onClick={goToPreviousMonth} className="icon-btn" aria-label="Previous month">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
-              <h2 className="text-xl font-semibold text-white">
-                {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+              <h2 className="calendar-month-label">
+                {MONTH_NAMES[currentDate.getMonth()]} {currentDate.getFullYear()}
               </h2>
-              <button
-                onClick={goToNextMonth}
-                className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors text-slate-300"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <button type="button" onClick={goToNextMonth} className="icon-btn" aria-label="Next month">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
             </div>
-            <button
-              onClick={goToToday}
-              className="px-4 py-2 text-sky-400 hover:text-sky-300 transition-colors"
-            >
+
+            <div className="calendar-compact-stats">
+              <span className="calendar-stat-pill"><strong>{monthStats.total}</strong> events</span>
+              <span className="calendar-stat-pill"><strong>{monthStats.holidays}</strong> holidays</span>
+              <span className="calendar-stat-pill"><strong>{monthStats.upcoming}</strong> upcoming</span>
+            </div>
+
+            <button type="button" onClick={goToToday} className="btn-secondary px-2.5 py-1 text-xs">
               Today
             </button>
           </div>
-        </div>
 
-        {/* Legend */}
-        <div className="flex flex-wrap gap-3 mb-6">
-          {categories.map(cat => (
-            <div key={cat.value} className="flex items-center gap-2">
-              <div
-                className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: cat.color }}
-              />
-              <span className="text-sm text-slate-300">{cat.label}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Calendar Grid */}
-        <div className="glass-card rounded-xl overflow-hidden">
-          {/* Weekday Headers */}
-          <div className="grid grid-cols-7 border-b border-slate-700/50">
-            {weekDays.map(day => (
-              <div key={day} className="p-4 text-center text-sm font-medium text-slate-400">
-                {day}
-              </div>
+          <div className="calendar-grid">
+            {WEEK_DAYS.map((day) => (
+              <div key={day} className="calendar-weekday">{day}</div>
             ))}
-          </div>
 
-          {/* Calendar Days */}
-          {loading ? (
-            <div className="p-12 text-center text-slate-400">Loading calendar...</div>
-          ) : (
-            <div className="grid grid-cols-7">
-              {calendarDays.map((date, index) => {
+            {loading ? (
+              <div className="col-span-7 empty-state py-10">
+                <div
+                  className="animate-spin rounded-full h-8 w-8 border-2 mx-auto mb-4"
+                  style={{ borderColor: 'var(--border-default)', borderTopColor: 'var(--accent)' }}
+                />
+                <p>Loading calendar...</p>
+              </div>
+            ) : (
+              calendarDays.map((date, index) => {
                 if (!date) {
-                  return (
-                    <div key={`empty-${index}`} className="min-h-[120px] border-b border-r border-slate-700/30 bg-slate-800/20" />
-                  );
+                  return <div key={`empty-${index}`} className="calendar-day calendar-day--empty" />;
                 }
 
                 const dayEvents = getEventsForDate(date);
                 const today = isToday(date);
                 const weekendOff = isWeekendOff(date);
-                const primaryEvent = dayEvents.length > 0 ? dayEvents[0] : null;
-
-                let cellStyle: React.CSSProperties = {};
-                if (primaryEvent) {
-                  cellStyle = { backgroundColor: `${primaryEvent.color}15` };
-                }
+                const visibleEvents = dayEvents.slice(0, 1);
+                const hiddenCount = dayEvents.length - visibleEvents.length;
+                const canAdd = isAdmin && dayEvents.length === 0;
 
                 return (
                   <div
-                    key={date.toISOString()}
+                    key={toDateKey(date)}
                     onClick={() => {
-                      if (primaryEvent) {
-                        setShowEventDetail(primaryEvent);
-                      } else if (isAdmin) {
+                      if (dayEvents.length === 1) {
+                        setShowEventDetail(dayEvents[0]);
+                      } else if (canAdd) {
                         openAddModal(date);
                       }
                     }}
-                    className={`min-h-[120px] border-b border-r border-slate-700/30 flex flex-col p-3 cursor-pointer transition-colors hover:opacity-80 ${today && !primaryEvent ? 'bg-sky-500/10' : ''
-                      } ${weekendOff && !primaryEvent ? 'bg-red-500/5' : ''}`}
-                    style={cellStyle}
+                    className={`calendar-day${today ? ' calendar-day--today' : ''}${weekendOff && dayEvents.length === 0 ? ' calendar-day--weekend' : ''}${dayEvents.length > 0 || canAdd ? ' calendar-day--interactive' : ''}`}
                   >
-                    <div className={`text-sm font-medium mb-1 ${today ? 'text-sky-400' : weekendOff ? 'text-red-400' : 'text-slate-300'
-                      }`}>
-                      {date.getDate()}
-                      {weekendOff && !primaryEvent && <span className="ml-1 text-xs text-red-500/70">(Off)</span>}
+                    <div className="calendar-day-header">
+                      <span className="calendar-day-number">{date.getDate()}</span>
+                      {weekendOff && dayEvents.length === 0 && (
+                        <span className="calendar-day-off">Off</span>
+                      )}
                     </div>
-                    <div className="flex-1 flex flex-col gap-3 mt-1">
-                      {dayEvents.map(event => (
-                        <div
+
+                    <div className="calendar-day-events">
+                      {visibleEvents.map((event) => (
+                        <button
                           key={event.id}
-                          className="w-full text-left"
-                          style={{ color: event.color }}
+                          type="button"
+                          className="calendar-event-pill"
+                          style={{ '--event-color': event.color } as React.CSSProperties}
                           title={event.title}
                           onClick={(e) => {
-                            if (dayEvents.length > 1) {
-                              e.stopPropagation();
-                              setShowEventDetail(event);
-                            }
+                            e.stopPropagation();
+                            setShowEventDetail(event);
                           }}
                         >
-                          <div className="font-bold text-[15px] leading-tight break-words">{event.title}</div>
-                          {!event.is_full_day && event.start_time && (
-                            <div className="font-semibold text-xs opacity-90 mt-1">{event.start_time.substring(0, 5)}</div>
-                          )}
-                        </div>
+                          <span className="calendar-event-pill__dot" />
+                          <span className="calendar-event-pill__text">
+                            <span className="calendar-event-pill__title">{event.title}</span>
+                          </span>
+                        </button>
                       ))}
+                      {hiddenCount > 0 && (
+                        <button
+                          type="button"
+                          className="calendar-day-more"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowEventDetail(dayEvents[0]);
+                          }}
+                        >
+                          +{hiddenCount} more
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
         </div>
+
+        <aside>
+          <div className="surface-panel calendar-sidebar-panel">
+            <h3 className="calendar-sidebar-title">Upcoming</h3>
+            {upcomingEvents.length === 0 ? (
+              <p className="meta-text text-xs">No upcoming events.</p>
+            ) : (
+              <div className="calendar-upcoming-list">
+                {upcomingEvents.map((event) => (
+                  <button
+                    key={event.id}
+                    type="button"
+                    className="calendar-upcoming-item"
+                    onClick={() => setShowEventDetail(event)}
+                  >
+                    <p className="calendar-upcoming-item__date">{formatEventDate(event.date)}</p>
+                    <p className="calendar-upcoming-item__title">{event.title}</p>
+                    <div className="calendar-upcoming-item__meta">
+                      <span
+                        className="calendar-legend-dot"
+                        style={{ backgroundColor: event.color }}
+                      />
+                      <span className="truncate">{getCategoryLabel(event.category)}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {categories.length > 0 && (
+              <div className="calendar-legend">
+                {categories.map((cat) => (
+                  <span key={cat.value} className="calendar-legend-item">
+                    <span className="calendar-legend-dot" style={{ backgroundColor: cat.color }} />
+                    {cat.label}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <p className="calendar-weekend-note">
+              {weekendHolidays === 'saturday' && 'Weekly off: Saturday'}
+              {weekendHolidays === 'sunday' && 'Weekly off: Sunday'}
+              {weekendHolidays === 'both' && 'Weekly off: Sat & Sun'}
+            </p>
+          </div>
+        </aside>
       </div>
 
-      {/* Add/Edit Modal */}
       {isModalOpen && isAdmin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="glass-card rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold text-white">
-                  {isEditing ? 'Edit Event' : 'Add Event'}
-                </h2>
-                <button
-                  onClick={closeModal}
-                  className="text-slate-400 hover:text-white transition-colors"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+        <div className="modal-overlay">
+          <div className="modal-panel max-h-[90vh] overflow-y-auto">
+            <div className="modal-header">
+              <h2 className="modal-title">{isEditing ? 'Edit event' : 'Add event'}</h2>
+              <button type="button" onClick={closeModal} className="icon-btn" aria-label="Close">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                  <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Title *
                   </label>
                   <input
@@ -398,13 +484,13 @@ export default function CalendarPage() {
                     value={formData.title}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-500"
-                    placeholder="e.g., Independence Day"
+                    className="input-field"
+                    placeholder="e.g. Independence Day"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                  <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Description
                   </label>
                   <textarea
@@ -412,13 +498,13 @@ export default function CalendarPage() {
                     value={formData.description}
                     onChange={handleInputChange}
                     rows={3}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-500"
+                    className="input-field resize-none"
                     placeholder="Add details about this event..."
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                  <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Date *
                   </label>
                   <input
@@ -427,12 +513,12 @@ export default function CalendarPage() {
                     value={formData.date}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-500"
+                    className="input-field"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                  <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Category *
                   </label>
                   <select
@@ -440,35 +526,29 @@ export default function CalendarPage() {
                     value={formData.category}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-500"
+                    className="input-field"
                   >
-                    {categories.map(cat => (
-                      <option key={cat.value} value={cat.value}>
-                        {cat.label}
-                      </option>
+                    {categories.map((cat) => (
+                      <option key={cat.value} value={cat.value}>{cat.label}</option>
                     ))}
                   </select>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
                   <input
                     type="checkbox"
                     name="is_full_day"
-                    id="is_full_day"
                     checked={formData.is_full_day}
                     onChange={handleInputChange}
-                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
                   />
-                  <label htmlFor="is_full_day" className="text-sm text-slate-300">
-                    Full Day Event
-                  </label>
-                </div>
+                  Full day event
+                </label>
 
                 {!formData.is_full_day && (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        Start Time *
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                        Start time *
                       </label>
                       <input
                         type="time"
@@ -476,139 +556,123 @@ export default function CalendarPage() {
                         value={formData.start_time}
                         onChange={handleInputChange}
                         required={!formData.is_full_day}
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-500"
+                        className="input-field"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        End Time
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                        End time
                       </label>
                       <input
                         type="time"
                         name="end_time"
                         value={formData.end_time}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-500"
+                        className="input-field"
                       />
                     </div>
                   </div>
                 )}
+              </div>
 
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 px-4 py-2 bg-gradient-to-r from-sky-400 to-violet-500 text-white rounded-lg hover:opacity-90 transition-opacity"
-                  >
-                    {isEditing ? 'Update Event' : 'Add Event'}
+              <div className="modal-footer">
+                {isEditing && (
+                  <button type="button" onClick={handleDelete} className="btn-secondary text-red-500 border-red-200">
+                    Delete
                   </button>
-
-                  {isEditing && (
-                    <button
-                      type="button"
-                      onClick={handleDelete}
-                      className="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/50 rounded-lg hover:bg-red-500/30 transition-colors"
-                    >
-                      Delete
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
+                )}
+                <button type="button" onClick={closeModal} className="btn-secondary flex-1">
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary flex-1">
+                  {isEditing ? 'Update event' : 'Add event'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Event Detail View Modal */}
       {showEventDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="glass-card rounded-2xl w-full max-w-lg overflow-hidden border-t-4 shadow-2xl" style={{ borderTopColor: showEventDetail.color }}>
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-white mb-1">{showEventDetail.title}</h2>
-                  <div
-                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wide"
-                    style={{ backgroundColor: `${showEventDetail.color}20`, color: showEventDetail.color }}
-                  >
-                    {categories.find(c => c.value === showEventDetail.category)?.label || showEventDetail.category}
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowEventDetail(null)}
-                  className="text-slate-400 hover:text-white transition-colors p-1 bg-slate-800/50 rounded-full hover:bg-slate-700"
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-lg">
+            <div
+              className="h-1 rounded-t-xl"
+              style={{ backgroundColor: showEventDetail.color }}
+            />
+            <div className="modal-header">
+              <div>
+                <h2 className="modal-title">{showEventDetail.title}</h2>
+                <span
+                  className="calendar-detail-badge mt-2"
+                  style={{
+                    backgroundColor: `${showEventDetail.color}20`,
+                    color: showEventDetail.color,
+                  }}
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  {getCategoryLabel(showEventDetail.category)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEventDetail(null)}
+                className="icon-btn"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="modal-body space-y-4">
+              <div className="calendar-detail-row">
+                <div className="calendar-detail-row__icon">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                </button>
+                </div>
+                <div>
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {formatEventDateLong(showEventDetail.date)}
+                  </p>
+                  <p className="meta-text text-xs mt-0.5">
+                    {showEventDetail.is_full_day
+                      ? 'All day'
+                      : `${showEventDetail.start_time?.substring(0, 5) || ''}${showEventDetail.end_time ? ` – ${showEventDetail.end_time.substring(0, 5)}` : ''}`}
+                  </p>
+                </div>
               </div>
 
-              <div className="space-y-4 mb-8">
-                <div className="flex items-center gap-3 text-slate-300">
-                  <div className="p-2 bg-slate-800 rounded-lg text-sky-400">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-white">{new Date(showEventDetail.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
-                    <div className="text-xs text-slate-400">
-                      {showEventDetail.is_full_day ? 'All Day Event' : `${showEventDetail.start_time?.substring(0, 5) || ''} - ${showEventDetail.end_time?.substring(0, 5) || ''}`.replace(/ - $/, '')}
-                    </div>
-                  </div>
-                </div>
-
-                {showEventDetail.description && (
-                  <div className="text-sm text-slate-300 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
-                    {showEventDetail.description}
-                  </div>
-                )}
-              </div>
-
-              {isAdmin && (
-                <div className="flex gap-3 pt-4 border-t border-slate-700/50">
-                  <button
-                    onClick={() => {
-                      setShowEventDetail(null);
-                      openEditModal(showEventDetail);
-                    }}
-                    className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    Edit Event
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (confirm('Are you sure you want to delete this event?')) {
-                        calendarApi.deleteEvent(showEventDetail.id).then(() => {
-                          setShowEventDetail(null);
-                          fetchEvents();
-                        }).catch(err => {
-                          console.error('Error deleting event:', err);
-                          alert('Failed to delete event');
-                        });
-                      }
-                    }}
-                    className="flex-1 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    Delete Event
-                  </button>
-                </div>
+              {showEventDetail.description && (
+                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                  {showEventDetail.description}
+                </p>
               )}
             </div>
+
+            {isAdmin && (
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteFromDetail(showEventDetail)}
+                  className="btn-secondary"
+                  style={{ color: 'var(--danger)' }}
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEventDetail(null);
+                    openEditModal(showEventDetail);
+                  }}
+                  className="btn-primary flex-1"
+                >
+                  Edit event
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

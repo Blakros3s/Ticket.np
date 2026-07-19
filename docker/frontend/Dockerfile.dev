@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1.4
+# ==============================================================================
+# Next.js Frontend — Development (hot reload via `next dev`)
+# ==============================================================================
+
+FROM node:20-alpine
+
+RUN apk add --no-cache libc6-compat curl
+
+WORKDIR /app
+
+COPY frontend/package.json frontend/package-lock.json* ./
+
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
+
+# Source is bind-mounted in docker-compose.dev.yml
+COPY frontend/ .
+
+ENV NODE_ENV=development \
+    NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000 \
+    WATCHPACK_POLLING=true
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev:docker"]

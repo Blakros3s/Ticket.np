@@ -7,7 +7,6 @@ export interface OfficeSettings {
   office_start_time: string;
   office_end_time: string;
   auto_mark_absent: boolean;
-  user_terminology: 'employee' | 'developer';
   weekend_holidays: WeekendHolidays;
   is_within_office_hours: boolean;
   has_office_hours_ended: boolean;
@@ -140,7 +139,6 @@ export const attendanceApi = {
     office_start_time: string;
     office_end_time: string;
     auto_mark_absent: boolean;
-    user_terminology?: 'employee' | 'developer';
     weekend_holidays?: WeekendHolidays;
   }): Promise<OfficeSettings> => {
     const response = await api.put<OfficeSettings>('/attendance/settings/', data);

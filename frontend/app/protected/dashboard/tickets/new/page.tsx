@@ -4,10 +4,13 @@ import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, useRef, useMemo, Suspense } from 'react';
 import { ticketsApi, TicketType, TicketPriority, CreateTicketData } from '@/lib/tickets';
-import { projectsApi, Project } from '@/lib/projects';
+import { ProjectMember } from '@/lib/projects';
+import { useProjects } from '@/lib/data-hooks';
 import { authApi, User } from '@/lib/auth';
+
+type AssigneeCandidate = User | ProjectMember['user'];
 import { FileUploadZone } from '@/components/file-upload-zone';
 
 function CreateTicketForm() {
@@ -15,13 +18,14 @@ function CreateTicketForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialProjectId = searchParams.get('project') ? Number(searchParams.get('project')) : 0;
-  const [projects, setProjects] = useState<Project[]>([]);
+  const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchingData, setFetchingData] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
+  const [assigneeSearch, setAssigneeSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<CreateTicketData>({
@@ -32,6 +36,7 @@ function CreateTicketForm() {
     project: initialProjectId,
     assignees: [],
     media_files: [],
+    due_date: '',
   });
 
   const showToastMessage = (message: string, type: 'success' | 'error') => {
@@ -40,29 +45,27 @@ function CreateTicketForm() {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchUsers = async () => {
       try {
-        const [projectsData, usersData] = await Promise.all([
-          projectsApi.getProjects(),
-          authApi.getUsers(),
-        ]);
-        setProjects(projectsData);
-        setUsers(usersData.filter(u => u.is_active));
-
-        if (projectsData.length > 0 && !initialProjectId) {
-          setFormData(prev => ({ ...prev, project: projectsData[0].id }));
-        } else if (initialProjectId) {
-          setFormData(prev => ({ ...prev, project: initialProjectId }));
-        }
-      } catch (error) {
-        showToastMessage('Failed to load data', 'error');
+        const usersData = await authApi.getUsers();
+        setUsers(usersData.filter((u) => u.is_active));
+      } catch {
+        showToastMessage('Failed to load users', 'error');
       } finally {
         setFetchingData(false);
       }
     };
 
-    fetchData();
-  }, []);
+    if (projectsLoading) return;
+
+    if (projects.length > 0 && !initialProjectId) {
+      setFormData((prev) => ({ ...prev, project: projects[0].id }));
+    } else if (initialProjectId) {
+      setFormData((prev) => ({ ...prev, project: initialProjectId }));
+    }
+
+    void fetchUsers();
+  }, [projectsLoading, projects, initialProjectId]);
 
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -97,23 +100,55 @@ function CreateTicketForm() {
       const ticketData = {
         ...formData,
         media_files: mediaFiles,
+        due_date: formData.due_date || null,
       };
       const ticket = await ticketsApi.createTicket(ticketData);
       showToastMessage('Ticket created successfully', 'success');
 
-      setTimeout(() => {
-        window.location.href = `/protected/dashboard/tickets/${ticket.id}`;
-      }, 500);
+      if (ticket?.id) {
+        await router.push(`/protected/dashboard/tickets/${ticket.id}`);
+      }
     } catch (error: any) {
       showToastMessage(error.response?.data?.detail || 'Failed to create ticket', 'error');
+    } finally {
       setLoading(false);
     }
   };
 
   const selectedProject = projects.find(p => p.id === formData.project);
   const projectMembers = selectedProject?.members.map(m => m.user) || [];
+  const assigneePool = projectMembers.length > 0 ? projectMembers : users;
 
-  if (fetchingData) {
+  const filteredAssignees = useMemo(() => {
+    const query = assigneeSearch.trim().toLowerCase();
+    if (!query) return assigneePool;
+
+    return assigneePool.filter((member) => {
+      const fullName = `${member.first_name} ${member.last_name}`.trim().toLowerCase();
+      return (
+        fullName.includes(query) ||
+        member.username.toLowerCase().includes(query) ||
+        member.email.toLowerCase().includes(query) ||
+        (member.login_address?.toLowerCase().includes(query) ?? false)
+      );
+    });
+  }, [assigneePool, assigneeSearch]);
+
+  const getMemberDisplayName = (member: AssigneeCandidate) => {
+    const fullName = `${member.first_name} ${member.last_name}`.trim();
+    return fullName || member.username;
+  };
+
+  const toggleAssignee = (memberId: number, checked: boolean) => {
+    const ids = formData.assignees || [];
+    if (checked) {
+      setFormData({ ...formData, assignees: [...ids, memberId] });
+    } else {
+      setFormData({ ...formData, assignees: ids.filter((id) => id !== memberId) });
+    }
+  };
+
+  if (fetchingData || projectsLoading) {
     return (
       <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="animate-pulse space-y-6">
@@ -160,8 +195,8 @@ function CreateTicketForm() {
       </div>
 
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">Create New Ticket</h1>
-        <p className="text-slate-400 mt-1">Fill in the details to create a new ticket</p>
+        <h1 className="page-title text-3xl font-bold">Create New Ticket</h1>
+        <p className="page-subtitle mt-1">Fill in the details to create a new ticket</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -174,7 +209,10 @@ function CreateTicketForm() {
               required
               className="input-field w-full"
               value={formData.project}
-              onChange={(e) => setFormData({ ...formData, project: Number(e.target.value), assignees: [] })}
+              onChange={(e) => {
+                setFormData({ ...formData, project: Number(e.target.value), assignees: [] });
+                setAssigneeSearch('');
+              }}
             >
               <option value="">Select a project...</option>
               {projects.map((project) => (
@@ -245,36 +283,122 @@ function CreateTicketForm() {
                 <option value="critical">Critical</option>
               </select>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-200 mb-2">Due date (optional)</label>
+              <input
+                type="date"
+                className="input-field w-full"
+                value={formData.due_date || ''}
+                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+              />
+            </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-200 mb-2">
               Assignees (optional)
             </label>
-            <p className="text-xs text-slate-500 mb-2">
-              Select project members to assign. Leave empty to allow self-assign.
+            <p className="text-xs text-slate-500 mb-3">
+              Search project members by name or username. Leave empty to allow self-assign.
             </p>
-            <div className="border border-slate-600 rounded-lg p-3 max-h-32 overflow-y-auto space-y-2">
-              {(projectMembers.length > 0 ? projectMembers : users).map((member) => (
-                <label key={member.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-700/30 rounded px-2 py-1">
-                  <input
-                    type="checkbox"
-                    checked={formData.assignees?.includes(member.id) ?? false}
-                    onChange={(e) => {
-                      const ids = formData.assignees || [];
-                      if (e.target.checked) {
-                        setFormData({ ...formData, assignees: [...ids, member.id] });
-                      } else {
-                        setFormData({ ...formData, assignees: ids.filter(id => id !== member.id) });
-                      }
-                    }}
-                    className="rounded border-slate-500"
-                  />
-                  <span className="text-sm text-slate-200">
-                    {member.first_name} {member.last_name} (@{member.username})
-                  </span>
-                </label>
-              ))}
+
+            {formData.assignees && formData.assignees.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {formData.assignees.map((id) => {
+                  const member = assigneePool.find((m) => m.id === id);
+                  if (!member) return null;
+                  return (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm bg-sky-500/15 text-sky-300 border border-sky-500/25"
+                    >
+                      {getMemberDisplayName(member)}
+                      <button
+                        type="button"
+                        onClick={() => toggleAssignee(id, false)}
+                        className="text-sky-400/80 hover:text-white"
+                        aria-label={`Remove ${getMemberDisplayName(member)}`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="search-input flex items-center mb-2">
+              <div className="pl-3 flex items-center pointer-events-none">
+                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Search by name or username..."
+                className="w-full bg-transparent border-0 pl-2 pr-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-0"
+                value={assigneeSearch}
+                onChange={(e) => setAssigneeSearch(e.target.value)}
+              />
+              {assigneeSearch && (
+                <button
+                  type="button"
+                  onClick={() => setAssigneeSearch('')}
+                  className="pr-3 text-slate-400 hover:text-white"
+                  aria-label="Clear search"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            <div className="assignee-picker-list border border-slate-600 rounded-lg max-h-48 overflow-y-auto">
+              {assigneePool.length === 0 ? (
+                <p className="text-sm text-slate-500 px-3 py-4 text-center">No project members available</p>
+              ) : filteredAssignees.length === 0 ? (
+                <p className="text-sm text-slate-500 px-3 py-4 text-center">No members match &ldquo;{assigneeSearch}&rdquo;</p>
+              ) : (
+                <div className="divide-y divide-slate-700/50">
+                  {filteredAssignees.map((member) => {
+                    const isSelected = formData.assignees?.includes(member.id) ?? false;
+                    const displayName = getMemberDisplayName(member);
+                    const initials =
+                      member.first_name && member.last_name
+                        ? `${member.first_name[0]}${member.last_name[0]}`.toUpperCase()
+                        : member.username.slice(0, 2).toUpperCase();
+
+                    return (
+                      <label
+                        key={member.id}
+                        className={`assignee-picker-row flex items-center gap-3 cursor-pointer px-3 py-2.5 ${
+                          isSelected ? 'assignee-picker-row--selected' : ''
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => toggleAssignee(member.id, e.target.checked)}
+                          className="rounded border-slate-500 shrink-0"
+                        />
+                        <div className="w-8 h-8 rounded-full bg-sky-500/20 flex items-center justify-center shrink-0">
+                          <span className="text-xs font-medium text-sky-400">{initials}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-slate-200 truncate">{displayName}</p>
+                          <p className="text-xs text-slate-500 truncate">
+                            {member.login_address || member.username}
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 

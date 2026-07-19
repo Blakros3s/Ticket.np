@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
+from corsheaders.defaults import default_headers
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -15,23 +16,30 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOW_PUBLIC_REGISTRATION = config('ALLOW_PUBLIC_REGISTRATION', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,.localhost').split(',')
 
-INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
+SHARED_APPS = [
+    'django_tenants',
+    'apps.customers',
+    'apps.platform',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
+    'django.contrib.admin',
     'rest_framework',
-    'rest_framework_simplejwt',
     'corsheaders',
     'drf_spectacular',
     'django_filters',
+    'whitenoise',
+]
+
+TENANT_APPS = [
+    'django.contrib.contenttypes',
+    'django.contrib.auth',
+    'django.contrib.admin',
+    'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
-    
     'apps.users',
     'apps.projects',
     'apps.tickets',
@@ -44,9 +52,17 @@ INSTALLED_APPS = [
     'apps.core',
     'apps.attendance',
     'apps.notifications',
+    'apps.workspace_docs',
+    'apps.workspace_whiteboards',
+    'apps.integrations',
+]
+
+INSTALLED_APPS = list(SHARED_APPS) + [
+    app for app in TENANT_APPS if app not in SHARED_APPS
 ]
 
 MIDDLEWARE = [
+    'apps.customers.middleware.TenantResolutionMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -59,6 +75,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'config.urls'
+PUBLIC_SCHEMA_URLCONF = 'config.urls_public'
 
 TEMPLATES = [
     {
@@ -80,7 +97,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
+        'ENGINE': 'django_tenants.postgresql_backend',
         'NAME': config('POSTGRES_DB'),
         'USER': config('POSTGRES_USER'),
         'PASSWORD': config('POSTGRES_PASSWORD'),
@@ -89,6 +106,14 @@ DATABASES = {
         'ATOMIC_REQUESTS': True,
     }
 }
+
+DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
+
+TENANT_MODEL = 'customers.Client'
+TENANT_DOMAIN_MODEL = 'customers.Domain'
+PUBLIC_SCHEMA_NAME = 'public'
+SHOW_PUBLIC_IF_NO_TENANT_FOUND = config('SHOW_PUBLIC_IF_NO_TENANT_FOUND', default=True, cast=bool)
+SHARED_APP_DOMAIN = config('SHARED_APP_DOMAIN', default='localhost')
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -117,9 +142,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.User'
 
+AUTHENTICATION_BACKENDS = [
+    'apps.platform.backends.PlatformAdminBackend',
+    'apps.platform.backends.TenantAwareModelBackend',
+]
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'apps.users.authentication.TenantJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -148,6 +178,10 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000,http://localhost:3001').split(',')
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = (
+    *default_headers,
+    'x-tenant-schema',
+)
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'TicketHub API',
@@ -179,7 +213,17 @@ AUTH_RATE_LIMIT = '10/minute'
 
 # Frontend + public website (Technest-style links in HTML emails)
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+BACKEND_PUBLIC_URL = config('BACKEND_PUBLIC_URL', default='http://localhost:8000')
 WEBSITE_URL = config('WEBSITE_URL', default='https://technestinnovations.com.np')
+
+# GitHub OAuth (tenant admins connect organization GitHub account)
+GITHUB_CLIENT_ID = config('GITHUB_CLIENT_ID', default='').strip()
+GITHUB_CLIENT_SECRET = config('GITHUB_CLIENT_SECRET', default='').strip()
+GITHUB_OAUTH_SCOPES = config('GITHUB_OAUTH_SCOPES', default='read:user repo')
+GITHUB_OAUTH_REDIRECT_URI = config(
+    'GITHUB_OAUTH_REDIRECT_URI',
+    default=f'{BACKEND_PUBLIC_URL.rstrip("/")}/api/public/integrations/github/callback/',
+)
 
 # Mail — Technest-style: file/console in dev, SMTP when credentials are set.
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')

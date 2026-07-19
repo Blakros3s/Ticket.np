@@ -1,4 +1,4 @@
-﻿import api from './api';
+﻿import api, { TENANT_SCHEMA_KEY } from './api';
 import { normalizeListResponse } from './http-utils';
 
 export interface UserRole {
@@ -16,9 +16,22 @@ export interface User {
   last_name: string;
   role: 'admin' | 'employee' | 'manager';
   department_roles: UserRole[];
+  login_address?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface TenantInfo {
+  slug: string;
+  schema_name: string;
+  name: string;
+}
+
+export interface TenantOrganization {
+  name: string;
+  slug: string;
+  login_domain: string;
 }
 
 export interface LoginCredentials {
@@ -39,6 +52,7 @@ export interface AuthResponse {
   user: User;
   access: string;
   refresh: string;
+  tenant: TenantInfo;
 }
 
 export const authApi = {
@@ -65,6 +79,7 @@ export const authApi = {
   logout: async (): Promise<void> => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    localStorage.removeItem(TENANT_SCHEMA_KEY);
   },
 
   getUsers: async (): Promise<User[]> => {
@@ -161,6 +176,16 @@ export const authApi = {
     confirm_password: string;
   }): Promise<{ message: string }> => {
     const response = await api.post<{ message: string }>(`/auth/users/${userId}/reset-password/`, data);
+    return response.data;
+  },
+
+  getOrganization: async (): Promise<TenantOrganization> => {
+    const response = await api.get<TenantOrganization>('/auth/organization/');
+    return response.data;
+  },
+
+  updateOrganization: async (data: { login_domain: string }): Promise<TenantOrganization> => {
+    const response = await api.patch<TenantOrganization>('/auth/organization/', data);
     return response.data;
   },
 };

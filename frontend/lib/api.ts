@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+export const TENANT_SCHEMA_KEY = 'tenant_schema';
 
 // Custom error class for API errors
 export class ApiError extends Error {
@@ -8,7 +9,7 @@ export class ApiError extends Error {
     message: string,
     public statusCode?: number,
     public errors?: Record<string, string[]>,
-    public response?: any
+    public response?: unknown
   ) {
     super(message);
     this.name = 'ApiError';
@@ -20,7 +21,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 second timeout
+  timeout: 30000,
 });
 
 let isRefreshing = false;
@@ -32,14 +33,21 @@ const requestNewAccessToken = async (): Promise<string> => {
     throw new Error('No refresh token');
   }
 
-  const response = await axios.post(`${API_URL}/auth/token/refresh/`, {
-    refresh: refreshToken,
-  });
+  const headers: Record<string, string> = {};
+  const tenantSchema = localStorage.getItem(TENANT_SCHEMA_KEY);
+  if (tenantSchema) {
+    headers['X-Tenant-Schema'] = tenantSchema;
+  }
+
+  const response = await axios.post(
+    `${API_URL}/auth/token/refresh/`,
+    { refresh: refreshToken },
+    { headers }
+  );
 
   const { access, refresh } = response.data;
   localStorage.setItem('access_token', access);
 
-  // Some backends may not rotate refresh on every call.
   if (refresh) {
     localStorage.setItem('refresh_token', refresh);
   }
@@ -49,6 +57,11 @@ const requestNewAccessToken = async (): Promise<string> => {
 
 api.interceptors.request.use(
   (config) => {
+    const tenantSchema = localStorage.getItem(TENANT_SCHEMA_KEY);
+    if (tenantSchema) {
+      config.headers['X-Tenant-Schema'] = tenantSchema;
+    }
+
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -68,7 +81,6 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config;
 
-    // Handle rate limiting
     if (error.response?.status === 429) {
       const retryAfter = error.response.headers['retry-after'] || 60;
       return Promise.reject(
@@ -79,7 +91,6 @@ api.interceptors.response.use(
       );
     }
 
-    // Handle network errors
     if (!error.response) {
       return Promise.reject(
         new ApiError(
@@ -89,12 +100,10 @@ api.interceptors.response.use(
       );
     }
 
-    // Handle 401 Unauthorized
-    if (error.response?.status === 401 && originalRequest && !(originalRequest as any)._retry) {
-      (originalRequest as any)._retry = true;
+    if (error.response?.status === 401 && originalRequest && !(originalRequest as { _retry?: boolean })._retry) {
+      (originalRequest as { _retry?: boolean })._retry = true;
 
       try {
-        // Ensure only one refresh request runs at a time.
         if (!isRefreshing) {
           isRefreshing = true;
           refreshPromise = requestNewAccessToken().finally(() => {
@@ -104,40 +113,41 @@ api.interceptors.response.use(
         }
 
         const access = await refreshPromise;
-
         originalRequest.headers.Authorization = `Bearer ${access}`;
         return api(originalRequest);
-      } catch (refreshError: any) {
-        // Only clear tokens and redirect if it's an explicit authentication failure (401/403).
-        // Otherwise, it might be a temporary network issue.
-        const refreshStatus = refreshError.response?.status;
+      } catch (refreshError: unknown) {
+        const refreshStatus =
+          axios.isAxiosError(refreshError) ? refreshError.response?.status : undefined;
         if (refreshStatus === 401 || refreshStatus === 403) {
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
+          localStorage.removeItem(TENANT_SCHEMA_KEY);
           if (typeof window !== 'undefined') {
             window.location.href = '/auth/login';
           }
         }
-        
+
         return Promise.reject(
           new ApiError('Your session has expired. Please log in again.', 401)
         );
       }
     }
 
-    // Handle other errors
-    const errorData = error.response?.data as any;
-    const message = errorData?.detail || 
-                   errorData?.error || 
-                   errorData?.message || 
-                   error.message ||
-                   'An unexpected error occurred';
-    
+    const errorData = error.response?.data as Record<string, unknown> | undefined;
+    const detail = errorData?.detail;
+    const message =
+      (typeof detail === 'string' && detail) ||
+      (Array.isArray(detail) && typeof detail[0] === 'string' && detail[0]) ||
+      (typeof errorData?.error === 'string' && errorData.error) ||
+      (typeof errorData?.message === 'string' && errorData.message) ||
+      error.message ||
+      'An unexpected error occurred';
+
     return Promise.reject(
       new ApiError(
         message,
         error.response?.status,
-        errorData?.errors,
+        errorData?.errors as Record<string, string[]> | undefined,
         errorData
       )
     );

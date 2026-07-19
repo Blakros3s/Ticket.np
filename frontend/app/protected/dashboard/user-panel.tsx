@@ -126,7 +126,7 @@ export default function UserPanel() {
     <section className="card glow-border rounded-xl p-6 mt-6 bg-slate-900/40">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-xl font-semibold text-white">User Management</h2>
+          <h2 className="dashboard-section-title">User Management</h2>
           <div className="text-sm text-slate-400">Total: {total} • Managers: {managers} • {terminology.labelPlural}: {employees}</div>
         </div>
         <div className="flex items-center gap-3">

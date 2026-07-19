@@ -2,41 +2,100 @@
 
 import React from 'react';
 
-const MENTION_PATTERN = /@([a-zA-Z0-9_]+)/g;
-
-export function renderCommentContent(content: string): React.ReactNode[] {
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  MENTION_PATTERN.lastIndex = 0;
-  while ((match = MENTION_PATTERN.exec(content)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(content.slice(lastIndex, match.index));
-    }
-    parts.push(
-      <span
-        key={`${match.index}-${match[1]}`}
-        className="text-sky-400 font-medium bg-sky-500/10 px-1 rounded"
-      >
-        @{match[1]}
-      </span>
-    );
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < content.length) {
-    parts.push(content.slice(lastIndex));
-  }
-
-  return parts.length > 0 ? parts : [content];
-}
-
 interface MentionableUser {
   id: number;
   username: string;
   first_name?: string;
   last_name?: string;
+}
+
+function displayName(user: MentionableUser): string {
+  const full = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+  return full || user.username;
+}
+
+function isMentionBoundary(content: string, index: number): boolean {
+  return index >= content.length || /[\s.,!?;:]/.test(content[index]);
+}
+
+function findMentionSpans(
+  content: string,
+  users: MentionableUser[],
+): Array<{ start: number; end: number }> {
+  if (!content) return [];
+
+  const names = users
+    .map((user) => displayName(user))
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  const spans: Array<{ start: number; end: number }> = [];
+  let index = 0;
+
+  while (index < content.length) {
+    if (content[index] !== '@') {
+      index += 1;
+      continue;
+    }
+
+    const rest = content.slice(index + 1);
+    let matched = false;
+
+    for (const name of names) {
+      if (!rest.toLowerCase().startsWith(name.toLowerCase())) continue;
+      if (!isMentionBoundary(rest, name.length)) continue;
+      spans.push({ start: index, end: index + 1 + name.length });
+      index += 1 + name.length;
+      matched = true;
+      break;
+    }
+
+    if (matched) continue;
+
+    const usernameMatch = rest.match(/^([a-zA-Z0-9_]+)/);
+    if (usernameMatch && isMentionBoundary(rest, usernameMatch[1].length)) {
+      spans.push({ start: index, end: index + 1 + usernameMatch[1].length });
+      index += 1 + usernameMatch[1].length;
+      continue;
+    }
+
+    index += 1;
+  }
+
+  return spans;
+}
+
+export function renderCommentContent(
+  content: string,
+  users: MentionableUser[] = [],
+): React.ReactNode[] {
+  const spans = findMentionSpans(content, users);
+  if (spans.length === 0) return [content];
+
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+
+  spans.forEach((span, spanIndex) => {
+    if (span.start > lastIndex) {
+      parts.push(content.slice(lastIndex, span.start));
+    }
+    const mentionText = content.slice(span.start, span.end);
+    parts.push(
+      <span
+        key={`mention-${span.start}-${spanIndex}`}
+        className="mention-highlight"
+      >
+        {mentionText}
+      </span>,
+    );
+    lastIndex = span.end;
+  });
+
+  if (lastIndex < content.length) {
+    parts.push(content.slice(lastIndex));
+  }
+
+  return parts;
 }
 
 interface CommentMentionInputProps {
@@ -46,11 +105,6 @@ interface CommentMentionInputProps {
   placeholder?: string;
   rows?: number;
   disabled?: boolean;
-}
-
-function displayName(user: MentionableUser): string {
-  const full = `${user.first_name || ''} ${user.last_name || ''}`.trim();
-  return full || user.username;
 }
 
 export function CommentMentionInput({
@@ -70,7 +124,7 @@ export function CommentMentionInput({
     if (mentionQuery === null) return [];
     const query = mentionQuery.toLowerCase();
     return mentionableUsers
-      .filter((user) => displayName(user).toLowerCase().includes(query) || user.username.toLowerCase().includes(query))
+      .filter((user) => displayName(user).toLowerCase().includes(query))
       .slice(0, 8);
   }, [mentionQuery, mentionableUsers]);
 
@@ -105,14 +159,15 @@ export function CommentMentionInput({
     setActiveIndex(0);
   };
 
-  const insertMention = (username: string) => {
+  const insertMention = (user: MentionableUser) => {
     const textarea = textareaRef.current;
     if (!textarea || mentionStart < 0) return;
 
     const cursor = textarea.selectionStart;
     const before = value.slice(0, mentionStart);
     const after = value.slice(cursor);
-    const mentionText = `@${username} `;
+    const name = displayName(user);
+    const mentionText = `@${name} `;
     const nextValue = `${before}${mentionText}${after}`;
     onChange(nextValue);
     closeMentions();
@@ -141,7 +196,7 @@ export function CommentMentionInput({
       setActiveIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
     } else if (e.key === 'Enter' || e.key === 'Tab') {
       e.preventDefault();
-      insertMention(suggestions[activeIndex].username);
+      insertMention(suggestions[activeIndex]);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       closeMentions();
@@ -163,30 +218,27 @@ export function CommentMentionInput({
       />
 
       {mentionQuery !== null && suggestions.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800 shadow-xl">
+        <div className="mention-dropdown">
           {suggestions.map((user, index) => (
             <button
               key={user.id}
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
-                insertMention(user.username);
+                insertMention(user);
               }}
-              className={`w-full px-3 py-2 text-left transition-colors ${
-                index === activeIndex
-                  ? 'bg-sky-500/20 text-white'
-                  : 'text-slate-200 hover:bg-slate-700/60'
+              className={`mention-dropdown-item ${
+                index === activeIndex ? 'mention-dropdown-item--active' : ''
               }`}
             >
               <span className="text-sm font-medium">{displayName(user)}</span>
-              <span className="ml-2 text-xs text-slate-400">@{user.username}</span>
             </button>
           ))}
         </div>
       )}
 
-      <p className="text-xs text-slate-500 mt-1">
-        Type <span className="text-sky-400">@</span> followed by a name to mention someone
+      <p className="meta-text text-xs mt-1">
+        Type <span style={{ color: 'var(--accent)' }}>@</span> followed by a name to mention someone
       </p>
     </div>
   );

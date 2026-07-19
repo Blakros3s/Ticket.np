@@ -1,14 +1,25 @@
 import logging
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework import generics, permissions, status
-from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError, AuthenticationFailed
-from rest_framework.decorators import api_view, permission_classes
+
 from django.contrib.auth.hashers import check_password
+from rest_framework import generics, permissions, status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import AuthenticationFailed, ValidationError
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
 from .models import User
-from .serializers import UserSerializer, UserProfileSerializer, AdminUserSerializer, RegisterSerializer, CustomTokenObtainPairSerializer
 from .permissions import IsAdminUser
+from .serializers import (
+    AdminUserSerializer,
+    CustomTokenObtainPairSerializer,
+    RegisterSerializer,
+    TenantOrganizationSerializer,
+    TenantTokenRefreshSerializer,
+    UserProfileSerializer,
+    UserSerializer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +81,53 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             return Response({'detail': 'An error occurred during login. Please try again.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class TenantTokenRefreshView(TokenRefreshView):
+    serializer_class = TenantTokenRefreshSerializer
+
+
+class TenantOrganizationView(APIView):
+    """Tenant admin: view or update organization login domain (user@domain)."""
+
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        client = getattr(request, 'tenant', None)
+        if client is None:
+            return Response({'detail': 'Tenant context required.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            TenantOrganizationSerializer(
+                {'name': client.name, 'slug': client.slug, 'login_domain': client.login_domain},
+            ).data,
+        )
+
+    def patch(self, request):
+        from apps.customers.services.login_accounts import update_client_login_domain
+        from apps.customers.services.tenants import TenantProvisionError
+
+        client = getattr(request, 'tenant', None)
+        if client is None:
+            return Response({'detail': 'Tenant context required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = TenantOrganizationSerializer(data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        login_domain = serializer.validated_data.get('login_domain')
+        if login_domain is None:
+            return Response({'detail': 'No changes submitted.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            client = update_client_login_domain(client=client, login_domain=login_domain)
+        except TenantProvisionError as exc:
+            return Response({'detail': exc.message}, status=exc.status_code)
+
+        return Response(
+            TenantOrganizationSerializer(
+                {'name': client.name, 'slug': client.slug, 'login_domain': client.login_domain},
+            ).data,
+        )
+
+
 class UserProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -101,6 +159,16 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
         except Exception as e:
             logger.error(f"Profile update error for user {request.user.username}: {str(e)}")
             return Response({'detail': 'Failed to update profile'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def destroy(self, request, *args, **kwargs):
+        from apps.customers.services.login_accounts import unregister_login_account
+
+        instance = self.get_object()
+        tenant = getattr(request, 'tenant', None)
+        response = super().destroy(request, *args, **kwargs)
+        if tenant is not None:
+            unregister_login_account(client=tenant, tenant_user_id=instance.pk)
+        return response
 
 
 @api_view(['POST'])

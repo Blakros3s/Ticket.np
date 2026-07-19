@@ -1,9 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
 import { ErrorModal, extractErrorMessage } from '@/components/error-modal';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -16,7 +18,6 @@ export default function LoginPage() {
   const { login, isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Redirect if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       router.push('/protected/dashboard');
@@ -33,11 +34,8 @@ export default function LoginPage() {
     try {
       await login(username, password);
       router.push('/protected/dashboard');
-    } catch (err: any) {
+    } catch (err: unknown) {
       const { message, statusCode: code } = extractErrorMessage(err);
-      console.error('Login error:', err);
-      console.error('Error response:', err.response);
-      console.error('Error data:', err.response?.data);
       setError(message);
       setStatusCode(code);
       setShowErrorModal(true);
@@ -61,144 +59,107 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen grid-bg relative overflow-hidden">
-      <div className="orb orb-1 pulse-animation"></div>
-      <div className="orb orb-2 pulse-animation" style={{ animationDelay: '1.5s' }}></div>
+    <div className="min-h-screen grid-bg flex items-center justify-center px-4 py-12 relative">
+      <div className="absolute top-4 right-4 z-20">
+        <ThemeToggle />
+      </div>
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div
+            className="w-14 h-14 rounded-xl mx-auto mb-5 flex items-center justify-center"
+            style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}
+          >
+            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"
+              />
+            </svg>
+          </div>
+          <h1 className="page-title text-3xl">Sign in to TicketHub</h1>
+          <p className="page-subtitle mt-2">Use your username and password</p>
+        </div>
 
-      <div className="relative z-10 min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center mx-auto mb-4 shadow-2xl shadow-sky-500/30">
-              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-              </svg>
+        <div className="card p-8 shadow-sm" style={{ boxShadow: 'var(--shadow-sm)' }}>
+          {error && !showErrorModal && (
+            <div
+              className="mb-6 p-4 rounded-lg text-sm"
+              style={{
+                background: 'var(--danger-muted)',
+                color: 'var(--danger)',
+                border: '1px solid var(--border-default)',
+              }}
+            >
+              {error}
             </div>
-            <h2 className="text-3xl font-bold text-white">
-              Welcome to <span className="gradient-text">TechnestHub</span>
-            </h2>
-            <p className="mt-2 text-slate-400">Sign in to access your dashboard</p>
-          </div>
+          )}
 
-          <div className="card glow-border rounded-2xl p-8">
-            {/* Inline Error Message (shown when modal is not open) */}
-            {error && !showErrorModal && (
-              <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2 animate-pulse">
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="font-medium">{error}</span>
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+                Username
+              </label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                required
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="input-field"
+                placeholder="mike.brown@technest.com"
+              />
+              <p className="mt-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                Enter your full username, e.g. mike.brown@technest.com
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-field pr-12"
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm"
+                  style={{ color: 'var(--text-muted)' }}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  disabled={isLoading}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
               </div>
-            )}
+            </div>
 
-            <form className="space-y-6" onSubmit={handleSubmit}>
-              <div>
-                <label htmlFor="username" className="block text-sm font-medium text-slate-300 mb-2">
-                  Username
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </div>
-                  <input
-                    id="username"
-                    name="username"
-                    type="text"
-                    required
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="input-field w-full pl-12 pr-4 py-3 rounded-xl text-white placeholder-slate-500"
-                    placeholder="Enter your username"
-                  />
-                </div>
-              </div>
+            <button type="submit" disabled={isLoading} className="btn-primary w-full py-3">
+              {isLoading ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
 
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
-                  Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                  </div>
-                  <input
-                    id="password"
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="input-field w-full pl-12 pr-12 py-3 rounded-xl text-white placeholder-slate-500"
-                    placeholder="Enter your password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-200 transition-colors"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    disabled={isLoading}
-                  >
-                    {showPassword ? (
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M13.875 18.825A10.05 10.05 0 0112 19c-5 0-9.27-3.11-11-7 1-2.25 2.62-4.13 4.63-5.38M9.88 9.88a3 3 0 104.24 4.24M6.1 6.1L3 3m3.1 3.1A10.04 10.04 0 0112 5c5 0 9.27 3.11 11 7a11.83 11.83 0 01-4.1 4.9M6.1 6.1l12.8 12.8"
-                        />
-                      </svg>
-                    ) : (
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7S3.732 16.057 2.458 12z"
-                        />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="btn-primary w-full py-3 rounded-xl text-base font-semibold text-white shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isLoading ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Signing in...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                    </svg>
-                    Sign In
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-
+          <p className="text-center text-sm mt-6" style={{ color: 'var(--text-muted)' }}>
+            Platform administrator?{' '}
+            <Link href="/server/login" className="server-link">
+              Server console
+            </Link>
+          </p>
         </div>
       </div>
 
-      {/* Error Modal Popup */}
       <ErrorModal
         isOpen={showErrorModal}
         onClose={handleCloseModal}
