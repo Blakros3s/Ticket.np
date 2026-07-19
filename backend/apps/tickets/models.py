@@ -54,12 +54,17 @@ class Ticket(models.Model):
     in_progress_at = models.DateTimeField(null=True, blank=True)
     qa_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
+    due_date = models.DateField(null=True, blank=True)
     
     class Meta:
         db_table = 'tickets'
         verbose_name = 'Ticket'
         verbose_name_plural = 'Tickets'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['due_date']),
+            models.Index(fields=['project', 'status']),
+        ]
     
     def __str__(self):
         return f"{self.ticket_id} - {self.title}"

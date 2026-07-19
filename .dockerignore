@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+
+# Frontend — exclude installed deps and build output from image context
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/.env
+frontend/.env.local
+
+# Backend Python cache / venv
+backend/__pycache__
+backend/**/__pycache__
+backend/.pytest_cache
+backend/.venv
+backend/venv
+**/*.pyc
+**/.pytest_cache
+
+# IDE / OS
+.idea
+.vscode
+*.swp
+.DS_Store
+Thumbs.db

@@ -53,11 +53,18 @@ def employee_dashboard(request):
         end_time__isnull=True
     ).select_related('ticket').first()
     
-    # Tickets due soon (created more than 7 days ago and still open)
+    # Overdue tickets (due date passed, not closed)
+    overdue_tickets = assigned_tickets.filter(
+        due_date__lt=timezone.now().date(),
+        status__in=['new', 'in_progress', 'qa', 'reopened'],
+    ).count()
+
+    # Legacy metric: tickets open > 7 days without due date tracking
     week_ago = timezone.now() - timedelta(days=7)
     tickets_due_soon = assigned_tickets.filter(
         created_at__lte=week_ago,
-        status__in=['new', 'in_progress', 'qa']
+        status__in=['new', 'in_progress', 'qa'],
+        due_date__isnull=True,
     ).count()
     
     # My tickets grouped by status
@@ -118,6 +125,7 @@ def employee_dashboard(request):
             'start_time': active_session.start_time,
         } if active_session else None,
         'tickets_due_soon': tickets_due_soon,
+        'overdue_tickets': overdue_tickets,
     })
 
 
@@ -194,6 +202,11 @@ def manager_dashboard(request):
     
     # Unassigned tickets count (no assignees)
     unassigned_tickets = project_tickets.annotate(ac=Count('assignees')).filter(ac=0).count()
+
+    overdue_tickets = project_tickets.filter(
+        due_date__lt=timezone.now().date(),
+        status__in=['new', 'in_progress', 'qa', 'reopened'],
+    ).count()
     
     return Response({
         'total_projects': managed_projects.count(),
@@ -218,6 +231,7 @@ def manager_dashboard(request):
             for t in recent_tickets
         ],
         'unassigned_tickets': unassigned_tickets,
+        'overdue_tickets': overdue_tickets,
     })
 
 
@@ -280,6 +294,11 @@ def admin_dashboard(request):
     activity_by_type = ActivityLog.objects.values('action').annotate(
         count=Count('id')
     ).order_by('-count')[:5]
+
+    overdue_tickets = Ticket.objects.filter(
+        due_date__lt=timezone.now().date(),
+        status__in=['new', 'in_progress', 'qa', 'reopened'],
+    ).count()
     
     return Response({
         'users': {
@@ -297,6 +316,7 @@ def admin_dashboard(request):
             'total': total_tickets,
             'recent': recent_tickets,
             'by_status': {item['status']: item['count'] for item in tickets_by_status},
+            'overdue': overdue_tickets,
         },
         'work_logs': {
             'total': total_work_logs,

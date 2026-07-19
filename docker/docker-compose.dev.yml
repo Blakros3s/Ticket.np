@@ -56,25 +56,35 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api}
       WATCHPACK_POLLING: "true"
+      WATCHPACK_POLLING_INTERVAL: "1000"
       CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
+      NEXT_WEBPACK_USEPOLLING: "1"
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     volumes:
       - ../frontend:/app
       - frontend_node_modules:/app/node_modules
       - frontend_next_cache:/app/.next
-    command: ["npm", "run", "dev", "--", "-H", "0.0.0.0", "-p", "3000"]
+    command:
+      - sh
+      - -c
+      - >-
+        HASH=$$(md5sum package-lock.json | awk '{print $$1}');
+        STAMP=node_modules/.package-lock.hash;
+        if [ ! -f "$$STAMP" ] || [ "$$(cat $$STAMP)" != "$$HASH" ]; then echo "Installing deps..."; npm ci && echo $$HASH > "$$STAMP"; else echo "Deps up to date."; fi;
+        exec npm run dev:docker
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost:3000/ || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1.5'
+          memory: 2G
 
 volumes:
   frontend_node_modules:

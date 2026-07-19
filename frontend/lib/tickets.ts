@@ -34,6 +34,17 @@ export interface TicketAssignee {
   display_name: string;
 }
 
+export interface TicketGitHubLink {
+  repo_owner: string;
+  repo_name: string;
+  issue_number: number;
+  issue_url: string;
+  sync_status: 'linked' | 'error' | 'disconnected';
+  last_sync_error?: string;
+  last_synced_at?: string | null;
+  created_at?: string;
+}
+
 export interface Ticket {
   id: number;
   ticket_id: string;
@@ -50,11 +61,16 @@ export interface Ticket {
   created_by_id: number;
   created_at: string;
   updated_at: string;
-  media_files: TicketMedia[];
-  comments: TicketComment[];
+  media_files?: TicketMedia[];
+  comments?: TicketComment[];
+  media_count?: number;
+  comment_count?: number;
   in_progress_at: string | null;
   qa_at: string | null;
   closed_at: string | null;
+  due_date: string | null;
+  is_overdue?: boolean;
+  github_link?: TicketGitHubLink | null;
 }
 
 export interface CreateTicketData {
@@ -65,6 +81,7 @@ export interface CreateTicketData {
   project: number;
   assignees?: number[];
   media_files?: File[];
+  due_date?: string | null;
 }
 
 export interface UpdateTicketData {
@@ -74,6 +91,7 @@ export interface UpdateTicketData {
   priority?: TicketPriority;
   status?: TicketStatus;
   assignees?: number[];
+  due_date?: string | null;
 }
 
 export interface TicketFilters {
@@ -81,6 +99,9 @@ export interface TicketFilters {
   priority?: TicketPriority;
   type?: TicketType;
   project?: number;
+  assignee?: number;
+  exclude_status?: string;
+  ordering?: string;
   search?: string;
   page?: number;
 }
@@ -92,6 +113,9 @@ export const ticketsApi = {
       priority: filters?.priority,
       type: filters?.type,
       project: filters?.project,
+      assignee: filters?.assignee,
+      exclude_status: filters?.exclude_status,
+      ordering: filters?.ordering,
       search: filters?.search,
       page: filters?.page,
     });
@@ -124,6 +148,9 @@ export const ticketsApi = {
       formData.append('type', data.type);
       formData.append('priority', data.priority);
       formData.append('project', data.project.toString());
+      if (data.due_date) {
+        formData.append('due_date', data.due_date);
+      }
       if (data.assignees && data.assignees.length > 0) {
         data.assignees.forEach(id => formData.append('assignees', id.toString()));
       }
@@ -152,6 +179,11 @@ export const ticketsApi = {
 
   updateStatus: async (id: number, status: TicketStatus): Promise<Ticket> => {
     const response = await api.patch<Ticket>(`/tickets/tickets/${id}/update_status/`, { status });
+    return response.data;
+  },
+
+  createGithubIssue: async (id: number): Promise<Ticket> => {
+    const response = await api.post<Ticket>(`/tickets/tickets/${id}/create-github-issue/`);
     return response.data;
   },
 

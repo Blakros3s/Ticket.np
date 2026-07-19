@@ -58,6 +58,68 @@ class TenantLoginAccount(models.Model):
         return f'{self.username} → {self.client.schema_name}'
 
 
+class PublicDocShareIndex(models.Model):
+    """Public-schema lookup for unauthenticated doc share links."""
+
+    token = models.UUIDField(primary_key=True, editable=False)
+    tenant_schema = models.CharField(max_length=63, db_index=True)
+    doc_id = models.UUIDField()
+    is_active = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'customers_public_doc_share_index'
+
+    def __str__(self) -> str:
+        return f'{self.token} → {self.tenant_schema}:{self.doc_id}'
+
+
+class PublicDocShareAccessLog(models.Model):
+    share_index = models.ForeignKey(
+        PublicDocShareIndex,
+        on_delete=models.CASCADE,
+        related_name='access_logs',
+    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    accessed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'customers_public_doc_share_access_log'
+        ordering = ['-accessed_at']
+
+
+class PublicWhiteboardShareIndex(models.Model):
+    """Public-schema lookup for unauthenticated whiteboard share links."""
+
+    token = models.UUIDField(primary_key=True, editable=False)
+    tenant_schema = models.CharField(max_length=63, db_index=True)
+    whiteboard_id = models.UUIDField()
+    is_active = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'customers_public_whiteboard_share_index'
+
+    def __str__(self) -> str:
+        return f'{self.token} → {self.tenant_schema}:{self.whiteboard_id}'
+
+
+class PublicWhiteboardShareAccessLog(models.Model):
+    share_index = models.ForeignKey(
+        PublicWhiteboardShareIndex,
+        on_delete=models.CASCADE,
+        related_name='access_logs',
+    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    accessed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'customers_public_whiteboard_share_access_log'
+        ordering = ['-accessed_at']
+
+
 class PlanTier(models.TextChoices):
     STANDARD = 'standard', 'Standard'
     PREMIUM = 'premium', 'Premium'
@@ -74,6 +136,7 @@ class Plan(models.Model):
     attendance_enabled = models.BooleanField(default=True)
     calendar_enabled = models.BooleanField(default=True)
     email_notifications_enabled = models.BooleanField(default=True)
+    github_integration_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

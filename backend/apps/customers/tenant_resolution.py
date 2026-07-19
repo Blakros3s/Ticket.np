@@ -26,6 +26,10 @@ def is_public_api_path(path: str) -> bool:
     path = path or ''
     if path.startswith('/api/server/'):
         return True
+    if path.startswith('/api/public/share/'):
+        return True
+    if path.startswith('/api/public/integrations/github/'):
+        return True
     if path in ('/api/health/', '/health/'):
         return True
     return False

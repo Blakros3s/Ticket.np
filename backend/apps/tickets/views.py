@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError, PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import FilterSet, NumberFilter
+import django_filters
 from django.db.models import Q, Count
 from django.utils import timezone
 
@@ -19,6 +20,7 @@ from apps.core.access import user_can_create_ticket_on_project
 from .models import Ticket, TicketMedia
 from .serializers import (
     TicketSerializer,
+    TicketListSerializer,
     TicketCreateSerializer,
     TicketUpdateSerializer,
     TicketStatusSerializer,
@@ -29,6 +31,8 @@ from .serializers import (
     get_file_type,
 )
 
+LIST_ACTIONS = frozenset({'list', 'my_tickets', 'by_project'})
+
 
 # ---------------------------------------------------------------------------
 # Filter
@@ -36,10 +40,19 @@ from .serializers import (
 
 class TicketFilter(FilterSet):
     assignee = NumberFilter(field_name='assignees', lookup_expr='exact')
+    exclude_status = django_filters.CharFilter(method='filter_exclude_status')
 
     class Meta:
         model  = Ticket
         fields = ['status', 'priority', 'type', 'project']
+
+    def filter_exclude_status(self, queryset, name, value):
+        if not value:
+            return queryset
+        statuses = [item.strip() for item in value.split(',') if item.strip()]
+        if statuses:
+            return queryset.exclude(status__in=statuses)
+        return queryset
 
 
 TICKET_STATUS_KEYS = ('new', 'in_progress', 'qa', 'closed', 'reopened')
@@ -70,7 +83,7 @@ class TicketViewSet(viewsets.ModelViewSet):
     filter_backends     = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class     = TicketFilter
     search_fields       = ['ticket_id', 'title', 'description']
-    ordering_fields     = ['created_at', 'updated_at', 'priority']
+    ordering_fields     = ['created_at', 'updated_at', 'priority', 'due_date']
     ordering            = ['-created_at']
     lookup_field        = 'id'
     # pagination_class    = None  # return all tickets — filtering is done client-side
@@ -80,6 +93,8 @@ class TicketViewSet(viewsets.ModelViewSet):
             return TicketCreateSerializer
         if self.action == 'partial_update':
             return TicketUpdateSerializer
+        if self.action in LIST_ACTIONS:
+            return TicketListSerializer
         return TicketSerializer
 
     def get_permissions(self):
@@ -89,7 +104,7 @@ class TicketViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        base_qs = self._ticket_detail_queryset()
+        base_qs = self._queryset_for_action()
 
         if user.role == 'admin':
             return base_qs.all()
@@ -109,10 +124,31 @@ class TicketViewSet(viewsets.ModelViewSet):
             Q(created_by=user)
         ).distinct()
 
+    def _queryset_for_action(self):
+        if self.action in LIST_ACTIONS:
+            return self._ticket_list_queryset()
+        return self._ticket_detail_queryset()
+
+    def _ticket_list_queryset(self):
+        return (
+            Ticket.objects
+            .select_related('project', 'created_by')
+            .prefetch_related('assignees')
+            .annotate(
+                media_count=Count(
+                    'media_files',
+                    filter=Q(media_files__comment__isnull=True),
+                    distinct=True,
+                ),
+                comment_count=Count('comments', distinct=True),
+            )
+        )
+
     def _ticket_detail_queryset(self):
         return (
             Ticket.objects
             .select_related('project', 'created_by')
+            .select_related('github_link')
             .prefetch_related('assignees', 'media_files', 'comments__author', 'comments__media_files')
         )
 
@@ -124,7 +160,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         distinct_pks = queryset.order_by().values('pk').distinct()
 
         return (
-            self._ticket_detail_queryset()
+            self._queryset_for_action()
             .filter(pk__in=distinct_pks)
             .order_by(*ordering)
         )
@@ -163,6 +199,17 @@ class TicketViewSet(viewsets.ModelViewSet):
         output = TicketSerializer(ticket, context=self.get_serializer_context())
         headers = self.get_success_headers(output.data)
         return Response(output.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def retrieve(self, request, *args, **kwargs):
+        ticket = self.get_object()
+        try:
+            from apps.integrations.services.github_sync import pull_github_issue_state_for_ticket
+            pull_github_issue_state_for_ticket(ticket)
+        except Exception:
+            pass
+        ticket = self._ticket_detail_queryset().get(pk=ticket.pk)
+        serializer = self.get_serializer(ticket)
+        return Response(serializer.data)
 
     def perform_create(self, serializer):
         project = serializer.validated_data['project']
@@ -222,6 +269,20 @@ class TicketViewSet(viewsets.ModelViewSet):
                 user=self.request.user,
                 instance=ticket,
                 description=f"Updated ticket {ticket.ticket_id}: {', '.join(changes)}",
+            )
+
+        content_changed = (
+            old.title != ticket.title
+            or old.description != ticket.description
+            or old.type != ticket.type
+            or old.priority != ticket.priority
+        )
+        if content_changed:
+            from apps.integrations.services.github_sync import sync_ticket_content_to_github
+            from apps.notifications.email_utils import get_frontend_base_url
+            sync_ticket_content_to_github(
+                ticket,
+                frontend_base_url=get_frontend_base_url(self.request),
             )
 
     def perform_destroy(self, instance):
@@ -284,7 +345,65 @@ class TicketViewSet(viewsets.ModelViewSet):
             extra_data={'old_status': old_status, 'new_status': new_status},
         )
 
+        self._sync_github_status(ticket, new_status)
+
         return Response(TicketSerializer(ticket).data)
+
+    def _sync_github_status(self, ticket, new_status: str) -> None:
+        tenant = getattr(self.request, 'tenant', None)
+        if tenant is None:
+            return
+        from apps.integrations.tasks import sync_ticket_status_to_github_task
+        sync_ticket_status_to_github_task.delay(tenant.schema_name, ticket.id, new_status)
+
+    @action(detail=True, methods=['post'], url_path='create-github-issue')
+    def create_github_issue(self, request, id=None):
+        ticket = self.get_object()
+        tenant = getattr(request, 'tenant', None)
+        if tenant is None:
+            return Response({'detail': 'Tenant context is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            from apps.customers.services.plans import requires_feature
+            requires_feature(tenant, 'github_integration_enabled')
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+
+        from apps.integrations.models import TicketGitHubLink
+        try:
+            ticket.github_link
+        except TicketGitHubLink.DoesNotExist:
+            pass
+        else:
+            return Response(
+                {'detail': 'This ticket is already linked to a GitHub issue.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from apps.integrations.services.github_sync import create_github_issue_for_ticket
+        from apps.notifications.email_utils import get_frontend_base_url
+        try:
+            link = create_github_issue_for_ticket(
+                ticket,
+                user=request.user,
+                tenant_slug=tenant.slug,
+                frontend_base_url=get_frontend_base_url(request),
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({'detail': f'Failed to create GitHub issue: {exc}'}, status=status.HTTP_502_BAD_GATEWAY)
+
+        ticket = self._ticket_detail_queryset().get(pk=ticket.pk)
+        data = TicketSerializer(ticket, context={'request': request}).data
+        data['github_link'] = {
+            'issue_url': link.issue_url,
+            'issue_number': link.issue_number,
+            'repo_owner': link.repo_owner,
+            'repo_name': link.repo_name,
+            'sync_status': link.sync_status,
+        }
+        return Response(data, status=status.HTTP_201_CREATED)
 
     def _get_valid_transitions(self, current_status: str) -> list:
         """Define valid status transitions — linear workflow."""
@@ -355,7 +474,7 @@ class TicketViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def my_tickets(self, request):
         """Get tickets assigned to the current user."""
-        tickets    = Ticket.objects.filter(assignees=request.user)
+        tickets = self._ticket_list_queryset().filter(assignees=request.user)
         serializer = self.get_serializer(tickets, many=True)
         return Response(serializer.data)
 

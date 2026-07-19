@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ticketsApi, Ticket, TicketStatus, TicketPriority, TicketType } from '@/lib/tickets';
-import { projectsApi, Project } from '@/lib/projects';
+import { useProjects } from '@/lib/data-hooks';
 
 const statusColors: Record<TicketStatus, string> = {
   new: 'bg-blue-500/20 text-blue-400',
@@ -29,7 +29,7 @@ function TicketsList() {
   const initialProject = searchParams.get('project') ? Number(searchParams.get('project')) : '';
   
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const { data: projects = [] } = useProjects();
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -57,10 +57,10 @@ function TicketsList() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchData = useCallback(async (isInitial = false) => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [ticketsResponse, statsData, projectsData] = await Promise.all([
+      const [ticketsResponse, statsData] = await Promise.all([
         ticketsApi.getTickets({
           page,
           status: statusFilter || undefined,
@@ -75,19 +75,17 @@ function TicketsList() {
           project: projectFilter || undefined,
           search: searchQuery || undefined,
         }),
-        isInitial ? projectsApi.getProjects() : Promise.resolve(projects),
       ]);
       
       setTickets(ticketsResponse.results);
       setTotalCount(ticketsResponse.count);
       setStats(statsData as any);
-      if (isInitial) setProjects(projectsData);
     } catch (error) {
       showToastMessage('Failed to load tickets', 'error');
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, priorityFilter, typeFilter, projectFilter, searchQuery, projects]);
+  }, [page, statusFilter, priorityFilter, typeFilter, projectFilter, searchQuery]);
 
   // Reset page to 1 when filters change
   useEffect(() => {
@@ -97,7 +95,7 @@ function TicketsList() {
   // Fetch data on page or filter change (filters trigger setPage(1) which triggers this)
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchData(projects.length === 0);
+      fetchData();
     }, searchQuery ? 500 : 0);
     
     return () => clearTimeout(timer);
@@ -147,6 +145,12 @@ function TicketsList() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
               My Tickets
+            </Link>
+            <Link href="/protected/dashboard/tickets/board" className="ticket-view-nav__link">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7" />
+              </svg>
+              Board
             </Link>
           </nav>
         </div>
@@ -293,7 +297,7 @@ function TicketsList() {
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Ticket</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Status</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Priority · Type · Project</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Created By</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Due</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase">Assignee</th>
                 </tr>
               </thead>
@@ -327,7 +331,13 @@ function TicketsList() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-slate-300">{ticket.created_by}</span>
+                      {ticket.due_date ? (
+                        <span className={`text-xs ${ticket.is_overdue ? 'text-red-400 font-medium' : 'text-slate-300'}`}>
+                          {ticket.due_date}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-500">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       {ticket.assignees_list && ticket.assignees_list.length > 0 ? (

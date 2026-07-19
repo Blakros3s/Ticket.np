@@ -21,6 +21,22 @@ def get_website_url() -> str:
     return getattr(settings, 'WEBSITE_URL', 'https://technestinnovations.com.np').rstrip('/')
 
 
+def get_frontend_base_url(request=None) -> str:
+    """Frontend origin for in-app links: browser Origin/Referer, else FRONTEND_URL."""
+    if request is not None:
+        origin = (request.headers.get('Origin') or '').strip()
+        parsed = urlparse(origin)
+        if parsed.scheme in ('http', 'https') and parsed.netloc:
+            return origin.rstrip('/')
+
+        referer = (request.headers.get('Referer') or '').strip()
+        parsed = urlparse(referer)
+        if parsed.scheme in ('http', 'https') and parsed.netloc:
+            return f'{parsed.scheme}://{parsed.netloc}'
+
+    return settings.FRONTEND_URL.rstrip('/')
+
+
 def build_ticket_url(ticket_id: int, frontend_url: str | None = None) -> str | None:
     if not is_public_frontend_url(frontend_url):
         return None

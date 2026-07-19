@@ -52,6 +52,9 @@ TENANT_APPS = [
     'apps.core',
     'apps.attendance',
     'apps.notifications',
+    'apps.workspace_docs',
+    'apps.workspace_whiteboards',
+    'apps.integrations',
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [
@@ -210,7 +213,17 @@ AUTH_RATE_LIMIT = '10/minute'
 
 # Frontend + public website (Technest-style links in HTML emails)
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+BACKEND_PUBLIC_URL = config('BACKEND_PUBLIC_URL', default='http://localhost:8000')
 WEBSITE_URL = config('WEBSITE_URL', default='https://technestinnovations.com.np')
+
+# GitHub OAuth (tenant admins connect organization GitHub account)
+GITHUB_CLIENT_ID = config('GITHUB_CLIENT_ID', default='').strip()
+GITHUB_CLIENT_SECRET = config('GITHUB_CLIENT_SECRET', default='').strip()
+GITHUB_OAUTH_SCOPES = config('GITHUB_OAUTH_SCOPES', default='read:user repo')
+GITHUB_OAUTH_REDIRECT_URI = config(
+    'GITHUB_OAUTH_REDIRECT_URI',
+    default=f'{BACKEND_PUBLIC_URL.rstrip("/")}/api/public/integrations/github/callback/',
+)
 
 # Mail — Technest-style: file/console in dev, SMTP when credentials are set.
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')

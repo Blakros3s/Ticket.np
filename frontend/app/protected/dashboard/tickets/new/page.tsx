@@ -6,8 +6,11 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useRef, useMemo, Suspense } from 'react';
 import { ticketsApi, TicketType, TicketPriority, CreateTicketData } from '@/lib/tickets';
-import { projectsApi, Project } from '@/lib/projects';
+import { ProjectMember } from '@/lib/projects';
+import { useProjects } from '@/lib/data-hooks';
 import { authApi, User } from '@/lib/auth';
+
+type AssigneeCandidate = User | ProjectMember['user'];
 import { FileUploadZone } from '@/components/file-upload-zone';
 
 function CreateTicketForm() {
@@ -15,7 +18,7 @@ function CreateTicketForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialProjectId = searchParams.get('project') ? Number(searchParams.get('project')) : 0;
-  const [projects, setProjects] = useState<Project[]>([]);
+  const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchingData, setFetchingData] = useState(true);
@@ -33,6 +36,7 @@ function CreateTicketForm() {
     project: initialProjectId,
     assignees: [],
     media_files: [],
+    due_date: '',
   });
 
   const showToastMessage = (message: string, type: 'success' | 'error') => {
@@ -41,29 +45,27 @@ function CreateTicketForm() {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchUsers = async () => {
       try {
-        const [projectsData, usersData] = await Promise.all([
-          projectsApi.getProjects(),
-          authApi.getUsers(),
-        ]);
-        setProjects(projectsData);
-        setUsers(usersData.filter(u => u.is_active));
-
-        if (projectsData.length > 0 && !initialProjectId) {
-          setFormData(prev => ({ ...prev, project: projectsData[0].id }));
-        } else if (initialProjectId) {
-          setFormData(prev => ({ ...prev, project: initialProjectId }));
-        }
-      } catch (error) {
-        showToastMessage('Failed to load data', 'error');
+        const usersData = await authApi.getUsers();
+        setUsers(usersData.filter((u) => u.is_active));
+      } catch {
+        showToastMessage('Failed to load users', 'error');
       } finally {
         setFetchingData(false);
       }
     };
 
-    fetchData();
-  }, []);
+    if (projectsLoading) return;
+
+    if (projects.length > 0 && !initialProjectId) {
+      setFormData((prev) => ({ ...prev, project: projects[0].id }));
+    } else if (initialProjectId) {
+      setFormData((prev) => ({ ...prev, project: initialProjectId }));
+    }
+
+    void fetchUsers();
+  }, [projectsLoading, projects, initialProjectId]);
 
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -98,6 +100,7 @@ function CreateTicketForm() {
       const ticketData = {
         ...formData,
         media_files: mediaFiles,
+        due_date: formData.due_date || null,
       };
       const ticket = await ticketsApi.createTicket(ticketData);
       showToastMessage('Ticket created successfully', 'success');
@@ -131,7 +134,7 @@ function CreateTicketForm() {
     });
   }, [assigneePool, assigneeSearch]);
 
-  const getMemberDisplayName = (member: User) => {
+  const getMemberDisplayName = (member: AssigneeCandidate) => {
     const fullName = `${member.first_name} ${member.last_name}`.trim();
     return fullName || member.username;
   };
@@ -145,7 +148,7 @@ function CreateTicketForm() {
     }
   };
 
-  if (fetchingData) {
+  if (fetchingData || projectsLoading) {
     return (
       <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="animate-pulse space-y-6">
@@ -279,6 +282,16 @@ function CreateTicketForm() {
                 <option value="high">High</option>
                 <option value="critical">Critical</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-200 mb-2">Due date (optional)</label>
+              <input
+                type="date"
+                className="input-field w-full"
+                value={formData.due_date || ''}
+                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+              />
             </div>
           </div>
 

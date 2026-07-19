@@ -310,6 +310,7 @@ export default function TicketDetailPage() {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingTicket, setDeletingTicket] = useState(false);
+  const [creatingGithubIssue, setCreatingGithubIssue] = useState(false);
   const [viewingMedia, setViewingMedia] = useState<ViewingMedia | null>(null);
   const [showAssignDropdown, setShowAssignDropdown] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState('');
@@ -326,6 +327,7 @@ export default function TicketDetailPage() {
     priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
     status: 'new' as TicketStatus,
     assignees: [] as number[],
+    due_date: '',
   });
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<string, string | string[]>>>({});
 
@@ -362,6 +364,7 @@ export default function TicketDetailPage() {
           priority: ticketData.priority,
           status: ticketData.status,
           assignees: ticketData.assignees || [],
+          due_date: ticketData.due_date || '',
         });
       } catch (error: any) {
         showToastMessage(error.response?.data?.detail || 'Failed to load ticket', 'error');
@@ -423,7 +426,10 @@ export default function TicketDetailPage() {
       setSaving(true);
       setFieldErrors({});
       const { assignees: _, status: _s, ...savePayload } = editData;
-      const updated = await ticketsApi.updateTicket(ticketId, savePayload);
+      const updated = await ticketsApi.updateTicket(ticketId, {
+        ...savePayload,
+        due_date: savePayload.due_date || null,
+      });
       setTicket({ ...ticket!, ...updated });
       setIsEditing(false);
       showToastMessage('Ticket updated successfully', 'success');
@@ -468,6 +474,19 @@ export default function TicketDetailPage() {
     }
   };
 
+  const handleCreateGithubIssue = async () => {
+    try {
+      setCreatingGithubIssue(true);
+      const updated = await ticketsApi.createGithubIssue(ticketId);
+      setTicket(updated);
+      showToastMessage('GitHub issue created and linked', 'success');
+    } catch (error: any) {
+      showToastMessage(error.response?.data?.detail || 'Failed to create GitHub issue', 'error');
+    } finally {
+      setCreatingGithubIssue(false);
+    }
+  };
+
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -476,7 +495,7 @@ export default function TicketDetailPage() {
       setUploadingMedia(true);
       for (const file of Array.from(files)) {
         const media = await ticketsApi.uploadMedia(ticketId, file);
-        setTicket(prev => prev ? { ...prev, media_files: [...prev.media_files, media] } : null);
+        setTicket(prev => prev ? { ...prev, media_files: [...(prev.media_files ?? []), media] } : null);
       }
       showToastMessage('Media uploaded successfully', 'success');
     } catch (error: any) {
@@ -492,7 +511,7 @@ export default function TicketDetailPage() {
   const handleDeleteMedia = async (mediaId: number) => {
     try {
       await ticketsApi.deleteMedia(ticketId, mediaId);
-      setTicket(prev => prev ? { ...prev, media_files: prev.media_files.filter(m => m.id !== mediaId) } : null);
+      setTicket(prev => prev ? { ...prev, media_files: (prev.media_files ?? []).filter(m => m.id !== mediaId) } : null);
       showToastMessage('Media deleted successfully', 'success');
     } catch (error: any) {
       showToastMessage(error.response?.data?.detail || 'Failed to delete media', 'error');
@@ -509,7 +528,7 @@ export default function TicketDetailPage() {
     try {
       setSubmittingComment(true);
       const comment = await ticketsApi.addComment(ticketId, newComment.trim(), commentImages);
-      setTicket(prev => prev ? { ...prev, comments: [...prev.comments, comment] } : null);
+      setTicket(prev => prev ? { ...prev, comments: [...(prev.comments ?? []), comment] } : null);
       setNewComment('');
       setCommentImages([]);
       if (commentFileInputRef.current) commentFileInputRef.current.value = '';
@@ -808,6 +827,9 @@ export default function TicketDetailPage() {
   const canViewActivity = user?.role === 'admin' || user?.role === 'manager';
   const isProjectMember = projectMembers.some(m => m.id === user?.id);
   const canAssign = user?.role === 'admin' || user?.role === 'manager' || isCreator || isProjectMember;
+  const currentProject = projects.find((project) => project.id === ticket?.project);
+  const projectHasGithubRepo = Boolean(currentProject?.github_repo);
+  const canCreateGithubIssue = projectHasGithubRepo && !ticket?.github_link;
 
   if (loading) {
     return (
@@ -882,6 +904,15 @@ export default function TicketDetailPage() {
                     </select>
                     {fieldErrors.priority && <p className="text-red-400 text-xs mt-1">{Array.isArray(fieldErrors.priority) ? fieldErrors.priority[0] : fieldErrors.priority}</p>}
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-200 mb-1">Due date</label>
+                    <input
+                      type="date"
+                      className="input-field w-full"
+                      value={editData.due_date || ''}
+                      onChange={(e) => setEditData({ ...editData, due_date: e.target.value })}
+                    />
+                  </div>
                 </div>
                 <div className="flex gap-2 pt-2">
                   <button onClick={handleSave} disabled={saving} className="btn-primary px-4 py-2">{saving ? 'Saving...' : 'Save'}</button>
@@ -928,7 +959,7 @@ export default function TicketDetailPage() {
                       setUploadingMedia(true);
                       for (const file of files) {
                         const media = await ticketsApi.uploadMedia(ticketId, file);
-                        setTicket(prev => prev ? { ...prev, media_files: [...prev.media_files, media] } : null);
+                        setTicket(prev => prev ? { ...prev, media_files: [...(prev.media_files ?? []), media] } : null);
                       }
                       showToastMessage('Media uploaded successfully', 'success');
                     } catch (error: any) {
@@ -1256,6 +1287,43 @@ export default function TicketDetailPage() {
               )}
               {!canChangeStatus && ticket.status !== 'closed' && (
                 <p className="text-xs text-slate-500 mt-2">Only assignees can change status</p>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-700/50">
+              <label className="block text-sm font-medium text-slate-400 mb-2">GitHub</label>
+              {ticket.github_link ? (
+                <a
+                  href={ticket.github_link.issue_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between gap-2 w-full px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 hover:border-slate-600 transition-colors"
+                >
+                  <span className="text-sm text-white truncate">
+                    {ticket.github_link.repo_owner}/{ticket.github_link.repo_name}#{ticket.github_link.issue_number}
+                  </span>
+                  <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              ) : canCreateGithubIssue ? (
+                <button
+                  type="button"
+                  onClick={handleCreateGithubIssue}
+                  disabled={creatingGithubIssue}
+                  className="w-full py-2.5 px-4 rounded-xl border border-slate-600 text-sm font-semibold text-white bg-slate-800/50 hover:bg-slate-700/50 transition-colors"
+                >
+                  {creatingGithubIssue ? 'Creating issue...' : 'Create GitHub issue'}
+                </button>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  {projectHasGithubRepo
+                    ? 'GitHub issue not linked yet.'
+                    : 'Add a GitHub repository URL on the project to enable issue linking.'}
+                </p>
+              )}
+              {ticket.github_link?.sync_status === 'error' && ticket.github_link.last_sync_error && (
+                <p className="text-xs text-red-400 mt-2">{ticket.github_link.last_sync_error}</p>
               )}
             </div>
 

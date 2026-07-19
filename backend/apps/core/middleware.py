@@ -17,6 +17,9 @@ class RateLimitMiddleware:
         # Skip rate limiting for admin panel
         if request.path.startswith('/admin/'):
             return self.get_response(request)
+
+        if request.path.startswith('/api/public/share/'):
+            return self._rate_limit_public_share(request)
         
         # Get client identifier
         client_id = self._get_client_id(request)
@@ -68,3 +71,20 @@ class RateLimitMiddleware:
             ip = request.META.get('REMOTE_ADDR', 'unknown')
         
         return f'ip:{ip}'
+
+    def _rate_limit_public_share(self, request):
+        client_id = self._get_client_id(request)
+        limit = 30
+        window = 60
+        cache_key = f'ratelimit:public_share:{client_id}'
+        current = cache.get(cache_key, 0)
+        if current >= limit:
+            return JsonResponse({
+                'error': 'Rate limit exceeded. Please try again later.',
+                'retry_after': window,
+            }, status=429)
+        cache.set(cache_key, current + 1, window)
+        response = self.get_response(request)
+        response['X-RateLimit-Limit'] = str(limit)
+        response['X-RateLimit-Remaining'] = str(max(0, limit - current - 1))
+        return response

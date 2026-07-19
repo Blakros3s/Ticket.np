@@ -9,7 +9,6 @@ import { projectsApi, Project, ProjectDocument } from '@/lib/projects';
 import { authApi, User } from '@/lib/auth';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import * as mammoth from 'mammoth';
 import { FileUploadZone } from '@/components/file-upload-zone';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 
@@ -245,6 +244,7 @@ export default function ProjectDetailPage() {
       try {
         const response = await fetch(getFileUrl(doc.file));
         const arrayBuffer = await response.arrayBuffer();
+        const mammoth = await import('mammoth');
         const result = await mammoth.convertToHtml({ arrayBuffer });
         setViewingContent(result.value);
       } catch (error) {
@@ -458,10 +458,17 @@ export default function ProjectDetailPage() {
           <div className="surface-panel">
             <div className="surface-panel-header">
               <h2 className="surface-panel-title">
-                Documents
+                Files
                 <span className="badge badge-neutral">{documents.length}</span>
               </h2>
-              <button
+              <div className="flex items-center gap-2">
+                <Link href={`/protected/dashboard/docs?project=${projectId}`} className="btn-secondary px-3 py-1.5 text-xs">
+                  Docs
+                </Link>
+                <Link href={`/protected/dashboard/whiteboards?project=${projectId}`} className="btn-secondary px-3 py-1.5 text-xs">
+                  Whiteboards
+                </Link>
+                <button
                 onClick={() => setShowUploadDoc(true)}
                 className="btn-secondary px-3 py-1.5 text-xs"
                 type="button"
@@ -469,6 +476,7 @@ export default function ProjectDetailPage() {
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                 Upload
               </button>
+              </div>
             </div>
 
             {documents.length === 0 ? (

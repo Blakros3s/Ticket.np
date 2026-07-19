@@ -25,6 +25,7 @@ DEFAULT_PLANS: tuple[dict, ...] = (
         'attendance_enabled': True,
         'calendar_enabled': True,
         'email_notifications_enabled': True,
+        'github_integration_enabled': False,
     },
     {
         'name': 'Premium',
@@ -35,6 +36,7 @@ DEFAULT_PLANS: tuple[dict, ...] = (
         'attendance_enabled': True,
         'calendar_enabled': True,
         'email_notifications_enabled': True,
+        'github_integration_enabled': True,
     },
 )
 

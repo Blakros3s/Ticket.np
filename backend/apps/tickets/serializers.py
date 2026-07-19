@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 import re
+from django.utils import timezone
 from django.utils.html import strip_tags
 from apps.core.media_utils import build_protected_media_url
 from .models import Ticket, TicketMedia
@@ -121,30 +122,75 @@ class TicketCommentSerializer(serializers.ModelSerializer):
         return obj.author.get_full_name() or obj.author.username
 
 
-class TicketSerializer(serializers.ModelSerializer):
-    created_by   = serializers.SerializerMethodField()
-    created_by_id = serializers.IntegerField(source='created_by.id', read_only=True)
+def _ticket_is_overdue(ticket) -> bool:
+    if not ticket.due_date or ticket.status == 'closed':
+        return False
+    return ticket.due_date < timezone.now().date()
 
-    def get_created_by(self, obj):
-        return obj.created_by.get_full_name() or obj.created_by.username
-    assignees    = serializers.SerializerMethodField()
+
+class _TicketCoreSerializer(serializers.ModelSerializer):
+    """Shared fields for list and detail ticket representations."""
+
+    created_by = serializers.SerializerMethodField()
+    created_by_id = serializers.IntegerField(source='created_by.id', read_only=True)
+    is_overdue = serializers.SerializerMethodField()
+    assignees = serializers.SerializerMethodField()
     assignees_list = serializers.SerializerMethodField()
     project_name = serializers.StringRelatedField(source='project', read_only=True)
-    media_files  = serializers.SerializerMethodField()
-    comments     = TicketCommentSerializer(many=True, read_only=True)
 
     class Meta:
-        model  = Ticket
+        model = Ticket
         fields = [
             'id', 'ticket_id', 'title', 'description', 'type', 'priority', 'status',
             'project', 'project_name', 'assignees', 'assignees_list', 'created_by',
-            'created_by_id', 'created_at', 'updated_at', 'media_files', 'comments',
-            'in_progress_at', 'qa_at', 'closed_at',
+            'created_by_id', 'created_at', 'updated_at',
+            'in_progress_at', 'qa_at', 'closed_at', 'due_date', 'is_overdue',
         ]
         read_only_fields = [
             'ticket_id', 'created_by', 'created_by_id', 'created_at', 'updated_at',
-            'in_progress_at', 'qa_at', 'closed_at',
+            'in_progress_at', 'qa_at', 'closed_at', 'is_overdue',
         ]
+
+    def get_created_by(self, obj):
+        return obj.created_by.get_full_name() or obj.created_by.username
+
+    def get_is_overdue(self, obj):
+        return _ticket_is_overdue(obj)
+
+    def get_assignees(self, obj):
+        return list(obj.assignees.values_list('id', flat=True))
+
+    def get_assignees_list(self, obj):
+        return [_build_assignee_dict(u) for u in obj.assignees.all()]
+
+
+class TicketListSerializer(_TicketCoreSerializer):
+    """Lightweight serializer for list endpoints — no embedded comments or media."""
+
+    media_count = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
+
+    class Meta(_TicketCoreSerializer.Meta):
+        fields = _TicketCoreSerializer.Meta.fields + ['media_count', 'comment_count']
+
+    def get_media_count(self, obj):
+        if hasattr(obj, 'media_count'):
+            return obj.media_count
+        return obj.media_files.filter(comment__isnull=True).count()
+
+    def get_comment_count(self, obj):
+        if hasattr(obj, 'comment_count'):
+            return obj.comment_count
+        return obj.comments.count()
+
+
+class TicketSerializer(_TicketCoreSerializer):
+    media_files = serializers.SerializerMethodField()
+    comments = TicketCommentSerializer(many=True, read_only=True)
+    github_link = serializers.SerializerMethodField()
+
+    class Meta(_TicketCoreSerializer.Meta):
+        fields = _TicketCoreSerializer.Meta.fields + ['media_files', 'comments', 'github_link']
 
     def get_media_files(self, obj):
         attachments = obj.media_files.filter(comment__isnull=True)
@@ -154,13 +200,14 @@ class TicketSerializer(serializers.ModelSerializer):
             context=self.context,
         ).data
 
-    def get_assignees(self, obj):
-        """Return list of assignee IDs for API compatibility."""
-        return list(obj.assignees.values_list('id', flat=True))
-
-    def get_assignees_list(self, obj):
-        """Return full assignee objects for display."""
-        return [_build_assignee_dict(u) for u in obj.assignees.all()]
+    def get_github_link(self, obj):
+        from apps.integrations.models import TicketGitHubLink
+        try:
+            link = obj.github_link
+        except TicketGitHubLink.DoesNotExist:
+            return None
+        from apps.integrations.serializers import TicketGitHubLinkSerializer
+        return TicketGitHubLinkSerializer(link).data
 
 
 class TicketCreateSerializer(serializers.ModelSerializer):
@@ -177,7 +224,7 @@ class TicketCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Ticket
-        fields = ['title', 'description', 'type', 'priority', 'project', 'assignees', 'media_files']
+        fields = ['title', 'description', 'type', 'priority', 'project', 'assignees', 'media_files', 'due_date']
 
     def validate_title(self, value):
         return strip_tags(value)
@@ -217,7 +264,7 @@ class TicketUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Ticket
-        fields = ['title', 'description', 'type', 'priority', 'assignees']
+        fields = ['title', 'description', 'type', 'priority', 'assignees', 'due_date']
 
     def validate_title(self, value):
         return strip_tags(value)
