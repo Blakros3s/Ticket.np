@@ -222,7 +222,7 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={handleConnectGitHub}
-              disabled={githubConnecting || githubStatus.feature_enabled === false}
+              disabled={githubConnecting}
               className="btn-primary px-4 py-2"
             >
               {githubConnecting ? 'Redirecting...' : 'Connect GitHub'}
