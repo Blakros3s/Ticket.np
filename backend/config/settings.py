@@ -26,7 +26,8 @@ SHARED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django.contrib.admin',
+    # admin is tenant-only: AUTH_USER_MODEL lives in tenant schemas (users.User).
+    # Public schema uses platform_admin_site + PlatformUser instead.
     'rest_framework',
     'corsheaders',
     'drf_spectacular',
