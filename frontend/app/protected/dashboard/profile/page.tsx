@@ -2,7 +2,9 @@
 
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/settings-context';
+import { integrationsApi, GitHubStatusResponse } from '@/lib/integrations';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { authApi } from '@/lib/auth';
 
@@ -25,9 +27,14 @@ function getRoleBadgeClass(role: string) {
 export default function ProfilePage() {
   const { user: currentUser, refreshUser } = useAuth();
   const { terminology } = useSettings();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [githubStatus, setGithubStatus] = useState<GitHubStatusResponse | null>(null);
+  const [githubLoading, setGithubLoading] = useState(true);
+  const [githubConnecting, setGithubConnecting] = useState(false);
 
   const [profileData, setProfileData] = useState({
     first_name: '',
@@ -57,8 +64,67 @@ export default function ProfilePage() {
         email: currentUser.email || '',
       });
       setLoading(false);
+      fetchGitHubStatus();
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    const githubParam = searchParams.get('github');
+    if (!githubParam) return;
+    if (githubParam === 'connected') {
+      showToastMessage('GitHub connected successfully', 'success');
+      fetchGitHubStatus();
+    } else if (githubParam === 'error') {
+      showToastMessage('GitHub connection failed. Please try again.', 'error');
+    }
+    router.replace('/protected/dashboard/profile');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, router]);
+
+  const fetchGitHubStatus = async () => {
+    try {
+      setGithubLoading(true);
+      const data = await integrationsApi.getGitHubStatus();
+      setGithubStatus(data);
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { detail?: string } } };
+      const detail = err.response?.data?.detail;
+      setGithubStatus({
+        connected: false,
+        configured: true,
+        feature_enabled: false,
+        feature_detail: typeof detail === 'string' ? detail : 'Failed to load GitHub integration status.',
+      });
+    } finally {
+      setGithubLoading(false);
+    }
+  };
+
+  const handleConnectGitHub = async () => {
+    try {
+      setGithubConnecting(true);
+      const authorizeUrl = await integrationsApi.connectGitHub();
+      window.location.href = authorizeUrl;
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { detail?: string } } };
+      showToastMessage(err.response?.data?.detail || 'Failed to start GitHub connection', 'error');
+      setGithubConnecting(false);
+    }
+  };
+
+  const handleDisconnectGitHub = async () => {
+    try {
+      setGithubConnecting(true);
+      await integrationsApi.disconnectGitHub();
+      setGithubStatus({ connected: false, configured: githubStatus?.configured ?? true });
+      showToastMessage('GitHub disconnected', 'success');
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { detail?: string } } };
+      showToastMessage(err.response?.data?.detail || 'Failed to disconnect GitHub', 'error');
+    } finally {
+      setGithubConnecting(false);
+    }
+  };
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -310,6 +376,63 @@ export default function ProfilePage() {
           </div>
         </section>
       </div>
+
+      <section className="profile-section mb-6">
+        <div className="profile-section-header">
+          <div>
+            <h2 className="profile-section-title">GitHub</h2>
+            <p className="profile-section-desc">
+              Connect your personal GitHub account so issues you create or close in TicketHub appear under your name on GitHub.
+            </p>
+          </div>
+          {githubStatus?.connected && (
+            <span className="profile-section-badge profile-section-badge--editable">Connected</span>
+          )}
+        </div>
+        <div className="profile-section-body">
+          {githubLoading ? (
+            <div className="h-12 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--accent)' }} />
+            </div>
+          ) : !githubStatus?.configured ? (
+            <p className="text-sm text-amber-400">
+              GitHub OAuth is not configured on the server. Ask your platform administrator.
+            </p>
+          ) : githubStatus.feature_enabled === false ? (
+            <p className="text-sm text-amber-400">
+              {githubStatus.feature_detail || 'Your subscription plan does not include GitHub integration.'}
+            </p>
+          ) : githubStatus.connected && githubStatus.connection ? (
+            <div className="space-y-4">
+              <div className="profile-readonly-value font-mono text-sm">
+                @{githubStatus.connection.github_login}
+              </div>
+              <button
+                type="button"
+                onClick={handleDisconnectGitHub}
+                disabled={githubConnecting}
+                className="btn-secondary px-4 py-2"
+              >
+                {githubConnecting ? 'Disconnecting…' : 'Disconnect GitHub'}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                Required to create GitHub issues from tickets and to sync close/reopen actions under your GitHub identity.
+              </p>
+              <button
+                type="button"
+                onClick={handleConnectGitHub}
+                disabled={githubConnecting}
+                className="btn-primary px-4 py-2"
+              >
+                {githubConnecting ? 'Redirecting…' : 'Connect GitHub'}
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
 
       <section className="profile-section">
         <div className="profile-section-header">

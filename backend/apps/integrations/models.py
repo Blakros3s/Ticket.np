@@ -1,34 +1,49 @@
-from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.tickets.models import Ticket
 from apps.users.models import User
 
 
-class GitHubConnection(models.Model):
-    """Tenant-wide GitHub OAuth connection (one active per tenant)."""
+class GitHubTenantConfig(models.Model):
+    """Per-tenant webhook secret (singleton row)."""
 
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    webhook_secret = models.CharField(max_length=64, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'integrations_github_tenant_config'
+        constraints = [
+            models.CheckConstraint(check=Q(id=1), name='integrations_github_tenant_config_singleton'),
+        ]
+
+    def __str__(self) -> str:
+        return 'GitHub tenant config'
+
+
+class GitHubConnection(models.Model):
+    """Per-user GitHub OAuth token — actions on GitHub appear under this account."""
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='github_connection',
+    )
     github_user_id = models.PositiveBigIntegerField()
     github_login = models.CharField(max_length=255)
     access_token_encrypted = models.TextField()
     token_scope = models.CharField(max_length=255, blank=True)
-    webhook_secret = models.CharField(max_length=64, blank=True)
-    connected_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='github_connections',
-    )
     connected_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'integrations_github_connection'
-        verbose_name = 'GitHub connection'
+        verbose_name = 'GitHub user connection'
 
     def __str__(self) -> str:
-        return f'GitHub @{self.github_login}'
+        return f'{self.user_id} → @{self.github_login}'
 
 
 class TicketGitHubLink(models.Model):
@@ -51,6 +66,13 @@ class TicketGitHubLink(models.Model):
     issue_number = models.PositiveIntegerField()
     github_issue_id = models.PositiveBigIntegerField()
     issue_url = models.URLField(max_length=500)
+    linked_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='github_issues_created',
+    )
     sync_status = models.CharField(
         max_length=20,
         choices=SYNC_CHOICES,

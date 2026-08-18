@@ -10,6 +10,7 @@ import { projectsApi, Project } from '@/lib/projects';
 import { authApi, User } from '@/lib/auth';
 import { activityApi, ActivityLog } from '@/lib/activity';
 import { timelogsApi, TicketActiveSession } from '@/lib/timelogs';
+import { integrationsApi, GitHubStatusResponse } from '@/lib/integrations';
 import Markdown from '@/components/Markdown';
 import { FileUploadZone } from '@/components/file-upload-zone';
 import { CommentMentionInput, renderCommentContent } from '@/components/comment-mentions';
@@ -311,6 +312,7 @@ export default function TicketDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingTicket, setDeletingTicket] = useState(false);
   const [creatingGithubIssue, setCreatingGithubIssue] = useState(false);
+  const [githubStatus, setGithubStatus] = useState<GitHubStatusResponse | null>(null);
   const [viewingMedia, setViewingMedia] = useState<ViewingMedia | null>(null);
   const [showAssignDropdown, setShowAssignDropdown] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState('');
@@ -347,16 +349,18 @@ export default function TicketDetailPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [ticketData, projectsData, usersData, activityData] = await Promise.all([
+        const [ticketData, projectsData, usersData, activityData, githubData] = await Promise.all([
           ticketsApi.getTicket(ticketId),
           projectsApi.getProjects(),
           authApi.getUsers(),
           activityApi.getActivityByTicket(ticketId).catch(() => []),
+          integrationsApi.getGitHubStatus().catch(() => null),
         ]);
         setTicket(ticketData);
         setProjects(projectsData);
         setUsers(usersData.filter(u => u.is_active));
         setActivities(activityData);
+        setGithubStatus(githubData);
         setEditData({
           title: ticketData.title,
           description: ticketData.description,
@@ -829,7 +833,10 @@ export default function TicketDetailPage() {
   const canAssign = user?.role === 'admin' || user?.role === 'manager' || isCreator || isProjectMember;
   const currentProject = projects.find((project) => project.id === ticket?.project);
   const projectHasGithubRepo = Boolean(currentProject?.github_repo);
-  const canCreateGithubIssue = projectHasGithubRepo && !ticket?.github_link;
+  const githubFeatureEnabled = githubStatus?.feature_enabled !== false;
+  const userGithubConnected = githubStatus?.connected === true;
+  const canCreateGithubIssue =
+    projectHasGithubRepo && !ticket?.github_link && githubFeatureEnabled && userGithubConnected;
 
   if (loading) {
     return (
@@ -1315,6 +1322,13 @@ export default function TicketDetailPage() {
                 >
                   {creatingGithubIssue ? 'Creating issue...' : 'Create GitHub issue'}
                 </button>
+              ) : projectHasGithubRepo && !ticket?.github_link && githubFeatureEnabled && !userGithubConnected ? (
+                <p className="text-xs text-slate-500">
+                  <Link href="/protected/dashboard/profile" className="text-sky-400 hover:text-sky-300">
+                    Connect your GitHub account
+                  </Link>
+                  {' '}in Profile to create issues from tickets.
+                </p>
               ) : (
                 <p className="text-xs text-slate-500">
                   {projectHasGithubRepo
