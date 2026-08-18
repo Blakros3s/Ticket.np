@@ -5,7 +5,6 @@ export interface GitHubConnectionInfo {
   github_login: string;
   github_user_id: number;
   token_scope: string;
-  connected_by_name: string | null;
   connected_at: string;
   updated_at: string;
 }

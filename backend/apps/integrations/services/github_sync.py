@@ -10,7 +10,7 @@ from django.db import connection
 from django.utils import timezone
 
 from apps.activity.utils import log_activity
-from apps.integrations.models import GitHubConnection, TicketGitHubLink
+from apps.integrations.models import GitHubConnection, GitHubTenantConfig, TicketGitHubLink
 from apps.integrations.services.crypto import decrypt_text
 from apps.integrations.services.github_client import GitHubAPIError, GitHubClient
 from apps.integrations.services.repo_utils import github_issue_labels, parse_github_repo_url
@@ -19,16 +19,36 @@ from apps.tickets.models import Ticket
 logger = logging.getLogger(__name__)
 
 
-def get_active_connection() -> GitHubConnection | None:
-    return GitHubConnection.objects.order_by('-connected_at').first()
+def get_tenant_github_config() -> GitHubTenantConfig:
+    config, _ = GitHubTenantConfig.objects.get_or_create(pk=1)
+    return config
 
 
-def get_github_client() -> GitHubClient | None:
-    connection_row = get_active_connection()
+def get_user_connection(user) -> GitHubConnection | None:
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return None
+    try:
+        return user.github_connection
+    except GitHubConnection.DoesNotExist:
+        return None
+
+
+def get_github_client(user=None) -> GitHubClient | None:
+    connection_row = get_user_connection(user)
     if not connection_row:
         return None
     token = decrypt_text(connection_row.access_token_encrypted)
     return GitHubClient(token)
+
+
+def get_github_client_for_link(link: TicketGitHubLink, acting_user=None) -> GitHubClient | None:
+    if acting_user is not None:
+        client = get_github_client(acting_user)
+        if client:
+            return client
+    if link.linked_by_id:
+        return get_github_client(link.linked_by)
+    return None
 
 
 def webhook_callback_url(tenant_slug: str) -> str:
@@ -47,18 +67,18 @@ def verify_webhook_signature(payload: bytes, signature_header: str | None, secre
     return hmac.compare_digest(expected, signature_header)
 
 
-def ensure_repo_webhook(owner: str, repo: str, tenant_slug: str) -> None:
-    connection_row = get_active_connection()
-    client = get_github_client()
-    if not connection_row or not client:
+def ensure_repo_webhook(owner: str, repo: str, tenant_slug: str, user) -> None:
+    client = get_github_client(user)
+    if not client:
         return
 
-    if not connection_row.webhook_secret:
-        connection_row.webhook_secret = secrets.token_hex(32)
-        connection_row.save(update_fields=['webhook_secret'])
+    tenant_config = get_tenant_github_config()
+    if not tenant_config.webhook_secret:
+        tenant_config.webhook_secret = secrets.token_hex(32)
+        tenant_config.save(update_fields=['webhook_secret', 'updated_at'])
 
     callback_url = webhook_callback_url(tenant_slug)
-    secret = connection_row.webhook_secret
+    secret = tenant_config.webhook_secret
 
     try:
         hooks = client.list_repo_hooks(owner, repo)
@@ -106,11 +126,11 @@ def create_github_issue_for_ticket(
         raise ValueError('Project does not have a valid GitHub repository URL')
 
     owner, repo_name = repo
-    client = get_github_client()
+    client = get_github_client(user)
     if not client:
-        raise ValueError('GitHub is not connected for this organization')
+        raise ValueError('Connect your GitHub account in Profile before creating GitHub issues.')
 
-    ensure_repo_webhook(owner, repo_name, tenant_slug)
+    ensure_repo_webhook(owner, repo_name, tenant_slug, user)
 
     title = build_issue_title(ticket)
     issue = client.create_issue(
@@ -128,6 +148,7 @@ def create_github_issue_for_ticket(
         issue_number=issue['number'],
         github_issue_id=issue['id'],
         issue_url=issue['html_url'],
+        linked_by=user,
     )
     link.mark_synced()
 
@@ -135,7 +156,7 @@ def create_github_issue_for_ticket(
         action='update',
         user=user,
         instance=ticket,
-        description=f'Linked ticket to GitHub issue #{issue["number"]}',
+        description=f'Linked ticket to GitHub issue #{issue["number"]} as @{user.github_connection.github_login}',
         extra_data={'issue_url': issue['html_url'], 'source': 'github'},
     )
     return link
@@ -149,7 +170,7 @@ def ticket_status_to_github_state(status: str) -> str | None:
     return None
 
 
-def sync_ticket_status_to_github(ticket: Ticket, new_status: str) -> None:
+def sync_ticket_status_to_github(ticket: Ticket, new_status: str, user=None) -> None:
     if getattr(ticket, '_github_sync_source', False):
         return
 
@@ -167,9 +188,9 @@ def sync_ticket_status_to_github(ticket: Ticket, new_status: str) -> None:
     if github_state is None:
         return
 
-    client = get_github_client()
+    client = get_github_client(user)
     if not client:
-        link.mark_error('GitHub connection is not configured')
+        link.mark_error('Connect your GitHub account in Profile to sync status with GitHub.')
         return
 
     try:
@@ -180,8 +201,7 @@ def sync_ticket_status_to_github(ticket: Ticket, new_status: str) -> None:
         logger.warning('GitHub status sync failed for ticket %s: %s', ticket.ticket_id, exc)
 
 
-def sync_ticket_content_to_github(ticket: Ticket, *, frontend_base_url: str | None = None) -> None:
-    """Push ticket title/description (and metadata footer) to the linked GitHub issue."""
+def sync_ticket_content_to_github(ticket: Ticket, *, user, frontend_base_url: str | None = None) -> None:
     if getattr(ticket, '_github_sync_source', False):
         return
 
@@ -193,9 +213,9 @@ def sync_ticket_content_to_github(ticket: Ticket, *, frontend_base_url: str | No
     if link.sync_status == TicketGitHubLink.SYNC_DISCONNECTED:
         return
 
-    client = get_github_client()
+    client = get_github_client(user)
     if not client:
-        link.mark_error('GitHub connection is not configured')
+        link.mark_error('Connect your GitHub account in Profile to sync edits with GitHub.')
         return
 
     try:
@@ -272,8 +292,7 @@ def apply_github_issue_state_to_ticket(
     return None
 
 
-def pull_github_issue_state_for_ticket(ticket: Ticket) -> bool:
-    """Fetch linked GitHub issue state and apply closed/reopened to the ticket."""
+def pull_github_issue_state_for_ticket(ticket: Ticket, user=None) -> bool:
     try:
         link = ticket.github_link
     except TicketGitHubLink.DoesNotExist:
@@ -282,7 +301,7 @@ def pull_github_issue_state_for_ticket(ticket: Ticket) -> bool:
     if link.sync_status == TicketGitHubLink.SYNC_DISCONNECTED:
         return False
 
-    client = get_github_client()
+    client = get_github_client_for_link(link, acting_user=user)
     if not client:
         return False
 

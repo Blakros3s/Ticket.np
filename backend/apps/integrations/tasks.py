@@ -16,9 +16,12 @@ logger = logging.getLogger(__name__)
     acks_late=True,
     autoretry_for=(Exception,),
 )
-def sync_ticket_status_to_github_task(self, tenant_schema: str, ticket_id: int, new_status: str):
+def sync_ticket_status_to_github_task(
+    self, tenant_schema: str, ticket_id: int, new_status: str, user_id: int | None = None,
+):
     from apps.integrations.services.github_sync import sync_ticket_status_to_github
     from apps.tickets.models import Ticket
+    from apps.users.models import User
 
     tenant = resolve_tenant(tenant_schema)
     if tenant is None:
@@ -32,4 +35,9 @@ def sync_ticket_status_to_github_task(self, tenant_schema: str, ticket_id: int, 
         except Ticket.DoesNotExist:
             logger.warning('GitHub sync skipped: ticket %s not found', ticket_id)
             return
-        sync_ticket_status_to_github(ticket, new_status)
+
+        user = None
+        if user_id:
+            user = User.objects.filter(pk=user_id).first()
+
+        sync_ticket_status_to_github(ticket, new_status, user=user)

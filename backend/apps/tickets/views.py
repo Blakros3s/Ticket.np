@@ -204,7 +204,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         ticket = self.get_object()
         try:
             from apps.integrations.services.github_sync import pull_github_issue_state_for_ticket
-            pull_github_issue_state_for_ticket(ticket)
+            pull_github_issue_state_for_ticket(ticket, user=request.user)
         except Exception:
             pass
         ticket = self._ticket_detail_queryset().get(pk=ticket.pk)
@@ -282,6 +282,7 @@ class TicketViewSet(viewsets.ModelViewSet):
             from apps.notifications.email_utils import get_frontend_base_url
             sync_ticket_content_to_github(
                 ticket,
+                user=self.request.user,
                 frontend_base_url=get_frontend_base_url(self.request),
             )
 
@@ -354,7 +355,9 @@ class TicketViewSet(viewsets.ModelViewSet):
         if tenant is None:
             return
         from apps.integrations.tasks import sync_ticket_status_to_github_task
-        sync_ticket_status_to_github_task.delay(tenant.schema_name, ticket.id, new_status)
+        sync_ticket_status_to_github_task.delay(
+            tenant.schema_name, ticket.id, new_status, self.request.user.id,
+        )
 
     @action(detail=True, methods=['post'], url_path='create-github-issue')
     def create_github_issue(self, request, id=None):

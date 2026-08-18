@@ -4,8 +4,6 @@ from apps.integrations.models import GitHubConnection, TicketGitHubLink
 
 
 class GitHubConnectionSerializer(serializers.ModelSerializer):
-    connected_by_name = serializers.SerializerMethodField()
-
     class Meta:
         model = GitHubConnection
         fields = [
@@ -13,16 +11,10 @@ class GitHubConnectionSerializer(serializers.ModelSerializer):
             'github_login',
             'github_user_id',
             'token_scope',
-            'connected_by_name',
             'connected_at',
             'updated_at',
         ]
         read_only_fields = fields
-
-    def get_connected_by_name(self, obj):
-        if not obj.connected_by:
-            return None
-        return obj.connected_by.get_full_name() or obj.connected_by.username
 
 
 class GitHubRepoSerializer(serializers.Serializer):
@@ -34,6 +26,8 @@ class GitHubRepoSerializer(serializers.Serializer):
 
 
 class TicketGitHubLinkSerializer(serializers.ModelSerializer):
+    linked_by_login = serializers.SerializerMethodField()
+
     class Meta:
         model = TicketGitHubLink
         fields = [
@@ -44,6 +38,14 @@ class TicketGitHubLinkSerializer(serializers.ModelSerializer):
             'sync_status',
             'last_sync_error',
             'last_synced_at',
+            'linked_by_login',
             'created_at',
         ]
         read_only_fields = fields
+
+    def get_linked_by_login(self, obj):
+        if obj.linked_by_id and obj.linked_by:
+            connection = getattr(obj.linked_by, 'github_connection', None)
+            if connection:
+                return connection.github_login
+        return None

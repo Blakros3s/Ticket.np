@@ -9,14 +9,14 @@ from django.views.decorators.csrf import csrf_exempt
 from django_tenants.utils import schema_context
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from apps.customers.tenant_resolution import resolve_tenant, set_tenant
 from apps.integrations.models import GitHubConnection
 from apps.integrations.serializers import GitHubConnectionSerializer, GitHubRepoSerializer
 from apps.integrations.services.crypto import encrypt_text
-from apps.integrations.services.github_client import GitHubAPIError, GitHubClient
+from apps.integrations.services.github_client import GitHubAPIError
 from apps.integrations.services.github_oauth import (
     build_authorize_url,
     exchange_code_for_token,
@@ -26,24 +26,16 @@ from apps.integrations.services.github_oauth import (
 )
 from apps.integrations.services.github_sync import (
     apply_github_issue_state_to_ticket,
-    get_active_connection,
+    get_tenant_github_config,
+    get_user_connection,
     verify_webhook_signature,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class IsTenantAdmin(BasePermission):
-    def has_permission(self, request, view):
-        return (
-            request.user
-            and request.user.is_authenticated
-            and getattr(request.user, 'role', None) == 'admin'
-        )
-
-
-def _frontend_settings_url(query: str = '') -> str:
-    base = f'{settings.FRONTEND_URL.rstrip("/")}/protected/dashboard/settings'
+def _frontend_profile_url(query: str = '') -> str:
+    base = f'{settings.FRONTEND_URL.rstrip("/")}/protected/dashboard/profile'
     return f'{base}{query}'
 
 
@@ -60,7 +52,7 @@ def _require_github_feature(request) -> Response | None:
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, IsTenantAdmin])
+@permission_classes([IsAuthenticated])
 def github_status(request):
     configured = github_oauth_configured()
     feature_enabled = True
@@ -77,7 +69,7 @@ def github_status(request):
         feature_enabled = False
         feature_detail = str(exc.detail) if hasattr(exc, 'detail') else str(exc)
 
-    connection = get_active_connection()
+    connection = get_user_connection(request.user)
     if not connection:
         return Response({
             'connected': False,
@@ -96,7 +88,7 @@ def github_status(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, IsTenantAdmin])
+@permission_classes([IsAuthenticated])
 def github_connect(request):
     blocked = _require_github_feature(request)
     if blocked:
@@ -114,13 +106,13 @@ def github_connect(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsTenantAdmin])
+@permission_classes([IsAuthenticated])
 def github_disconnect(request):
     blocked = _require_github_feature(request)
     if blocked:
         return blocked
 
-    GitHubConnection.objects.all().delete()
+    GitHubConnection.objects.filter(user_id=request.user.id).delete()
     return Response({'connected': False})
 
 
@@ -131,11 +123,14 @@ def github_repos(request):
     if blocked:
         return blocked
 
-    client = None
     from apps.integrations.services.github_sync import get_github_client
-    client = get_github_client()
+
+    client = get_github_client(request.user)
     if not client:
-        return Response({'detail': 'GitHub is not connected.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {'detail': 'Connect your GitHub account in Profile first.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     try:
         repos = client.list_repos()
@@ -152,21 +147,21 @@ def github_repos(request):
 def github_oauth_callback(request):
     error = request.GET.get('error')
     if error:
-        return HttpResponseRedirect(_frontend_settings_url('?github=error'))
+        return HttpResponseRedirect(_frontend_profile_url('?github=error'))
 
     code = request.GET.get('code', '').strip()
     state = request.GET.get('state', '').strip()
     if not code or not state:
-        return HttpResponseRedirect(_frontend_settings_url('?github=error'))
+        return HttpResponseRedirect(_frontend_profile_url('?github=error'))
 
     try:
         tenant_slug, user_id = parse_oauth_state(state)
     except ValueError:
-        return HttpResponseRedirect(_frontend_settings_url('?github=error'))
+        return HttpResponseRedirect(_frontend_profile_url('?github=error'))
 
     tenant = resolve_tenant(tenant_slug)
     if tenant is None:
-        return HttpResponseRedirect(_frontend_settings_url('?github=error'))
+        return HttpResponseRedirect(_frontend_profile_url('?github=error'))
 
     try:
         token_payload = exchange_code_for_token(code)
@@ -174,23 +169,27 @@ def github_oauth_callback(request):
         github_user = fetch_github_user(access_token)
     except (ValueError, KeyError) as exc:
         logger.warning('GitHub OAuth callback failed: %s', exc)
-        return HttpResponseRedirect(_frontend_settings_url('?github=error'))
+        return HttpResponseRedirect(_frontend_profile_url('?github=error'))
 
     with schema_context(tenant.schema_name):
         set_tenant(tenant)
         from apps.users.models import User
-        connected_by = User.objects.filter(pk=user_id).first()
 
-        GitHubConnection.objects.all().delete()
-        GitHubConnection.objects.create(
-            github_user_id=github_user['id'],
-            github_login=github_user['login'],
-            access_token_encrypted=encrypt_text(access_token),
-            token_scope=token_payload.get('scope', ''),
-            connected_by=connected_by,
+        user = User.objects.filter(pk=user_id).first()
+        if user is None:
+            return HttpResponseRedirect(_frontend_profile_url('?github=error'))
+
+        GitHubConnection.objects.update_or_create(
+            user_id=user.id,
+            defaults={
+                'github_user_id': github_user['id'],
+                'github_login': github_user['login'],
+                'access_token_encrypted': encrypt_text(access_token),
+                'token_scope': token_payload.get('scope', ''),
+            },
         )
 
-    return HttpResponseRedirect(_frontend_settings_url('?github=connected'))
+    return HttpResponseRedirect(_frontend_profile_url('?github=connected'))
 
 
 @csrf_exempt
@@ -228,15 +227,15 @@ def github_webhook(request, tenant_slug: str):
 
     with schema_context(tenant.schema_name):
         set_tenant(tenant)
-        connection = get_active_connection()
-        if connection is None:
+        tenant_config = get_tenant_github_config()
+        if not tenant_config.webhook_secret:
             return HttpResponse(status=200)
 
         signature = request.headers.get('X-Hub-Signature-256')
-        if connection.webhook_secret and not verify_webhook_signature(
+        if not verify_webhook_signature(
             payload_bytes,
             signature,
-            connection.webhook_secret,
+            tenant_config.webhook_secret,
         ):
             return HttpResponse(status=401)
 
