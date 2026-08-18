@@ -6,7 +6,7 @@ from .models import GitHubConnection, GitHubTenantConfig, TicketGitHubLink
 @admin.register(GitHubTenantConfig)
 class GitHubTenantConfigAdmin(admin.ModelAdmin):
     list_display = ('id', 'updated_at')
-    readonly_fields = ('updated_at')
+    readonly_fields = ('updated_at',)
 
 
 @admin.register(GitHubConnection)
