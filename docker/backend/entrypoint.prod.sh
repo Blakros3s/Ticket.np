@@ -15,7 +15,7 @@ log "Starting production entrypoint script..."
 
 # Wait for database to be ready (with retries)
 log "Waiting for database to be ready..."
-until python manage.py check --database default 2>/dev/null; do
+until python manage.py check --database default; do
     log "Database is unavailable - sleeping"
     sleep 2
 done
