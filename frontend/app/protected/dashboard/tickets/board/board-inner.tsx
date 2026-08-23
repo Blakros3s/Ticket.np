@@ -182,7 +182,10 @@ export default function TicketBoardPage() {
                     <Link href={`/protected/dashboard/tickets/${ticket.id}`} className="kanban-card__title">
                       {ticket.title}
                     </Link>
-                    <p className="kanban-card__meta">{ticket.ticket_id} · {ticket.project_name}</p>
+                    <p className="kanban-card__meta">
+                      {ticket.ticket_id} · {ticket.project_name}
+                      {ticket.module ? ` · ${ticket.module}` : ''}
+                    </p>
                     {ticket.due_date && (
                       <p className={`kanban-card__due ${ticket.is_overdue ? 'kanban-card__due--overdue' : ''}`}>
                         Due {ticket.due_date}

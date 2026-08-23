@@ -330,6 +330,7 @@ export default function TicketDetailPage() {
     status: 'new' as TicketStatus,
     assignees: [] as number[],
     due_date: '',
+    module: '',
   });
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<string, string | string[]>>>({});
 
@@ -369,6 +370,7 @@ export default function TicketDetailPage() {
           status: ticketData.status,
           assignees: ticketData.assignees || [],
           due_date: ticketData.due_date || '',
+          module: ticketData.module || '',
         });
       } catch (error: any) {
         showToastMessage(error.response?.data?.detail || 'Failed to load ticket', 'error');
@@ -433,6 +435,7 @@ export default function TicketDetailPage() {
       const updated = await ticketsApi.updateTicket(ticketId, {
         ...savePayload,
         due_date: savePayload.due_date || null,
+        module: savePayload.module?.trim() || null,
       });
       setTicket({ ...ticket!, ...updated });
       setIsEditing(false);
@@ -920,6 +923,17 @@ export default function TicketDetailPage() {
                       onChange={(e) => setEditData({ ...editData, due_date: e.target.value })}
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-200 mb-1">Module</label>
+                    <input
+                      type="text"
+                      className="input-field w-full"
+                      placeholder="e.g. notifications, settings"
+                      value={editData.module || ''}
+                      onChange={(e) => setEditData({ ...editData, module: e.target.value })}
+                      maxLength={100}
+                    />
+                  </div>
                 </div>
                 <div className="flex gap-2 pt-2">
                   <button onClick={handleSave} disabled={saving} className="btn-primary px-4 py-2">{saving ? 'Saving...' : 'Save'}</button>
@@ -1398,6 +1412,15 @@ export default function TicketDetailPage() {
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Type</label>
               <span className="text-white capitalize">{ticket.type}</span>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Module</label>
+              {ticket.module ? (
+                <span className="text-white text-sm">{ticket.module}</span>
+              ) : (
+                <span className="text-slate-500 text-sm">—</span>
+              )}
             </div>
 
             <div>

@@ -37,6 +37,7 @@ function CreateTicketForm() {
     assignees: [],
     media_files: [],
     due_date: '',
+    module: '',
   });
 
   const showToastMessage = (message: string, type: 'success' | 'error') => {
@@ -101,6 +102,7 @@ function CreateTicketForm() {
         ...formData,
         media_files: mediaFiles,
         due_date: formData.due_date || null,
+        module: formData.module?.trim() || null,
       };
       const ticket = await ticketsApi.createTicket(ticketData);
       showToastMessage('Ticket created successfully', 'success');
@@ -292,6 +294,19 @@ function CreateTicketForm() {
                 value={formData.due_date || ''}
                 onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-200 mb-2">Module (optional)</label>
+              <input
+                type="text"
+                className="input-field w-full"
+                placeholder="e.g. notifications, settings, messages"
+                value={formData.module || ''}
+                onChange={(e) => setFormData({ ...formData, module: e.target.value })}
+                maxLength={100}
+              />
+              <p className="text-xs text-slate-500 mt-1">Which part of the project this ticket relates to.</p>
             </div>
           </div>
 

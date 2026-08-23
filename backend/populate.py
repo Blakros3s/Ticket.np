@@ -275,29 +275,20 @@ def create_tickets(projects, users):
             description = random.choice(TICKET_DESCRIPTIONS)
             creator = random.choice(project_users)
 
-            # Try to create ticket with unique ID, retry if collision
-            max_retries = 10
-            for attempt in range(max_retries):
-                try:
-                    ticket = Ticket.objects.create(
-                        title=f"{title} - {random.randint(1, 999)}",
-                        description=description,
-                        type=random.choice(ticket_types),
-                        priority=random.choice(priorities),
-                        status=random.choice(statuses),
-                        project=project,
-                        created_by=creator
-                    )
-                    if random.random() > 0.1:
-                        ticket.assignees.add(random.choice(project_users))
-                    print(f"Created ticket: {ticket.ticket_id}")
-                    tickets.append((ticket, project_users))
-                    break
-                except Exception as e:
-                    if 'duplicate key' in str(e).lower() and attempt < max_retries - 1:
-                        continue
-                    else:
-                        raise
+            # Sequential IDs are unique; no retry needed for collisions.
+            ticket = Ticket.objects.create(
+                title=f"{title} - {random.randint(1, 999)}",
+                description=description,
+                type=random.choice(ticket_types),
+                priority=random.choice(priorities),
+                status=random.choice(statuses),
+                project=project,
+                created_by=creator,
+            )
+            if random.random() > 0.1:
+                ticket.assignees.add(random.choice(project_users))
+            print(f"Created ticket: {ticket.ticket_id}")
+            tickets.append((ticket, project_users))
     
     return tickets
 
