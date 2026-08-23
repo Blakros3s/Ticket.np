@@ -6,7 +6,7 @@ from apps.tickets.models import Ticket, TicketIdCounter, format_ticket_number
 
 class Command(BaseCommand):
     help = (
-        'Renumber all tickets sequentially (0001, 0002, …) ordered by created_at. '
+        'Renumber all tickets sequentially (TKT-0001, TKT-0002, …) ordered by created_at. '
         'Run per tenant schema after migrate_schemas.'
     )
 

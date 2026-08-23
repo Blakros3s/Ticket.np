@@ -302,3 +302,24 @@ def build_pdf_response(
         f'attachment; filename="{build_export_filename(project, start, end, "pdf")}"'
     )
     return response
+
+
+def build_ticket_export_response(
+    project: Project,
+    period: str | None,
+    start_date: str | None,
+    end_date: str | None,
+    export_format: str,
+) -> HttpResponse:
+    """Build Excel or PDF export for a project's tickets within a date range."""
+    normalized_format = (export_format or '').strip().lower()
+    if normalized_format not in {'xlsx', 'pdf'}:
+        raise ValueError('format must be xlsx or pdf.')
+
+    start, end = resolve_export_date_range(period, start_date, end_date)
+    tickets = get_tickets_for_export(project.id, start, end)
+    rows = build_export_rows(tickets)
+
+    if normalized_format == 'xlsx':
+        return build_excel_response(project, start, end, rows)
+    return build_pdf_response(project, start, end, rows)
