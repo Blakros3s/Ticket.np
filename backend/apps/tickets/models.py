@@ -1,13 +1,23 @@
-from django.db import models
-from django.utils import timezone
+from django.db import models, transaction
 from apps.users.models import User
 from apps.projects.models import Project
 
 
-def generate_ticket_id():
-    import random
-    import string
-    return f"TKT-{timezone.now().strftime('%Y%m%d')}-{''.join(random.choices(string.digits, k=4))}"
+def format_ticket_number(number: int) -> str:
+    """Format a ticket sequence number as a zero-padded string (0001, 0002, …)."""
+    return str(number).zfill(4)
+
+
+def allocate_next_ticket_id() -> str:
+    """Return the next sequential ticket_id for this tenant schema (thread-safe)."""
+    with transaction.atomic():
+        counter, _ = TicketIdCounter.objects.select_for_update().get_or_create(
+            pk=1,
+            defaults={'last_number': 0},
+        )
+        counter.last_number += 1
+        counter.save(update_fields=['last_number'])
+        return format_ticket_number(counter.last_number)
 
 
 from apps.core.media_paths import tenant_scoped_upload_path
@@ -15,6 +25,22 @@ from apps.core.media_paths import tenant_scoped_upload_path
 
 def ticket_media_upload_path(instance, filename):
     return tenant_scoped_upload_path(f'ticket_media/{instance.ticket.id}/{filename}')
+
+
+class TicketIdCounter(models.Model):
+    """Singleton row tracking the last issued ticket number per tenant schema."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    last_number = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = 'ticket_id_counter'
+        constraints = [
+            models.CheckConstraint(check=models.Q(id=1), name='ticket_id_counter_singleton'),
+        ]
+
+    def __str__(self) -> str:
+        return f'Ticket counter (last={self.last_number})'
 
 
 class Ticket(models.Model):
@@ -39,7 +65,7 @@ class Ticket(models.Model):
         ('reopened', 'Reopened'),
     ]
     
-    ticket_id = models.CharField(max_length=20, unique=True, default=generate_ticket_id)
+    ticket_id = models.CharField(max_length=20, unique=True, editable=False)
     title = models.CharField(max_length=255)
     description = models.TextField()
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='task')
@@ -55,6 +81,13 @@ class Ticket(models.Model):
     qa_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
     due_date = models.DateField(null=True, blank=True)
+    module = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        default=None,
+        help_text='Optional project area (e.g. notifications, settings)',
+    )
     
     class Meta:
         db_table = 'tickets'
@@ -65,6 +98,11 @@ class Ticket(models.Model):
             models.Index(fields=['due_date']),
             models.Index(fields=['project', 'status']),
         ]
+    
+    def save(self, *args, **kwargs):
+        if not self.ticket_id:
+            self.ticket_id = allocate_next_ticket_id()
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return f"{self.ticket_id} - {self.title}"

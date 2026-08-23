@@ -2,8 +2,17 @@
 
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { dashboardApi, EmployeeReports, ManagerReports, AdminReports } from '@/lib/dashboard';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  dashboardApi,
+  EmployeeReports,
+  ManagerReports,
+  AdminReports,
+  TicketExportPeriod,
+} from '@/lib/dashboard';
+import { useProjects } from '@/lib/data-hooks';
+import { toLocalDateString } from '@/lib/date-utils';
+import { extractErrorMessage } from '@/components/error-modal';
 
 export default function ReportsPage() {
   const { user } = useAuth();
@@ -14,9 +23,53 @@ export default function ReportsPage() {
   const [employeeReports, setEmployeeReports] = useState<EmployeeReports | null>(null);
   const [managerReports, setManagerReports] = useState<ManagerReports | null>(null);
   const [adminReports, setAdminReports] = useState<AdminReports | null>(null);
+  const { data: projects = [] } = useProjects();
+  const [exportProjectId, setExportProjectId] = useState<number>(0);
+  const [exportPeriod, setExportPeriod] = useState<TicketExportPeriod>('30');
+  const [exportStartDate, setExportStartDate] = useState('');
+  const [exportEndDate, setExportEndDate] = useState('');
+  const [exportingFormat, setExportingFormat] = useState<'xlsx' | 'pdf' | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const isAdmin = user?.role === 'admin';
   const isManager = user?.role === 'manager';
+
+  const activeProjects = useMemo(
+    () => projects.filter((project) => project.status === 'active'),
+    [projects],
+  );
+
+  useEffect(() => {
+    if (!isAdmin || activeProjects.length === 0 || exportProjectId) return;
+    setExportProjectId(activeProjects[0].id);
+  }, [isAdmin, activeProjects, exportProjectId]);
+
+  const handleExport = async (format: 'xlsx' | 'pdf') => {
+    if (!exportProjectId) {
+      setExportError('Select a project to export.');
+      return;
+    }
+    if (exportPeriod === 'custom' && (!exportStartDate || !exportEndDate)) {
+      setExportError('Choose a start and end date for the custom range.');
+      return;
+    }
+
+    setExportError(null);
+    setExportingFormat(format);
+    try {
+      await dashboardApi.exportTicketReport({
+        projectId: exportProjectId,
+        period: exportPeriod,
+        format,
+        startDate: exportPeriod === 'custom' ? exportStartDate : undefined,
+        endDate: exportPeriod === 'custom' ? exportEndDate : undefined,
+      });
+    } catch (error) {
+      setExportError(extractErrorMessage(error).message || 'Failed to export tickets.');
+    } finally {
+      setExportingFormat(null);
+    }
+  };
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -24,38 +77,28 @@ export default function ReportsPage() {
       setError(null);
       try {
         if (isAdmin) {
-          console.log('Fetching admin reports...');
           const [admin, manager, employee] = await Promise.all([
             dashboardApi.getAdminReports(period),
             dashboardApi.getManagerReports(period),
             dashboardApi.getEmployeeReports(period),
           ]);
-          console.log('Admin reports:', admin);
-          console.log('Manager reports:', manager);
-          console.log('Employee reports:', employee);
           setAdminReports(admin);
           setManagerReports(manager);
           setEmployeeReports(employee);
         } else if (isManager) {
-          console.log('Fetching manager reports...');
           const [manager, employee] = await Promise.all([
             dashboardApi.getManagerReports(period),
             dashboardApi.getEmployeeReports(period),
           ]);
-          console.log('Manager reports:', manager);
-          console.log('Employee reports:', employee);
           setManagerReports(manager);
           setEmployeeReports(employee);
         } else {
-          console.log('Fetching employee reports...');
           const employee = await dashboardApi.getEmployeeReports(period);
-          console.log('Employee reports:', employee);
           setEmployeeReports(employee);
         }
-      } catch (error: any) {
-        console.error('Failed to load reports:', error);
-        console.error('Error response:', error.response);
-        setError(error.response?.data?.error || error.message || 'Failed to load reports');
+      } catch (error: unknown) {
+        const err = error as { response?: { data?: { error?: string } }; message?: string };
+        setError(err.response?.data?.error || err.message || 'Failed to load reports');
       } finally {
         setLoading(false);
       }
@@ -128,6 +171,103 @@ export default function ReportsPage() {
       </div>
 
       <div className="space-y-8">
+        {isAdmin && (
+          <section className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-white">Ticket Export</h2>
+                <p className="text-sm text-slate-400 mt-1">
+                  Download project tickets as Excel or PDF. Includes ticket details, assignees, and assignment history — not comments or work logs.
+                </p>
+              </div>
+            </div>
+
+            {exportError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                {exportError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Project</label>
+                <select
+                  value={exportProjectId || ''}
+                  onChange={(e) => setExportProjectId(Number(e.target.value))}
+                  className="input-field w-full"
+                >
+                  {activeProjects.length === 0 ? (
+                    <option value="">No active projects</option>
+                  ) : (
+                    activeProjects.map((project) => (
+                      <option key={project.id} value={project.id}>{project.name}</option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Date range</label>
+                <select
+                  value={exportPeriod}
+                  onChange={(e) => setExportPeriod(e.target.value as TicketExportPeriod)}
+                  className="input-field w-full"
+                >
+                  <option value="today">Today</option>
+                  <option value="7">Last 7 days</option>
+                  <option value="30">Last 30 days</option>
+                  <option value="custom">Custom range</option>
+                </select>
+              </div>
+
+              {exportPeriod === 'custom' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Start date</label>
+                    <input
+                      type="date"
+                      className="input-field w-full"
+                      value={exportStartDate}
+                      onChange={(e) => setExportStartDate(e.target.value)}
+                      max={exportEndDate || undefined}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">End date</label>
+                    <input
+                      type="date"
+                      className="input-field w-full"
+                      value={exportEndDate}
+                      onChange={(e) => setExportEndDate(e.target.value)}
+                      min={exportStartDate || undefined}
+                      max={toLocalDateString()}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => handleExport('xlsx')}
+                disabled={!exportProjectId || exportingFormat !== null}
+                className="btn-primary px-4 py-2"
+              >
+                {exportingFormat === 'xlsx' ? 'Exporting Excel…' : 'Export Excel'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExport('pdf')}
+                disabled={!exportProjectId || exportingFormat !== null}
+                className="btn-secondary px-4 py-2"
+              >
+                {exportingFormat === 'pdf' ? 'Exporting PDF…' : 'Export PDF'}
+              </button>
+            </div>
+          </section>
+        )}
+
         {adminReports && (
           <section>
             <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">

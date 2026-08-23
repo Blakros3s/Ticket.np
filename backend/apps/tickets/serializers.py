@@ -144,7 +144,7 @@ class _TicketCoreSerializer(serializers.ModelSerializer):
             'id', 'ticket_id', 'title', 'description', 'type', 'priority', 'status',
             'project', 'project_name', 'assignees', 'assignees_list', 'created_by',
             'created_by_id', 'created_at', 'updated_at',
-            'in_progress_at', 'qa_at', 'closed_at', 'due_date', 'is_overdue',
+            'in_progress_at', 'qa_at', 'closed_at', 'due_date', 'module', 'is_overdue',
         ]
         read_only_fields = [
             'ticket_id', 'created_by', 'created_by_id', 'created_at', 'updated_at',
@@ -224,13 +224,19 @@ class TicketCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Ticket
-        fields = ['title', 'description', 'type', 'priority', 'project', 'assignees', 'media_files', 'due_date']
+        fields = ['title', 'description', 'type', 'priority', 'project', 'assignees', 'media_files', 'due_date', 'module']
 
     def validate_title(self, value):
         return strip_tags(value)
 
     def validate_description(self, value):
         return sanitize_multiline_text(value)
+
+    def validate_module(self, value):
+        if value is None:
+            return None
+        cleaned = strip_tags(value).strip()
+        return cleaned or None
 
     def create(self, validated_data):
         media_files  = validated_data.pop('media_files', [])
@@ -264,13 +270,19 @@ class TicketUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Ticket
-        fields = ['title', 'description', 'type', 'priority', 'assignees', 'due_date']
+        fields = ['title', 'description', 'type', 'priority', 'assignees', 'due_date', 'module']
 
     def validate_title(self, value):
         return strip_tags(value)
 
     def validate_description(self, value):
         return sanitize_multiline_text(value)
+
+    def validate_module(self, value):
+        if value is None:
+            return None
+        cleaned = strip_tags(value).strip()
+        return cleaned or None
 
     def update(self, instance, validated_data):
         assignee_ids = validated_data.pop('assignees', None)

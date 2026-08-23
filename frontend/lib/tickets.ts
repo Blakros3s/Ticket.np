@@ -69,6 +69,7 @@ export interface Ticket {
   qa_at: string | null;
   closed_at: string | null;
   due_date: string | null;
+  module: string | null;
   is_overdue?: boolean;
   github_link?: TicketGitHubLink | null;
 }
@@ -82,6 +83,7 @@ export interface CreateTicketData {
   assignees?: number[];
   media_files?: File[];
   due_date?: string | null;
+  module?: string | null;
 }
 
 export interface UpdateTicketData {
@@ -92,6 +94,7 @@ export interface UpdateTicketData {
   status?: TicketStatus;
   assignees?: number[];
   due_date?: string | null;
+  module?: string | null;
 }
 
 export interface TicketFilters {
@@ -150,6 +153,9 @@ export const ticketsApi = {
       formData.append('project', data.project.toString());
       if (data.due_date) {
         formData.append('due_date', data.due_date);
+      }
+      if (data.module) {
+        formData.append('module', data.module);
       }
       if (data.assignees && data.assignees.length > 0) {
         data.assignees.forEach(id => formData.append('assignees', id.toString()));
