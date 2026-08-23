@@ -214,16 +214,18 @@ export const dashboardApi = {
 
   exportTicketReport: async (params: TicketExportParams): Promise<void> => {
     try {
-      const response = await api.get<Blob>('/dashboard/reports/tickets/export/', {
-        params: {
-          project_id: params.projectId,
-          period: params.period,
-          start_date: params.startDate,
-          end_date: params.endDate,
-          format: params.format,
+      const response = await api.get<Blob>(
+        `/projects/projects/${params.projectId}/export-tickets/`,
+        {
+          params: {
+            period: params.period,
+            start_date: params.startDate,
+            end_date: params.endDate,
+            format: params.format,
+          },
+          responseType: 'blob',
         },
-        responseType: 'blob',
-      });
+      );
 
       const disposition = response.headers['content-disposition'] as string | undefined;
       const filenameMatch = disposition?.match(/filename="?([^";\n]+)"?/i);

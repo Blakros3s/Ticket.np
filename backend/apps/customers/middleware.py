@@ -28,6 +28,9 @@ class TenantResolutionMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Tenant and public routes are both defined on ROOT_URLCONF (config.urls).
+        request.urlconf = settings.ROOT_URLCONF
+
         if request.path.startswith('/admin/'):
             set_public_schema()
             return self.get_response(request)
@@ -49,7 +52,6 @@ class TenantResolutionMiddleware:
         if tenant is not None:
             set_tenant(tenant)
             request.tenant = tenant
-            request.urlconf = settings.ROOT_URLCONF
             return self.get_response(request)
 
         if getattr(settings, 'SHOW_PUBLIC_IF_NO_TENANT_FOUND', True):
