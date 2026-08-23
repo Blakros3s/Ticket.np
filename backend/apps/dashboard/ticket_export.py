@@ -9,14 +9,6 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
-from openpyxl import Workbook
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import landscape, A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from apps.activity.models import ActivityLog
 from apps.projects.models import Project
@@ -202,6 +194,10 @@ def build_excel_response(
     end: date,
     rows: list[list[str]],
 ) -> HttpResponse:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.title = 'Tickets'
@@ -245,6 +241,12 @@ def build_pdf_response(
     end: date,
     rows: list[list[str]],
 ) -> HttpResponse:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import landscape, A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,

@@ -7,7 +7,7 @@ from datetime import timedelta
 from collections import OrderedDict
 
 from apps.users.models import User
-from apps.users.permissions import IsManagerOrAdmin
+from apps.users.permissions import IsAdminUser, IsManagerOrAdmin
 from apps.projects.models import Project
 from apps.tickets.models import Ticket
 from apps.timelogs.models import WorkLog
@@ -642,3 +642,42 @@ def admin_reports(request):
             'total_hours_logged': round((WorkLog.objects.filter(end_time__isnull=False).aggregate(t=Sum('duration_minutes'))['t'] or 0) / 60, 2)
         }
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def export_ticket_report(request, project_id=None):
+    """Admin-only project ticket export (Excel or PDF)."""
+    raw_project_id = project_id if project_id is not None else request.query_params.get('project_id')
+    period = request.query_params.get('period', '30')
+    start_date = request.query_params.get('start_date')
+    end_date = request.query_params.get('end_date')
+    export_format = (request.query_params.get('format') or '').strip().lower()
+
+    if not raw_project_id:
+        return Response({'detail': 'project_id is required.'}, status=400)
+
+    if export_format not in {'xlsx', 'pdf'}:
+        return Response({'detail': 'format must be xlsx or pdf.'}, status=400)
+
+    try:
+        project_id_int = int(raw_project_id)
+    except (TypeError, ValueError):
+        return Response({'detail': 'project_id must be a valid integer.'}, status=400)
+
+    try:
+        project = Project.objects.get(pk=project_id_int)
+    except Project.DoesNotExist:
+        return Response({'detail': 'Project not found.'}, status=404)
+
+    from apps.dashboard.ticket_export import build_ticket_export_response
+
+    try:
+        return build_ticket_export_response(project, period, start_date, end_date, export_format)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    except ImportError as exc:
+        return Response(
+            {'detail': f'Export dependencies are not installed: {exc}'},
+            status=500,
+        )

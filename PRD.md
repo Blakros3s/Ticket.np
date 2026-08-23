@@ -319,16 +319,16 @@ Plans are defined in the public schema and assigned to tenants by the platform a
 - Fields: title, description, type (bug/task/feature), priority (low/medium/high/critical), status, assignees (multi), creator, project
 - Status workflow with validated transitions:
 
-```mermaid
-stateDiagram-v2
-    [*] --> New
+  ```mermaid
+  stateDiagram-v2
+      [*] --> New
     New --> InProgress : Start work
-    InProgress --> QA : Submit for QA
-    QA --> Closed : Approved
+      InProgress --> QA : Submit for QA
+      QA --> Closed : Approved
     QA --> InProgress : Rejected
-    Closed --> Reopened : Issue recurs
-    Reopened --> InProgress : Resume work
-```
+      Closed --> Reopened : Issue recurs
+      Reopened --> InProgress : Resume work
+  ```
 
 - Ticket media: attach images, videos, documents to tickets
 - Search and filter by status, priority, type, project, assignee

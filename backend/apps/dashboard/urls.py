@@ -6,6 +6,7 @@ from .views import (
     employee_reports,
     manager_reports,
     admin_reports,
+    export_ticket_report,
 )
 
 urlpatterns = [
@@ -15,4 +16,5 @@ urlpatterns = [
     path('reports/employee/', employee_reports, name='employee_reports'),
     path('reports/manager/', manager_reports, name='manager_reports'),
     path('reports/admin/', admin_reports, name='admin_reports'),
+    path('reports/export-tickets/', export_ticket_report, name='export_ticket_report'),
 ]
