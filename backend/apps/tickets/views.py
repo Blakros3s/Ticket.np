@@ -82,7 +82,7 @@ class TicketViewSet(viewsets.ModelViewSet):
     permission_classes  = [IsAuthenticated]
     filter_backends     = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class     = TicketFilter
-    search_fields       = ['ticket_id', 'title', 'description']
+    search_fields       = ['ticket_id', 'title', 'description', 'module']
     ordering_fields     = ['created_at', 'updated_at', 'priority', 'due_date']
     ordering            = ['-created_at']
     lookup_field        = 'id'

@@ -328,6 +328,14 @@ function TicketsList() {
                         <span className="text-xs text-slate-400 truncate max-w-[10rem]" title={ticket.project_name}>
                           {ticket.project_name}
                         </span>
+                        {ticket.module && (
+                          <>
+                            <span className="ticket-meta-line__sep">·</span>
+                            <span className="text-xs text-slate-400 truncate max-w-[8rem]" title={ticket.module}>
+                              {ticket.module}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4">

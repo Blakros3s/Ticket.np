@@ -100,7 +100,8 @@ function MyTicketsInner() {
       if (
         !t.title.toLowerCase().includes(q) &&
         !t.ticket_id.toLowerCase().includes(q) &&
-        !(t.description ?? '').toLowerCase().includes(q)
+        !(t.description ?? '').toLowerCase().includes(q) &&
+        !(t.module ?? '').toLowerCase().includes(q)
       ) return false;
     }
     return true;

@@ -1,4 +1,5 @@
 import api from './api';
+import axios from 'axios';
 
 export interface MyTicketItem {
   id: number;
@@ -99,38 +100,6 @@ export interface AdminDashboard {
   };
 }
 
-export const dashboardApi = {
-  getEmployeeDashboard: async (): Promise<EmployeeDashboard> => {
-    const response = await api.get<EmployeeDashboard>('/dashboard/employee/');
-    return response.data;
-  },
-
-  getManagerDashboard: async (): Promise<ManagerDashboard> => {
-    const response = await api.get<ManagerDashboard>('/dashboard/manager/');
-    return response.data;
-  },
-
-  getAdminDashboard: async (): Promise<AdminDashboard> => {
-    const response = await api.get<AdminDashboard>('/dashboard/admin/');
-    return response.data;
-  },
-
-  getEmployeeReports: async (days: number = 30): Promise<EmployeeReports> => {
-    const response = await api.get<EmployeeReports>(`/dashboard/reports/employee/?days=${days}`);
-    return response.data;
-  },
-
-  getManagerReports: async (days: number = 30): Promise<ManagerReports> => {
-    const response = await api.get<ManagerReports>(`/dashboard/reports/manager/?days=${days}`);
-    return response.data;
-  },
-
-  getAdminReports: async (days: number = 30): Promise<AdminReports> => {
-    const response = await api.get<AdminReports>(`/dashboard/reports/admin/?days=${days}`);
-    return response.data;
-  },
-};
-
 export interface EmployeeReports {
   tickets_created_over_time: Array<{ week: string; count: number }>;
   tickets_completed_over_time: Array<{ week: string; count: number }>;
@@ -165,7 +134,7 @@ export interface ManagerReports {
     completed: number;
     progress: number;
   }>;
-  ticket_trends: Array<{ week: string; [key: string]: any }>;
+  ticket_trends: Array<{ week: string; [key: string]: unknown }>;
   resolution_by_priority: Array<{
     priority: string;
     avg_hours: number;
@@ -200,3 +169,87 @@ export interface AdminReports {
     total_hours_logged: number;
   };
 }
+
+export type TicketExportPeriod = 'today' | '7' | '30' | 'custom';
+export type TicketExportFormat = 'xlsx' | 'pdf';
+
+export interface TicketExportParams {
+  projectId: number;
+  period: TicketExportPeriod;
+  format: TicketExportFormat;
+  startDate?: string;
+  endDate?: string;
+}
+
+export const dashboardApi = {
+  getEmployeeDashboard: async (): Promise<EmployeeDashboard> => {
+    const response = await api.get<EmployeeDashboard>('/dashboard/employee/');
+    return response.data;
+  },
+
+  getManagerDashboard: async (): Promise<ManagerDashboard> => {
+    const response = await api.get<ManagerDashboard>('/dashboard/manager/');
+    return response.data;
+  },
+
+  getAdminDashboard: async (): Promise<AdminDashboard> => {
+    const response = await api.get<AdminDashboard>('/dashboard/admin/');
+    return response.data;
+  },
+
+  getEmployeeReports: async (days: number = 30): Promise<EmployeeReports> => {
+    const response = await api.get<EmployeeReports>(`/dashboard/reports/employee/?days=${days}`);
+    return response.data;
+  },
+
+  getManagerReports: async (days: number = 30): Promise<ManagerReports> => {
+    const response = await api.get<ManagerReports>(`/dashboard/reports/manager/?days=${days}`);
+    return response.data;
+  },
+
+  getAdminReports: async (days: number = 30): Promise<AdminReports> => {
+    const response = await api.get<AdminReports>(`/dashboard/reports/admin/?days=${days}`);
+    return response.data;
+  },
+
+  exportTicketReport: async (params: TicketExportParams): Promise<void> => {
+    try {
+      const response = await api.get<Blob>('/dashboard/reports/tickets/export/', {
+        params: {
+          project_id: params.projectId,
+          period: params.period,
+          start_date: params.startDate,
+          end_date: params.endDate,
+          format: params.format,
+        },
+        responseType: 'blob',
+      });
+
+      const disposition = response.headers['content-disposition'] as string | undefined;
+      const filenameMatch = disposition?.match(/filename="?([^";\n]+)"?/i);
+      const extension = params.format === 'pdf' ? 'pdf' : 'xlsx';
+      const filename = filenameMatch?.[1] || `tickets_export.${extension}`;
+
+      const blob = response.data;
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(anchor);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+        const text = await error.response.data.text();
+        try {
+          const payload = JSON.parse(text) as { detail?: string };
+          throw new Error(payload.detail || 'Failed to export tickets.');
+        } catch {
+          throw new Error('Failed to export tickets.');
+        }
+      }
+      throw error;
+    }
+  },
+};
