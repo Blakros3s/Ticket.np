@@ -99,10 +99,10 @@ class TicketAPITestCase(TestCase):
         self.assertEqual(response.data['type'], 'feature')
         self.assertEqual(response.data['priority'], 'critical')
         self.assertIn('ticket_id', response.data)
-        self.assertRegex(response.data['ticket_id'], r'^\d{4,}$')
+        self.assertRegex(response.data['ticket_id'], r'^TKT-\d{4}$')
     
     def test_ticket_ids_are_sequential(self):
-        """New tickets receive zero-padded sequential ticket_id values."""
+        """New tickets receive sequential TKT-0001 style ticket_id values."""
         self.client.force_authenticate(user=self.employee_user)
         created_ids = []
         for i in range(3):
@@ -120,8 +120,8 @@ class TicketAPITestCase(TestCase):
             self.assertEqual(response.status_code, status.HTTP_201_CREATED)
             created_ids.append(response.data['ticket_id'])
 
-        self.assertTrue(all(ticket_id.isdigit() for ticket_id in created_ids))
-        numbers = [int(ticket_id) for ticket_id in created_ids]
+        self.assertTrue(all(ticket_id.startswith('TKT-') for ticket_id in created_ids))
+        numbers = [int(ticket_id.split('-', 1)[1]) for ticket_id in created_ids]
         self.assertEqual(numbers, sorted(numbers))
         self.assertEqual(len(set(numbers)), len(numbers))
     

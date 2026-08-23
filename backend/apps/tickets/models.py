@@ -3,9 +3,31 @@ from apps.users.models import User
 from apps.projects.models import Project
 
 
+TICKET_ID_PREFIX = 'TKT-'
+TICKET_ID_PAD_WIDTH = 4
+
+
 def format_ticket_number(number: int) -> str:
-    """Format a ticket sequence number as a zero-padded string (0001, 0002, …)."""
-    return str(number).zfill(4)
+    """Format a ticket sequence number as TKT-0001, TKT-0002, …"""
+    return f'{TICKET_ID_PREFIX}{str(number).zfill(TICKET_ID_PAD_WIDTH)}'
+
+
+def parse_ticket_sequence(ticket_id: str | None) -> int | None:
+    """Extract the numeric sequence from ticket_id (supports TKT-0001 and legacy 0001)."""
+    if not ticket_id:
+        return None
+
+    value = ticket_id.strip()
+    prefix = TICKET_ID_PREFIX
+    if value.upper().startswith(prefix):
+        suffix = value[len(prefix):]
+        if suffix.isdigit():
+            return int(suffix)
+
+    if value.isdigit():
+        return int(value)
+
+    return None
 
 
 def allocate_next_ticket_id() -> str:
