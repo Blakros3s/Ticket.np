@@ -199,12 +199,21 @@ CSRF_TRUSTED_ORIGINS = config(
 # Security Settings
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_SSL_REDIRECT = not DEBUG
+# TLS is terminated at nginx/Cloudflare in production — do not redirect again inside Django
+# (causes /admin loops and POST /api/auth/login/ → 301 → GET). Set SECURE_SSL_REDIRECT=True
+# only if Django is exposed directly on HTTPS without a reverse proxy.
+SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 SECURE_HSTS_PRELOAD = not DEBUG
+
+# Behind nginx/traefik TLS termination: trust X-Forwarded-* so SECURE_SSL_REDIRECT
+# does not loop (HTTPS client → nginx → HTTP gunicorn).
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = config('USE_X_FORWARDED_HOST', default=True, cast=bool)
 
 # Rate Limiting
 RATELIMIT_ENABLE = True
