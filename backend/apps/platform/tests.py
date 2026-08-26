@@ -60,6 +60,14 @@ class PlatformDjangoAdminTests(TestCase):
     @override_settings(
         STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage',
     )
+    def test_django_admin_index_loads_without_admin_log(self):
+        self.client.login(username='django_admin_test', password='testpass123')
+        response = self.client.get('/admin/')
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(
+        STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage',
+    )
     def test_django_admin_login_with_platform_user(self):
         response = self.client.post(
             '/admin/login/',
