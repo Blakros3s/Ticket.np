@@ -34,8 +34,6 @@ services:
           memory: 1G
 
   celery_worker:
-    build:
-      dockerfile: docker/backend/Dockerfile.prod
     env_file:
       - ../backend/.env.prod
     volumes:
@@ -56,7 +54,8 @@ services:
   # ============================================================================
   frontend:
     build:
-      dockerfile: docker/frontend/Dockerfile
+      context: ../frontend
+      dockerfile: ../docker/frontend/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     env_file:

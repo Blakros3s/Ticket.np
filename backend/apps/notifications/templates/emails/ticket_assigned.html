@@ -8,8 +8,9 @@
     <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">Hi {{ assignee_greeting }},</p>
 
     <p style="margin:0 0 20px;font-size:16px;line-height:1.6;">
-        <strong>{{ assigner_name }}</strong> just assigned you a ticket on
-        <strong>{{ project_name }}</strong>.
+        <strong>{{ assigner_name }}</strong> just assigned you a ticket
+        {% if organization_name %}at <strong>{{ organization_name }}</strong>{% endif %}
+        on <strong>{{ project_name }}</strong>.
     </p>
 
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 24px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
@@ -19,6 +20,10 @@
                 <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#0f172a;">{{ ticket_id }}</p>
                 <p style="margin:0 0 14px;font-size:16px;line-height:1.5;color:#334155;">{{ ticket_title }}</p>
                 <p style="margin:0;font-size:14px;color:#64748b;">
+                    {% if organization_name %}
+                    Organization: <strong style="color:#334155;">{{ organization_name }}</strong>
+                    ·
+                    {% endif %}
                     Priority: <strong style="color:#334155;">{{ priority }}</strong>
                 </p>
             </td>
@@ -34,13 +39,18 @@
         </tr>
     </table>
     {% else %}
-    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#475569;">
-        Sign in to TicketHub when you're ready — the ticket will be waiting for you there.
-    </p>
+    <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 20px;">
+        <tr>
+            <td style="border-radius:8px;background-color:#0ea5e9;">
+                <a href="{{ login_url }}" style="display:inline-block;padding:12px 22px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">Sign in</a>
+            </td>
+        </tr>
+    </table>
     {% endif %}
 
     <p style="margin:0;font-size:14px;line-height:1.6;color:#64748b;">
         Thanks,<br>
-        The TicketHub team
+        {% if organization_name %}The {{ organization_name }} team{% else %}The TicketHub team{% endif %}
     </p>
 {% endblock %}
+

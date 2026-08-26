@@ -1,18 +1,19 @@
 Hi {{ assignee_greeting }},
 
-{{ assigner_name }} just assigned you a ticket on {{ project_name }}.
+{{ assigner_name }} just assigned you a ticket{% if organization_name %} at {{ organization_name }}{% endif %} on {{ project_name }}.
 
 Ticket: {{ ticket_id }}
 {{ ticket_title }}
-Priority: {{ priority }}
+{% if organization_name %}Organization: {{ organization_name }}
+{% endif %}Priority: {{ priority }}
 
 {% if ticket_url %}Open ticket: {{ ticket_url }}
 
-{% else %}Sign in to TicketHub when you're ready — the ticket will be waiting for you there.
+{% endif %}Sign in: {{ login_url }}
 
-{% endif %}Thanks,
-The TicketHub team
+Thanks,
+{% if organization_name %}The {{ organization_name }} team{% else %}The TicketHub team{% endif %}
 
-—
-Technest Innovations
-{{ website_url }}
+---
+This is an automated message.
+{{ login_url }}

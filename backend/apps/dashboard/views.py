@@ -652,13 +652,14 @@ def export_ticket_report(request, project_id=None):
     period = request.query_params.get('period', '30')
     start_date = request.query_params.get('start_date')
     end_date = request.query_params.get('end_date')
-    export_format = (request.query_params.get('format') or '').strip().lower()
+    # Use export_format — DRF reserves the query param "format" for content negotiation.
+    export_format = (request.query_params.get('export_format') or '').strip().lower()
 
     if not raw_project_id:
         return Response({'detail': 'project_id is required.'}, status=400)
 
     if export_format not in {'xlsx', 'pdf'}:
-        return Response({'detail': 'format must be xlsx or pdf.'}, status=400)
+        return Response({'detail': 'export_format must be xlsx or pdf.'}, status=400)
 
     try:
         project_id_int = int(raw_project_id)

@@ -19,21 +19,16 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    # libpq5 needed in runtime for psycopg2
     libpq-dev \
     libjpeg-dev \
     zlib1g-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv (fast Python package installer)
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.local/bin:$PATH"
-
-# Copy requirements and install Python dependencies with uv cache mount
+# Copy requirements and install Python dependencies with pip cache mount
 COPY backend/requirements.txt /app/
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system --index-strategy unsafe-best-match -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Runtime
 FROM python:3.11-slim

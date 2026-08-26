@@ -112,7 +112,7 @@ export function DeleteTenantModal({
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isSubmitting}
                 autoComplete="current-password"
-                placeholder="Your /server/login password"
+                placeholder="Your /console password"
               />
               <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                 Use the password for your platform admin account, not a tenant user password.

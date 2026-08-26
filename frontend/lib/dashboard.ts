@@ -220,7 +220,7 @@ export const dashboardApi = {
           period: params.period,
           start_date: params.startDate,
           end_date: params.endDate,
-          format: params.format,
+          export_format: params.format,
         },
         responseType: 'blob',
       });

@@ -8,13 +8,13 @@ FROM python:3.11-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     libjpeg-dev \
@@ -22,9 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
 COPY backend/requirements.txt /app/
-RUN pip install --upgrade pip setuptools wheel && \
+RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Runtime
@@ -36,8 +35,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install runtime dependencies only
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     libjpeg62-turbo \
     zlib1g \
@@ -45,33 +45,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
 RUN groupadd -r appgroup && useradd -r -g appgroup -m -u 1000 appuser
 
-# Create necessary directories
 RUN mkdir -p /app/staticfiles /app/media /app/logs && \
     chown -R appuser:appgroup /app
 
-# Copy installed Python packages from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
-# Copy application code
 COPY --chown=appuser:appgroup backend/ /app/
 
-# Copy and set up production entrypoint
 COPY --chown=appuser:appgroup docker/backend/entrypoint.prod.sh /app/entrypoint.prod.sh
 RUN chmod +x /app/entrypoint.prod.sh
 
-# Switch to non-root user
 USER appuser
 
 EXPOSE 8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD curl -f http://localhost:8000/health/ || exit 1
 
-# Use production entrypoint script
 ENTRYPOINT ["/app/entrypoint.prod.sh"]
 CMD ["python", "-m", "gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "config.wsgi:application"]

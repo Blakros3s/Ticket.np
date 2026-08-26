@@ -216,6 +216,10 @@ AUTH_RATE_LIMIT = '10/minute'
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
 BACKEND_PUBLIC_URL = config('BACKEND_PUBLIC_URL', default='http://localhost:8000')
 WEBSITE_URL = config('WEBSITE_URL', default='https://technestinnovations.com.np')
+APP_LOGIN_URL = config(
+    'APP_LOGIN_URL',
+    default='https://login.technestinnovationsofficial.com',
+).strip().rstrip('/')
 
 # GitHub OAuth (tenant admins connect organization GitHub account)
 GITHUB_CLIENT_ID = config('GITHUB_CLIENT_ID', default='').strip()
@@ -237,6 +241,8 @@ if not _use_tls_raw:
 EMAIL_USE_TLS = str(_use_tls_raw).lower() in ('true', '1', 'yes')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='').strip()
 SERVER_EMAIL = config('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL or '').strip()
+EMAIL_REPLY_TO = config('EMAIL_REPLY_TO', default='').strip()
+EMAIL_LIST_ID = config('EMAIL_LIST_ID', default='').strip()
 EMAIL_USE_SMTP_IN_DEBUG = config('EMAIL_USE_SMTP_IN_DEBUG', default=False, cast=bool)
 
 _email_credentials_complete = bool(

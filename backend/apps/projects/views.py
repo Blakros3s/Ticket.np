@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 from apps.notifications.models import Notification
 from apps.users.models import User
-from apps.users.permissions import IsManagerOrAdmin
+from apps.users.permissions import IsAdminUser, IsManagerOrAdmin
 from apps.core.access import get_accessible_project
 from apps.core.media_utils import build_protected_media_url
 from .models import Project, ProjectMember, ProjectDocument
@@ -61,6 +61,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'add_member', 'remove_member']:
             return [IsAuthenticated(), IsManagerOrAdmin()]
+        if self.action == 'export_tickets':
+            return [IsAuthenticated(), IsAdminUser()]
         return [IsAuthenticated()]
     
     def perform_create(self, serializer):
@@ -152,6 +154,37 @@ class ProjectViewSet(viewsets.ModelViewSet):
         projects = Project.objects.filter(members=user)
         serializer = self.get_serializer(projects, many=True)
         return Response(serializer.data)
+
+    @action(
+        detail=True,
+        methods=['get'],
+        url_path='export-tickets',
+    )
+    def export_tickets(self, request, pk=None):
+        """Admin-only ticket export (Excel or PDF) for this project."""
+        project = self.get_object()
+        period = request.query_params.get('period', '30')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        export_format = (request.query_params.get('export_format') or '').strip().lower()
+
+        if export_format not in {'xlsx', 'pdf'}:
+            return Response(
+                {'detail': 'export_format must be xlsx or pdf.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from apps.dashboard.ticket_export import build_ticket_export_response
+
+        try:
+            return build_ticket_export_response(project, period, start_date, end_date, export_format)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except ImportError as exc:
+            return Response(
+                {'detail': f'Export dependencies are not installed: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class ProjectDocumentViewSet(viewsets.ModelViewSet):

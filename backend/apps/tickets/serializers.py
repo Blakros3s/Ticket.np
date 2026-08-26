@@ -238,6 +238,18 @@ class TicketCreateSerializer(serializers.ModelSerializer):
         cleaned = strip_tags(value).strip()
         return cleaned or None
 
+    def validate(self, attrs):
+        assignee_ids = attrs.get('assignees') or []
+        project = attrs.get('project')
+        if assignee_ids and project is not None:
+            member_ids = set(project.members.values_list('id', flat=True))
+            invalid = [aid for aid in assignee_ids if aid not in member_ids]
+            if invalid:
+                raise ValidationError(
+                    {'assignees': 'Only project members can be assigned to tickets.'}
+                )
+        return attrs
+
     def create(self, validated_data):
         media_files  = validated_data.pop('media_files', [])
         assignee_ids = validated_data.pop('assignees', [])
