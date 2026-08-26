@@ -73,7 +73,7 @@ class TicketAssignmentEmailTestCase(TestCase):
         self.assertEqual(mail.outbox[0].to, [self.assignee.email])
         self.assertEqual(
             mail.outbox[0].subject,
-            f'assigner assigned you to {ticket.ticket_id}',
+            f'[TicketHub] assigner assigned you to {ticket.ticket_id}',
         )
         self.assertIn(ticket.ticket_id, mail.outbox[0].body)
         self.assertIn(
@@ -82,6 +82,8 @@ class TicketAssignmentEmailTestCase(TestCase):
         )
         self.assertEqual(mail.outbox[0].content_subtype, 'plain')
         self.assertEqual(len(mail.outbox[0].alternatives), 1)
+        self.assertEqual(mail.outbox[0].extra_headers.get('Auto-Submitted'), 'auto-generated')
+        self.assertIn('Reply-To', mail.outbox[0].extra_headers)
 
     @override_settings(
         FRONTEND_URL='http://localhost:3000',

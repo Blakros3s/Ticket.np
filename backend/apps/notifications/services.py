@@ -1,11 +1,21 @@
 import logging
 
 from django.conf import settings
+from django.db import connection, transaction
 
 from .models import Notification
 from .tasks import send_ticket_assignment_email
 
 logger = logging.getLogger(__name__)
+
+
+def _current_tenant_schema() -> str | None:
+    from django_tenants.utils import get_public_schema_name
+
+    schema = getattr(connection, 'schema_name', None)
+    if not schema or schema == get_public_schema_name():
+        return None
+    return schema
 
 
 def _assigner_display_name(user) -> str:
@@ -59,11 +69,31 @@ def notify_ticket_assigned(*, assignee, ticket, assigned_by) -> None:
         return
 
     try:
-        send_ticket_assignment_email.delay(
-            assignee.id,
-            ticket.id,
-            assigned_by.id,
-        )
+        tenant_schema = _current_tenant_schema()
+        if tenant_schema is None:
+            logger.warning(
+                'Skipping assignment email queue: no tenant context '
+                '(assignee=%s, ticket=%s)',
+                assignee.id,
+                ticket.id,
+            )
+            return
+
+        assignee_id = assignee.id
+        ticket_id = ticket.id
+        assigned_by_id = assigned_by.id
+
+        def queue_assignment_email() -> None:
+            send_ticket_assignment_email.delay(
+                tenant_schema,
+                assignee_id,
+                ticket_id,
+                assigned_by_id,
+            )
+
+        # ATOMIC_REQUESTS wraps each view in a transaction — queue after commit
+        # so Celery can read the ticket row (otherwise "Ticket does not exist").
+        transaction.on_commit(queue_assignment_email)
     except Exception:
         logger.exception(
             'Failed to queue assignment email (assignee=%s, ticket=%s)',

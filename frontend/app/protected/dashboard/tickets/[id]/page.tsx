@@ -644,13 +644,10 @@ export default function TicketDetailPage() {
     };
   }, [showAssignDropdown]);
 
-  const projectMembers = users.filter(u =>
-    ticket?.project && (
-      projects.find(p => p.id === ticket.project)?.members?.some(m => m.user.id === u.id) ||
-      u.role === 'admin' ||
-      u.role === 'manager'
-    )
-  );
+  const projectMemberIds = useMemo(() => {
+    const project = projects.find((p) => p.id === ticket?.project);
+    return new Set(project?.members?.map((m) => m.user.id) ?? []);
+  }, [projects, ticket?.project]);
 
   const getMemberDisplayName = (member: User) => {
     const fullName = `${member.first_name} ${member.last_name}`.trim();
@@ -665,12 +662,15 @@ export default function TicketDetailPage() {
   };
 
   const availableAssignees = useMemo(() => {
-    return projectMembers.filter((member) => !ticket?.assignees?.includes(member.id));
-  }, [projectMembers, ticket?.assignees]);
+    return users.filter((member) => !ticket?.assignees?.includes(member.id));
+  }, [users, ticket?.assignees]);
 
   const filteredAssignees = useMemo(() => {
     const query = assigneeSearch.trim().toLowerCase();
-    if (!query) return availableAssignees;
+    const basePool = query
+      ? availableAssignees
+      : availableAssignees.filter((member) => projectMemberIds.has(member.id));
+    if (!query) return basePool;
 
     return availableAssignees.filter((member) => {
       const fullName = getMemberDisplayName(member).toLowerCase();
@@ -680,7 +680,7 @@ export default function TicketDetailPage() {
         member.email.toLowerCase().includes(query)
       );
     });
-  }, [availableAssignees, assigneeSearch]);
+  }, [availableAssignees, assigneeSearch, projectMemberIds]);
 
   const renderAssigneeDropdown = () => {
     if (!showAssignDropdown) return null;
@@ -750,13 +750,16 @@ export default function TicketDetailPage() {
                 : `No members match "${assigneeSearch}"`}
             </p>
           ) : (
-            filteredAssignees.map((member) => (
+            filteredAssignees.map((member) => {
+              const canAssign = projectMemberIds.has(member.id);
+              return (
               <button
                 key={member.id}
                 type="button"
-                onClick={() => handleAssign(member.id)}
-                disabled={saving}
+                onClick={() => canAssign && handleAssign(member.id)}
+                disabled={saving || !canAssign}
                 className="assignee-dropdown-item"
+                title={canAssign ? undefined : 'Add this user to the project first'}
               >
                 <div
                   className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
@@ -764,9 +767,15 @@ export default function TicketDetailPage() {
                 >
                   <span className="text-[10px] font-medium">{getMemberInitials(member)}</span>
                 </div>
-                <span className="truncate">{getMemberDisplayName(member)}</span>
+                <span className="truncate">
+                  {getMemberDisplayName(member)}
+                  {!canAssign && (
+                    <span className="text-amber-400/90 text-xs"> · Not in project</span>
+                  )}
+                </span>
               </button>
-            ))
+              );
+            })
           )}
         </div>
       </div>
@@ -832,7 +841,7 @@ export default function TicketDetailPage() {
   const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'manager';
   const isCreator = ticket?.created_by_id === user?.id;
   const canViewActivity = user?.role === 'admin' || user?.role === 'manager';
-  const isProjectMember = projectMembers.some(m => m.id === user?.id);
+  const isProjectMember = user?.id != null && projectMemberIds.has(user.id);
   const canAssign = user?.role === 'admin' || user?.role === 'manager' || isCreator || isProjectMember;
   const currentProject = projects.find((project) => project.id === ticket?.project);
   const projectHasGithubRepo = Boolean(currentProject?.github_repo);

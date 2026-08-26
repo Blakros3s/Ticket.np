@@ -32,7 +32,19 @@ EXPORT_COLUMNS = [
 ]
 
 DESCRIPTION_EXCEL_MAX = 500
-DESCRIPTION_PDF_MAX = 180
+
+
+def _escape_pdf_text(text: str) -> str:
+    """Escape text for ReportLab Paragraph (minimal HTML)."""
+    from xml.sax.saxutils import escape
+
+    return escape((text or '').replace('\r\n', '\n').replace('\r', '\n'))
+
+
+def _pdf_paragraph(text: str, style):
+    from reportlab.platypus import Paragraph
+
+    return Paragraph(_escape_pdf_text(text).replace('\n', '<br/>'), style)
 
 
 def _display_name(user) -> str:
@@ -242,60 +254,177 @@ def build_pdf_response(
     rows: list[list[str]],
 ) -> HttpResponse:
     from reportlab.lib import colors
-    from reportlab.lib.pagesizes import landscape, A4
-    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import inch
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
     buffer = io.BytesIO()
+    page_width, _ = A4
+    margin = 0.55 * inch
+    content_width = page_width - (2 * margin)
+
     doc = SimpleDocTemplate(
         buffer,
-        pagesize=landscape(A4),
-        leftMargin=0.4 * inch,
-        rightMargin=0.4 * inch,
-        topMargin=0.5 * inch,
-        bottomMargin=0.5 * inch,
+        pagesize=A4,
+        leftMargin=margin,
+        rightMargin=margin,
+        topMargin=0.6 * inch,
+        bottomMargin=0.6 * inch,
     )
 
     styles = getSampleStyleSheet()
-    title_style = styles['Heading2']
-    meta_style = styles['Normal']
+    title_style = ParagraphStyle(
+        'ExportTitle',
+        parent=styles['Heading2'],
+        fontSize=14,
+        leading=18,
+        spaceAfter=4,
+        textColor=colors.HexColor('#0f172a'),
+    )
+    meta_style = ParagraphStyle(
+        'ExportMeta',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=12,
+        spaceAfter=10,
+        textColor=colors.HexColor('#475569'),
+    )
+    ticket_title_style = ParagraphStyle(
+        'TicketTitle',
+        parent=styles['Heading3'],
+        fontSize=10,
+        leading=13,
+        spaceAfter=6,
+        textColor=colors.HexColor('#1e293b'),
+    )
+    label_style = ParagraphStyle(
+        'FieldLabel',
+        parent=styles['Normal'],
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor('#64748b'),
+        fontName='Helvetica-Bold',
+    )
+    value_style = ParagraphStyle(
+        'FieldValue',
+        parent=styles['Normal'],
+        fontSize=8,
+        leading=11,
+        textColor=colors.HexColor('#0f172a'),
+    )
+    description_style = ParagraphStyle(
+        'Description',
+        parent=styles['Normal'],
+        fontSize=8,
+        leading=11,
+        textColor=colors.HexColor('#334155'),
+        alignment=TA_LEFT,
+        spaceBefore=2,
+        spaceAfter=2,
+    )
 
     story = [
-        Paragraph(f'Ticket Export — {project.name}', title_style),
+        Paragraph('Ticket Export', title_style),
         Paragraph(
-            f'Period: {start.isoformat()} to {end.isoformat()} · {len(rows)} ticket(s)',
+            f'<b>{_escape_pdf_text(project.name)}</b><br/>'
+            f'Period: {start.isoformat()} to {end.isoformat()} · '
+            f'{len(rows)} ticket(s)',
             meta_style,
         ),
-        Spacer(1, 12),
     ]
 
-    pdf_headers = EXPORT_COLUMNS[:-1] + ['Description (truncated)']
-    table_data = [pdf_headers]
-
     if not rows:
-        table_data.append(['No tickets found for the selected filters.'] + [''] * (len(pdf_headers) - 1))
+        story.append(Paragraph('No tickets found for the selected filters.', value_style))
     else:
-        for row in rows:
-            truncated = row[:]
-            truncated[-1] = _truncate(truncated[-1], DESCRIPTION_PDF_MAX)
-            table_data.append(truncated)
+        label_col = 0.95 * inch
+        value_col = (content_width - (2 * label_col)) / 2
+        meta_col_widths = [label_col, value_col, label_col, value_col]
 
-    table = Table(table_data, repeatRows=1)
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e293b')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#cbd5e1')),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 4),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-    ]))
-    story.append(table)
+        meta_table_style = TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f1f5f9')),
+            ('BACKGROUND', (2, 0), (2, -1), colors.HexColor('#f1f5f9')),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#64748b')),
+            ('TEXTCOLOR', (2, 0), (2, -1), colors.HexColor('#64748b')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('BOX', (0, 0), (-1, -1), 0.25, colors.HexColor('#e2e8f0')),
+            ('INNERGRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#e2e8f0')),
+        ])
+
+        for row in rows:
+            ticket_id, title, ticket_type, priority, status, module, _project, created_by, assignees, assigned_by, created_at, due_date, closed_at, description = row
+
+            meta_table = Table(
+                [
+                    [
+                        _pdf_paragraph('Type', label_style),
+                        _pdf_paragraph(ticket_type, value_style),
+                        _pdf_paragraph('Priority', label_style),
+                        _pdf_paragraph(priority, value_style),
+                    ],
+                    [
+                        _pdf_paragraph('Status', label_style),
+                        _pdf_paragraph(status, value_style),
+                        _pdf_paragraph('Module', label_style),
+                        _pdf_paragraph(module or '—', value_style),
+                    ],
+                    [
+                        _pdf_paragraph('Created By', label_style),
+                        _pdf_paragraph(created_by, value_style),
+                        _pdf_paragraph('Assignees', label_style),
+                        _pdf_paragraph(assignees, value_style),
+                    ],
+                    [
+                        _pdf_paragraph('Assigned By', label_style),
+                        _pdf_paragraph(assigned_by, value_style),
+                        _pdf_paragraph('Created At', label_style),
+                        _pdf_paragraph(created_at, value_style),
+                    ],
+                    [
+                        _pdf_paragraph('Due Date', label_style),
+                        _pdf_paragraph(due_date or '—', value_style),
+                        _pdf_paragraph('Closed At', label_style),
+                        _pdf_paragraph(closed_at or '—', value_style),
+                    ],
+                ],
+                colWidths=meta_col_widths,
+            )
+            meta_table.setStyle(meta_table_style)
+
+            description_block = Table(
+                [
+                    [_pdf_paragraph('Description', label_style)],
+                    [_pdf_paragraph(description or '—', description_style)],
+                ],
+                colWidths=[content_width],
+            )
+            description_block.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f1f5f9')),
+                ('BOX', (0, 0), (-1, -1), 0.25, colors.HexColor('#e2e8f0')),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ]))
+
+            ticket_block = KeepTogether([
+                Spacer(1, 8),
+                _pdf_paragraph(f'{ticket_id} — {title}', ticket_title_style),
+                meta_table,
+                Spacer(1, 4),
+                description_block,
+                Spacer(1, 10),
+            ])
+            story.append(ticket_block)
+
     doc.build(story)
 
     buffer.seek(0)

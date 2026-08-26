@@ -10,7 +10,7 @@ export function PlatformProtectedRoute({ children }: { children: React.ReactNode
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push('/server/login');
+      router.push('/console');
     }
   }, [isAuthenticated, isLoading, router]);
 

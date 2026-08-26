@@ -104,12 +104,9 @@ function CreateTicketForm() {
         due_date: formData.due_date || null,
         module: formData.module?.trim() || null,
       };
-      const ticket = await ticketsApi.createTicket(ticketData);
+      await ticketsApi.createTicket(ticketData);
       showToastMessage('Ticket created successfully', 'success');
-
-      if (ticket?.id) {
-        await router.push(`/protected/dashboard/tickets/${ticket.id}`);
-      }
+      router.replace('/protected/dashboard/tickets');
     } catch (error: any) {
       showToastMessage(error.response?.data?.detail || 'Failed to create ticket', 'error');
     } finally {
@@ -119,13 +116,19 @@ function CreateTicketForm() {
 
   const selectedProject = projects.find(p => p.id === formData.project);
   const projectMembers = selectedProject?.members.map(m => m.user) || [];
-  const assigneePool = projectMembers.length > 0 ? projectMembers : users;
+  const projectMemberIds = useMemo(
+    () => new Set(projectMembers.map((m) => m.id)),
+    [projectMembers],
+  );
+  const assigneePool =
+    projectMembers.length > 0 ? projectMembers : users;
 
   const filteredAssignees = useMemo(() => {
     const query = assigneeSearch.trim().toLowerCase();
-    if (!query) return assigneePool;
+    const basePool = query ? users : assigneePool;
+    if (!query) return basePool;
 
-    return assigneePool.filter((member) => {
+    return users.filter((member) => {
       const fullName = `${member.first_name} ${member.last_name}`.trim().toLowerCase();
       return (
         fullName.includes(query) ||
@@ -134,7 +137,7 @@ function CreateTicketForm() {
         (member.login_address?.toLowerCase().includes(query) ?? false)
       );
     });
-  }, [assigneePool, assigneeSearch]);
+  }, [users, assigneePool, assigneeSearch]);
 
   const getMemberDisplayName = (member: AssigneeCandidate) => {
     const fullName = `${member.first_name} ${member.last_name}`.trim();
@@ -315,7 +318,19 @@ function CreateTicketForm() {
               Assignees (optional)
             </label>
             <p className="text-xs text-slate-500 mb-3">
-              Search project members by name or username. Leave empty to allow self-assign.
+              Only project members can be assigned. Search by name to find users — those not in the
+              project are marked and must be added from the{' '}
+              {formData.project ? (
+                <Link
+                  href={`/protected/dashboard/projects/${formData.project}`}
+                  className="text-sky-400 hover:text-sky-300 underline"
+                >
+                  project page
+                </Link>
+              ) : (
+                'project page'
+              )}
+              first.
             </p>
 
             {formData.assignees && formData.assignees.length > 0 && (
@@ -381,6 +396,7 @@ function CreateTicketForm() {
                 <div className="divide-y divide-slate-700/50">
                   {filteredAssignees.map((member) => {
                     const isSelected = formData.assignees?.includes(member.id) ?? false;
+                    const canAssign = projectMemberIds.has(member.id);
                     const displayName = getMemberDisplayName(member);
                     const initials =
                       member.first_name && member.last_name
@@ -390,13 +406,14 @@ function CreateTicketForm() {
                     return (
                       <label
                         key={member.id}
-                        className={`assignee-picker-row flex items-center gap-3 cursor-pointer px-3 py-2.5 ${
-                          isSelected ? 'assignee-picker-row--selected' : ''
-                        }`}
+                        className={`assignee-picker-row flex items-center gap-3 px-3 py-2.5 ${
+                          canAssign ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'
+                        } ${isSelected ? 'assignee-picker-row--selected' : ''}`}
                       >
                         <input
                           type="checkbox"
                           checked={isSelected}
+                          disabled={!canAssign}
                           onChange={(e) => toggleAssignee(member.id, e.target.checked)}
                           className="rounded border-slate-500 shrink-0"
                         />
@@ -407,6 +424,9 @@ function CreateTicketForm() {
                           <p className="text-sm text-slate-200 truncate">{displayName}</p>
                           <p className="text-xs text-slate-500 truncate">
                             {member.login_address || member.username}
+                            {!canAssign && (
+                              <span className="text-amber-400/90"> · Not in project</span>
+                            )}
                           </p>
                         </div>
                       </label>

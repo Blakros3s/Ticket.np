@@ -60,7 +60,7 @@ export function PlatformAuthProvider({ children }: { children: React.ReactNode }
   const logout = () => {
     platformAuthApi.logout();
     setUser(null);
-    router.push('/server/login');
+    router.push('/console');
   };
 
   return (

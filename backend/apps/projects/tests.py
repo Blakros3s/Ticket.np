@@ -219,3 +219,77 @@ class ProjectPermissionsTestCase(TestCase):
         """Test that unauthenticated users cannot access projects"""
         response = self.client.get('/api/projects/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class ProjectTicketExportTestCase(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        from django_tenants.utils import get_tenant_model
+        from apps.customers.models import Domain
+        from apps.customers.tenant_resolution import internal_domain_for
+
+        Tenant = get_tenant_model()
+        cls.tenant = Tenant.objects.filter(schema_name='export_test').first()
+        if cls.tenant is None:
+            cls.tenant = Tenant(
+                schema_name='export_test',
+                name='Export Test Organization',
+                slug='export-test',
+                login_domain='export-test.local',
+                is_active=True,
+            )
+            cls.tenant.save()
+            Domain.objects.create(
+                domain=internal_domain_for('export_test'),
+                tenant=cls.tenant,
+                is_primary=True,
+            )
+
+    def setUp(self):
+        from django_tenants.utils import schema_context
+
+        self.client = APIClient()
+        with schema_context(self.tenant.schema_name):
+            self.admin_user = User.objects.create_user(
+                username='export_admin',
+                email='export_admin@test.com',
+                password='adminpass123',
+                role='admin',
+            )
+            self.employee_user = User.objects.create_user(
+                username='export_employee',
+                email='export_employee@test.com',
+                password='employeepass123',
+                role='employee',
+            )
+            self.project = Project.objects.create(
+                name='Export Project',
+                description='Export test project',
+                created_by=self.admin_user,
+                status='active',
+            )
+            self.project.members.add(self.employee_user)
+
+    def test_admin_export_with_export_format_returns_xlsx(self):
+        self.client.force_authenticate(user=self.admin_user)
+        self.client.credentials(HTTP_X_TENANT_SCHEMA=self.tenant.schema_name)
+        url = f'/api/projects/projects/{self.project.id}/export-tickets/'
+        response = self.client.get(url, {'period': '30', 'export_format': 'xlsx'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('spreadsheetml', response['Content-Type'])
+
+    def test_format_query_param_conflicts_with_drf_negotiation(self):
+        """?format= is reserved by DRF — export must use export_format."""
+        self.client.force_authenticate(user=self.admin_user)
+        self.client.credentials(HTTP_X_TENANT_SCHEMA=self.tenant.schema_name)
+        url = f'/api/projects/projects/{self.project.id}/export-tickets/'
+        response = self.client.get(url, {'period': '30', 'format': 'xlsx'})
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_employee_cannot_export_tickets(self):
+        self.client.force_authenticate(user=self.employee_user)
+        self.client.credentials(HTTP_X_TENANT_SCHEMA=self.tenant.schema_name)
+        url = f'/api/projects/projects/{self.project.id}/export-tickets/'
+        response = self.client.get(url, {'period': '30', 'export_format': 'xlsx'})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

@@ -96,7 +96,7 @@ platformApi.interceptors.response.use(
         localStorage.removeItem(PLATFORM_ACCESS_KEY);
         localStorage.removeItem(PLATFORM_REFRESH_KEY);
         if (typeof window !== 'undefined') {
-          window.location.href = '/server/login';
+          window.location.href = '/console';
         }
         return Promise.reject(new ApiError('Your session has expired. Please log in again.', 401));
       }
