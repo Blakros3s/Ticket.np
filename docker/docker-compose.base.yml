@@ -40,6 +40,7 @@ services:
     build:
       context: ..
       dockerfile: docker/backend/Dockerfile.dev
+    image: ${COMPOSE_PROJECT_NAME:-ticketnp}_backend
     container_name: ${COMPOSE_PROJECT_NAME:-ticketnp}_backend
     restart: unless-stopped
     depends_on:
@@ -91,9 +92,7 @@ services:
   # Celery Worker (async email + background tasks)
   # ============================================================================
   celery_worker:
-    build:
-      context: ..
-      dockerfile: docker/backend/Dockerfile.dev
+    image: ${COMPOSE_PROJECT_NAME:-ticketnp}_backend
     container_name: ${COMPOSE_PROJECT_NAME:-ticketnp}_celery
     restart: unless-stopped
     depends_on:
@@ -120,8 +119,8 @@ services:
   # ============================================================================
   frontend:
     build:
-      context: ..
-      dockerfile: docker/frontend/Dockerfile
+      context: ../frontend
+      dockerfile: ../docker/frontend/Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME:-ticketnp}_frontend
     restart: unless-stopped
     expose:

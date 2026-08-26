@@ -164,9 +164,7 @@ export const ticketsApi = {
         formData.append('media_files', file);
       });
       
-      const response = await api.post<Ticket>('/tickets/tickets/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const response = await api.post<Ticket>('/tickets/tickets/', formData);
       return response.data;
     }
     

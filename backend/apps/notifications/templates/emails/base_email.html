@@ -3,31 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}TicketHub{% endblock %}</title>
+    <title>{% block title %}{{ organization_name|default:"TicketHub" }}{% endblock %}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#1e293b;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9;padding:32px 16px;">
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#1e293b;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f8fafc;padding:24px 16px;">
         <tr>
             <td align="center">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background-color:#ffffff;border-radius:8px;border:1px solid #e2e8f0;">
                     <tr>
-                        <td style="padding:28px 32px 16px;background:linear-gradient(135deg,#0ea5e9,#6366f1);">
-                            <p style="margin:0;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.85);">TicketHub</p>
-                            <h1 style="margin:8px 0 0;font-size:22px;font-weight:700;color:#ffffff;">{% block headline %}Ticket update{% endblock %}</h1>
+                        <td style="padding:20px 28px;background-color:#0f172a;border-bottom:3px solid #0ea5e9;">
+                            <h1 style="margin:0;font-size:20px;font-weight:700;color:#ffffff;line-height:1.3;">
+                                {{ organization_name|default:"TicketHub" }}
+                            </h1>
+                            <p style="margin:8px 0 0;font-size:14px;color:#94a3b8;line-height:1.4;">{% block headline %}Ticket update{% endblock %}</p>
                         </td>
                     </tr>
                     <tr>
-                        <td style="padding:28px 32px;">
+                        <td style="padding:28px;">
                             {% block content %}{% endblock %}
                         </td>
                     </tr>
                     <tr>
-                        <td style="padding:20px 32px 28px;border-top:1px solid #e2e8f0;background-color:#f8fafc;">
-                            <p style="margin:0 0 8px;font-size:13px;color:#64748b;">
-                                Sent by <strong style="color:#334155;">Technest Innovations</strong>
+                        <td style="padding:18px 28px 24px;border-top:1px solid #e2e8f0;background-color:#f8fafc;">
+                            <p style="margin:0 0 8px;font-size:12px;line-height:1.5;color:#64748b;">
+                                This is an automated message. You received it because an action was taken on your account.
                             </p>
-                            <p style="margin:0;font-size:13px;">
-                                <a href="{{ website_url }}" style="color:#0ea5e9;text-decoration:none;">technestinnovations.com.np</a>
+                            <p style="margin:0;font-size:12px;">
+                                <a href="{{ login_url }}" style="color:#0369a1;text-decoration:none;">{{ login_url }}</a>
                             </p>
                         </td>
                     </tr>

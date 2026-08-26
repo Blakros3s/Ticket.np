@@ -1,26 +1,44 @@
-# Git
+# Docker build context is the repo root (context: ..). Exclude caches and artifacts
+# so Windows bind mounts / locked folders do not slow or break `docker build`.
+
+# Git & editor
 .git
 .gitignore
+.cursor
+.vscode
+.idea
 
-# Frontend — exclude installed deps and build output from image context
+# Docs / design (not needed in images)
+docs
+design
+**/*.md
+!frontend/README.md
+
+# Python / Django (backend)
+backend/.venv
+backend/venv
+backend/.pytest_cache
+backend/.ruff_cache
+backend/.mypy_cache
+backend/**/__pycache__
+backend/**/*.py[cod]
+backend/staticfiles
+backend/media
+
+# Node / Next.js (frontend — still excluded when backend context is repo root)
 frontend/node_modules
 frontend/.next
 frontend/out
-frontend/.env
-frontend/.env.local
+frontend/dist
+frontend/.turbo
+frontend/**/*.tsbuildinfo
 
-# Backend Python cache / venv
-backend/__pycache__
-backend/**/__pycache__
-backend/.pytest_cache
-backend/.venv
-backend/venv
-**/*.pyc
-**/.pytest_cache
+# Secrets (never send to daemon)
+**/.env
+**/.env.*
+!**/.env.example
 
-# IDE / OS
-.idea
-.vscode
-*.swp
+# OS
 .DS_Store
 Thumbs.db
+*.swp

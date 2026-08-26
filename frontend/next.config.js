@@ -2,6 +2,14 @@
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  async redirects() {
+    return [
+      { source: '/server', destination: '/console/dashboard', permanent: true },
+      { source: '/server/login', destination: '/console', permanent: true },
+      { source: '/server/dashboard', destination: '/console/dashboard', permanent: true },
+      { source: '/server/dashboard/:path*', destination: '/console/dashboard/:path*', permanent: true },
+    ];
+  },
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
   },
