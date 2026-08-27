@@ -77,7 +77,16 @@ export const authApi = {
   },
 
   logout: async (): Promise<void> => {
-    clearAuthStorage();
+    const refresh = localStorage.getItem('refresh_token');
+    try {
+      if (refresh) {
+        await api.post('/auth/logout/', { refresh });
+      }
+    } catch {
+      // Best-effort server blacklist; always clear local session.
+    } finally {
+      clearAuthStorage();
+    }
   },
 
   getUsers: async (): Promise<User[]> => {

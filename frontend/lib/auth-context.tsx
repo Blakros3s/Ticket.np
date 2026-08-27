@@ -6,9 +6,11 @@ import { User } from './auth';
 import { authApi } from './auth';
 import {
   clearAuthStorage,
+  getApiErrorStatusCode,
   hasStoredAuthSession,
   refreshAccessTokenWithLock,
   restoreAuthSession,
+  resetAuthSessionBootstrap,
   TENANT_SCHEMA_KEY,
 } from './api';
 
@@ -31,18 +33,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function getErrorStatusCode(error: unknown): number | undefined {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'statusCode' in error &&
-    typeof (error as { statusCode?: number }).statusCode === 'number'
-  ) {
-    return (error as { statusCode: number }).statusCode;
-  }
-  return undefined;
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,10 +44,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const checkAuth = useCallback(async () => {
+    resetAuthSessionBootstrap();
+
     if (!hasStoredAuthSession()) {
       setIsLoading(false);
       return;
     }
+
+    let authenticated = false;
 
     try {
       const sessionOk = await restoreAuthSession();
@@ -68,8 +62,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         await loadProfile();
+        authenticated = true;
       } catch (error: unknown) {
-        const statusCode = getErrorStatusCode(error);
+        const statusCode = getApiErrorStatusCode(error);
         if (
           (statusCode === 401 || statusCode === 403) &&
           localStorage.getItem('refresh_token')
@@ -77,20 +72,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             await refreshAccessTokenWithLock();
             await loadProfile();
-            return;
-          } catch (retryError: unknown) {
-            const retryStatus = getErrorStatusCode(retryError);
-            if (retryStatus === 401 || retryStatus === 403) {
-              clearAuthStorage();
-            }
-            return;
+            authenticated = true;
+          } catch {
+            clearAuthStorage();
           }
-        }
-        if (statusCode === 401 || statusCode === 403) {
+        } else if (statusCode === 401 || statusCode === 403) {
           clearAuthStorage();
         }
       }
     } finally {
+      if (!authenticated && hasStoredAuthSession()) {
+        const refresh = localStorage.getItem('refresh_token');
+        if (!refresh) {
+          clearAuthStorage();
+        }
+      }
       setIsLoading(false);
     }
   }, [loadProfile]);
@@ -114,19 +110,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [checkAuth]);
 
   const login = async (username: string, password: string) => {
-    try {
-      const response = await authApi.login({
-        username: username.trim(),
-        password: password.trim(),
-      });
-      localStorage.setItem('access_token', response.access);
-      localStorage.setItem('refresh_token', response.refresh);
-      localStorage.setItem(TENANT_SCHEMA_KEY, response.tenant.schema_name);
-      setUser(response.user);
-    } catch (error: unknown) {
-      console.error('Login error:', error);
-      throw error;
-    }
+    const response = await authApi.login({
+      username: username.trim(),
+      password: password.trim(),
+    });
+    localStorage.setItem('access_token', response.access);
+    localStorage.setItem('refresh_token', response.refresh);
+    localStorage.setItem(TENANT_SCHEMA_KEY, response.tenant.schema_name);
+    resetAuthSessionBootstrap();
+    setUser(response.user);
   };
 
   const register = async (data: {
@@ -137,21 +129,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     password: string;
     confirm_password: string;
   }) => {
-    try {
-      const response = await authApi.register(data);
-      localStorage.setItem('access_token', response.access);
-      localStorage.setItem('refresh_token', response.refresh);
-      setUser(response.user);
-    } catch (error: unknown) {
-      console.error('Registration error:', error);
-      throw error;
-    }
+    const response = await authApi.register(data);
+    localStorage.setItem('access_token', response.access);
+    localStorage.setItem('refresh_token', response.refresh);
+    resetAuthSessionBootstrap();
+    setUser(response.user);
   };
 
   const logout = () => {
-    authApi.logout();
-    setUser(null);
-    router.push('/');
+    void authApi.logout().finally(() => {
+      setUser(null);
+      router.push('/');
+    });
   };
 
   const refreshUser = async () => {

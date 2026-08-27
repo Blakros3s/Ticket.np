@@ -8,12 +8,14 @@ from .views import (
     UserDetailView,
     change_password,
     admin_reset_password,
+    logout_view,
 )
 from .management_views import UserListView, DeactivateUserView, UserRoleListView, UserRoleDetailView
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
     path('login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('logout/', logout_view, name='token_logout'),
     path('token/refresh/', TenantTokenRefreshView.as_view(), name='token_refresh'),
     path('organization/', TenantOrganizationView.as_view(), name='tenant_organization'),
     path('profile/', UserProfileView.as_view(), name='user_profile'),
