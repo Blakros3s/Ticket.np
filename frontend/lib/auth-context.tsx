@@ -1,10 +1,15 @@
 ﻿'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, TenantInfo } from './auth';
+import { User } from './auth';
 import { authApi } from './auth';
-import { TENANT_SCHEMA_KEY } from './api';
+import {
+  clearAuthStorage,
+  ensureValidAccessToken,
+  hasStoredAuthSession,
+  TENANT_SCHEMA_KEY,
+} from './api';
 
 interface AuthContextType {
   user: User | null;
@@ -30,28 +35,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  const checkAuth = useCallback(async () => {
+    if (!hasStoredAuthSession()) {
+      setIsLoading(false);
+      return;
+    }
 
-  const checkAuth = async () => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
+    try {
+      try {
+        const sessionOk = await ensureValidAccessToken();
+        if (!sessionOk) {
+          clearAuthStorage();
+          return;
+        }
+      } catch {
+        // Network failure during refresh — keep stored tokens for a later retry.
+        return;
+      }
+
       try {
         const userData = await authApi.getProfile();
         setUser(userData);
-      } catch (error: any) {
-        const statusCode = error?.statusCode ?? error?.response?.status;
+      } catch (error: unknown) {
+        const statusCode =
+          typeof error === 'object' &&
+          error !== null &&
+          'statusCode' in error &&
+          typeof (error as { statusCode?: number }).statusCode === 'number'
+            ? (error as { statusCode: number }).statusCode
+            : undefined;
         // Keep tokens on temporary/network/server issues; only clear on explicit auth failures.
         if (statusCode === 401 || statusCode === 403) {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          localStorage.removeItem(TENANT_SCHEMA_KEY);
+          clearAuthStorage();
         }
       }
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'access_token') {
+        if (event.newValue) {
+          void checkAuth();
+        } else {
+          setUser(null);
+        }
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [checkAuth]);
 
   const login = async (username: string, password: string) => {
     try {

@@ -2,6 +2,66 @@ import axios, { AxiosError } from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 export const TENANT_SCHEMA_KEY = 'tenant_schema';
+const REFRESH_LOCK_KEY = 'ticketnp_tenant_refresh_lock';
+const REFRESH_LOCK_TTL_MS = 15000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - base64.length % 4) % 4), '=');
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+export function isAccessTokenExpired(token: string, skewSeconds = 30): boolean {
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload.exp !== 'number') {
+    return false;
+  }
+  return payload.exp * 1000 <= Date.now() + skewSeconds * 1000;
+}
+
+async function acquireRefreshLock(): Promise<void> {
+  const deadline = Date.now() + REFRESH_LOCK_TTL_MS;
+  while (Date.now() < deadline) {
+    const raw = localStorage.getItem(REFRESH_LOCK_KEY);
+    if (!raw) {
+      localStorage.setItem(REFRESH_LOCK_KEY, String(Date.now()));
+      return;
+    }
+    const started = Number(raw);
+    if (Number.isNaN(started) || Date.now() - started > REFRESH_LOCK_TTL_MS) {
+      localStorage.setItem(REFRESH_LOCK_KEY, String(Date.now()));
+      return;
+    }
+    await sleep(200);
+  }
+  throw new Error('Token refresh lock timeout');
+}
+
+function releaseRefreshLock(): void {
+  localStorage.removeItem(REFRESH_LOCK_KEY);
+}
+
+export function clearAuthStorage(): void {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+  localStorage.removeItem(TENANT_SCHEMA_KEY);
+}
+
+export function hasStoredAuthSession(): boolean {
+  return Boolean(
+    localStorage.getItem('access_token') || localStorage.getItem('refresh_token'),
+  );
+}
 
 // Custom error class for API errors
 export class ApiError extends Error {
@@ -55,6 +115,38 @@ const requestNewAccessToken = async (): Promise<string> => {
   return access;
 };
 
+/** Refresh access token when expired; coordinates across tabs via localStorage lock. */
+export async function ensureValidAccessToken(): Promise<boolean> {
+  const access = localStorage.getItem('access_token');
+  const refresh = localStorage.getItem('refresh_token');
+  if (!access && !refresh) {
+    return false;
+  }
+  if (access && !isAccessTokenExpired(access)) {
+    return true;
+  }
+  if (!refresh) {
+    return false;
+  }
+
+  await acquireRefreshLock();
+  try {
+    const latestAccess = localStorage.getItem('access_token');
+    if (latestAccess && !isAccessTokenExpired(latestAccess)) {
+      return true;
+    }
+    await requestNewAccessToken();
+    return true;
+  } catch (error) {
+    if (axios.isAxiosError(error) && !error.response) {
+      throw error;
+    }
+    return false;
+  } finally {
+    releaseRefreshLock();
+  }
+}
+
 api.interceptors.request.use(
   (config) => {
     const tenantSchema = localStorage.getItem(TENANT_SCHEMA_KEY);
@@ -106,10 +198,21 @@ api.interceptors.response.use(
       try {
         if (!isRefreshing) {
           isRefreshing = true;
-          refreshPromise = requestNewAccessToken().finally(() => {
-            isRefreshing = false;
-            refreshPromise = null;
-          });
+          refreshPromise = ensureValidAccessToken()
+            .then((ok) => {
+              if (!ok) {
+                throw new Error('No valid token');
+              }
+              const token = localStorage.getItem('access_token');
+              if (!token) {
+                throw new Error('No access token');
+              }
+              return token;
+            })
+            .finally(() => {
+              isRefreshing = false;
+              refreshPromise = null;
+            });
         }
 
         const access = await refreshPromise;
@@ -119,9 +222,7 @@ api.interceptors.response.use(
         const refreshStatus =
           axios.isAxiosError(refreshError) ? refreshError.response?.status : undefined;
         if (refreshStatus === 401 || refreshStatus === 403) {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          localStorage.removeItem(TENANT_SCHEMA_KEY);
+          clearAuthStorage();
           if (typeof window !== 'undefined') {
             window.location.href = '/auth/login';
           }

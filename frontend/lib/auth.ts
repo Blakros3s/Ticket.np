@@ -1,4 +1,4 @@
-﻿import api, { TENANT_SCHEMA_KEY } from './api';
+﻿import api, { TENANT_SCHEMA_KEY, clearAuthStorage } from './api';
 import { normalizeListResponse } from './http-utils';
 
 export interface UserRole {
@@ -77,9 +77,7 @@ export const authApi = {
   },
 
   logout: async (): Promise<void> => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem(TENANT_SCHEMA_KEY);
+    clearAuthStorage();
   },
 
   getUsers: async (): Promise<User[]> => {

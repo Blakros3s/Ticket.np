@@ -1,4 +1,4 @@
-import platformApi, { PLATFORM_ACCESS_KEY, PLATFORM_REFRESH_KEY } from './platform-api';
+import platformApi, { clearPlatformAuthStorage } from './platform-api';
 
 export interface PlatformUser {
   id: number;
@@ -33,7 +33,6 @@ export const platformAuthApi = {
   },
 
   logout: (): void => {
-    localStorage.removeItem(PLATFORM_ACCESS_KEY);
-    localStorage.removeItem(PLATFORM_REFRESH_KEY);
+    clearPlatformAuthStorage();
   },
 };
