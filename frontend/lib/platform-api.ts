@@ -1,7 +1,48 @@
 import axios, { AxiosError } from 'axios';
-import { ApiError } from './api';
+import { ApiError, isAccessTokenExpired } from './api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+export const PLATFORM_ACCESS_KEY = 'platform_access_token';
+export const PLATFORM_REFRESH_KEY = 'platform_refresh_token';
+const PLATFORM_REFRESH_LOCK_KEY = 'ticketnp_platform_refresh_lock';
+const REFRESH_LOCK_TTL_MS = 15000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function acquirePlatformRefreshLock(): Promise<void> {
+  const deadline = Date.now() + REFRESH_LOCK_TTL_MS;
+  while (Date.now() < deadline) {
+    const raw = localStorage.getItem(PLATFORM_REFRESH_LOCK_KEY);
+    if (!raw) {
+      localStorage.setItem(PLATFORM_REFRESH_LOCK_KEY, String(Date.now()));
+      return;
+    }
+    const started = Number(raw);
+    if (Number.isNaN(started) || Date.now() - started > REFRESH_LOCK_TTL_MS) {
+      localStorage.setItem(PLATFORM_REFRESH_LOCK_KEY, String(Date.now()));
+      return;
+    }
+    await sleep(200);
+  }
+  throw new Error('Platform token refresh lock timeout');
+}
+
+function releasePlatformRefreshLock(): void {
+  localStorage.removeItem(PLATFORM_REFRESH_LOCK_KEY);
+}
+
+export function clearPlatformAuthStorage(): void {
+  localStorage.removeItem(PLATFORM_ACCESS_KEY);
+  localStorage.removeItem(PLATFORM_REFRESH_KEY);
+}
+
+export function hasStoredPlatformAuthSession(): boolean {
+  return Boolean(
+    localStorage.getItem(PLATFORM_ACCESS_KEY) || localStorage.getItem(PLATFORM_REFRESH_KEY),
+  );
+}
 
 export function extractPlatformApiMessage(errorData: Record<string, unknown> | undefined, fallback: string): string {
   if (!errorData) return fallback;
@@ -21,9 +62,6 @@ export function extractPlatformApiMessage(errorData: Record<string, unknown> | u
 
   return fallback;
 }
-
-export const PLATFORM_ACCESS_KEY = 'platform_access_token';
-export const PLATFORM_REFRESH_KEY = 'platform_refresh_token';
 
 const platformApi = axios.create({
   baseURL: `${API_URL}/server`,
@@ -55,6 +93,37 @@ const requestNewPlatformAccessToken = async (): Promise<string> => {
   return access;
 };
 
+export async function ensureValidPlatformAccessToken(): Promise<boolean> {
+  const access = localStorage.getItem(PLATFORM_ACCESS_KEY);
+  const refresh = localStorage.getItem(PLATFORM_REFRESH_KEY);
+  if (!access && !refresh) {
+    return false;
+  }
+  if (access && !isAccessTokenExpired(access)) {
+    return true;
+  }
+  if (!refresh) {
+    return false;
+  }
+
+  await acquirePlatformRefreshLock();
+  try {
+    const latestAccess = localStorage.getItem(PLATFORM_ACCESS_KEY);
+    if (latestAccess && !isAccessTokenExpired(latestAccess)) {
+      return true;
+    }
+    await requestNewPlatformAccessToken();
+    return true;
+  } catch (error) {
+    if (axios.isAxiosError(error) && !error.response) {
+      throw error;
+    }
+    return false;
+  } finally {
+    releasePlatformRefreshLock();
+  }
+}
+
 platformApi.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem(PLATFORM_ACCESS_KEY);
@@ -83,18 +152,28 @@ platformApi.interceptors.response.use(
       try {
         if (!isRefreshing) {
           isRefreshing = true;
-          refreshPromise = requestNewPlatformAccessToken().finally(() => {
-            isRefreshing = false;
-            refreshPromise = null;
-          });
+          refreshPromise = ensureValidPlatformAccessToken()
+            .then((ok) => {
+              if (!ok) {
+                throw new Error('No valid platform token');
+              }
+              const token = localStorage.getItem(PLATFORM_ACCESS_KEY);
+              if (!token) {
+                throw new Error('No platform access token');
+              }
+              return token;
+            })
+            .finally(() => {
+              isRefreshing = false;
+              refreshPromise = null;
+            });
         }
 
         const access = await refreshPromise;
         originalRequest.headers.Authorization = `Bearer ${access}`;
         return platformApi(originalRequest);
       } catch {
-        localStorage.removeItem(PLATFORM_ACCESS_KEY);
-        localStorage.removeItem(PLATFORM_REFRESH_KEY);
+        clearPlatformAuthStorage();
         if (typeof window !== 'undefined') {
           window.location.href = '/console';
         }

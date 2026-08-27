@@ -1,8 +1,14 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { PLATFORM_ACCESS_KEY, PLATFORM_REFRESH_KEY } from './platform-api';
+import {
+  PLATFORM_ACCESS_KEY,
+  PLATFORM_REFRESH_KEY,
+  clearPlatformAuthStorage,
+  ensureValidPlatformAccessToken,
+  hasStoredPlatformAuthSession,
+} from './platform-api';
 import { PlatformUser, platformAuthApi } from './platform-auth';
 
 interface PlatformAuthContextType {
@@ -20,11 +26,20 @@ export function PlatformAuthProvider({ children }: { children: React.ReactNode }
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      const token = localStorage.getItem(PLATFORM_ACCESS_KEY);
-      if (!token) {
-        setIsLoading(false);
+  const checkAuth = useCallback(async () => {
+    if (!hasStoredPlatformAuthSession()) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      try {
+        const sessionOk = await ensureValidPlatformAccessToken();
+        if (!sessionOk) {
+          clearPlatformAuthStorage();
+          return;
+        }
+      } catch {
         return;
       }
 
@@ -37,15 +52,31 @@ export function PlatformAuthProvider({ children }: { children: React.ReactNode }
             ? (error as { statusCode?: number }).statusCode
             : undefined;
         if (statusCode === 401 || statusCode === 403) {
-          platformAuthApi.logout();
+          clearPlatformAuthStorage();
         }
-      } finally {
-        setIsLoading(false);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === PLATFORM_ACCESS_KEY) {
+        if (event.newValue) {
+          void checkAuth();
+        } else {
+          setUser(null);
+        }
       }
     };
-
-    checkAuth();
-  }, []);
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [checkAuth]);
 
   const login = async (username: string, password: string) => {
     const response = await platformAuthApi.login({
