@@ -55,9 +55,55 @@ export function clearAuthStorage(): void {
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
   localStorage.removeItem(TENANT_SCHEMA_KEY);
+  resetAuthSessionBootstrap();
+}
+
+function syncTenantSchemaFromStoredTokens(): void {
+  const access = localStorage.getItem('access_token');
+  const refresh = localStorage.getItem('refresh_token');
+  const token = access || refresh;
+  if (!token) {
+    return;
+  }
+  const payload = decodeJwtPayload(token);
+  const schema = payload?.tenant_schema;
+  if (typeof schema === 'string' && schema) {
+    localStorage.setItem(TENANT_SCHEMA_KEY, schema);
+  }
+}
+
+export function resetAuthSessionBootstrap(): void {
+  sessionBootstrapPromise = null;
+}
+
+let sessionBootstrapPromise: Promise<boolean> | null = null;
+
+/** Restore tokens on cold load; deduped across React Strict Mode double-mount. */
+export async function restoreAuthSession(): Promise<boolean> {
+  if (sessionBootstrapPromise) {
+    return sessionBootstrapPromise;
+  }
+
+  sessionBootstrapPromise = (async () => {
+    if (!hasStoredAuthSession()) {
+      return false;
+    }
+    syncTenantSchemaFromStoredTokens();
+    try {
+      return await ensureValidAccessToken();
+    } catch {
+      // Network failure during refresh — keep tokens for retry.
+      return true;
+    }
+  })();
+
+  return sessionBootstrapPromise;
 }
 
 export function hasStoredAuthSession(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
   return Boolean(
     localStorage.getItem('access_token') || localStorage.getItem('refresh_token'),
   );
@@ -107,6 +153,7 @@ const requestNewAccessToken = async (): Promise<string> => {
 
   const { access, refresh } = response.data;
   localStorage.setItem('access_token', access);
+  syncTenantSchemaFromStoredTokens();
 
   if (refresh) {
     localStorage.setItem('refresh_token', refresh);
@@ -114,6 +161,21 @@ const requestNewAccessToken = async (): Promise<string> => {
 
   return access;
 };
+
+/** Force refresh on 401 — does not skip when local JWT expiry looks valid. */
+export async function refreshAccessTokenWithLock(): Promise<string> {
+  const refresh = localStorage.getItem('refresh_token');
+  if (!refresh) {
+    throw new Error('No refresh token');
+  }
+
+  await acquireRefreshLock();
+  try {
+    return await requestNewAccessToken();
+  } finally {
+    releaseRefreshLock();
+  }
+}
 
 /** Refresh access token when expired; coordinates across tabs via localStorage lock. */
 export async function ensureValidAccessToken(): Promise<boolean> {
@@ -198,21 +260,10 @@ api.interceptors.response.use(
       try {
         if (!isRefreshing) {
           isRefreshing = true;
-          refreshPromise = ensureValidAccessToken()
-            .then((ok) => {
-              if (!ok) {
-                throw new Error('No valid token');
-              }
-              const token = localStorage.getItem('access_token');
-              if (!token) {
-                throw new Error('No access token');
-              }
-              return token;
-            })
-            .finally(() => {
-              isRefreshing = false;
-              refreshPromise = null;
-            });
+          refreshPromise = refreshAccessTokenWithLock().finally(() => {
+            isRefreshing = false;
+            refreshPromise = null;
+          });
         }
 
         const access = await refreshPromise;

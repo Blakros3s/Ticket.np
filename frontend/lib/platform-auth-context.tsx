@@ -8,6 +8,7 @@ import {
   clearPlatformAuthStorage,
   ensureValidPlatformAccessToken,
   hasStoredPlatformAuthSession,
+  refreshPlatformAccessTokenWithLock,
 } from './platform-api';
 import { PlatformUser, platformAuthApi } from './platform-auth';
 
@@ -51,6 +52,26 @@ export function PlatformAuthProvider({ children }: { children: React.ReactNode }
           typeof error === 'object' && error !== null && 'statusCode' in error
             ? (error as { statusCode?: number }).statusCode
             : undefined;
+        if (
+          (statusCode === 401 || statusCode === 403) &&
+          localStorage.getItem(PLATFORM_REFRESH_KEY)
+        ) {
+          try {
+            await refreshPlatformAccessTokenWithLock();
+            const profile = await platformAuthApi.getProfile();
+            setUser(profile);
+            return;
+          } catch (retryError: unknown) {
+            const retryStatus =
+              typeof retryError === 'object' && retryError !== null && 'statusCode' in retryError
+                ? (retryError as { statusCode?: number }).statusCode
+                : undefined;
+            if (retryStatus === 401 || retryStatus === 403) {
+              clearPlatformAuthStorage();
+            }
+            return;
+          }
+        }
         if (statusCode === 401 || statusCode === 403) {
           clearPlatformAuthStorage();
         }

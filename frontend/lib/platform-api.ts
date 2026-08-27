@@ -39,6 +39,9 @@ export function clearPlatformAuthStorage(): void {
 }
 
 export function hasStoredPlatformAuthSession(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
   return Boolean(
     localStorage.getItem(PLATFORM_ACCESS_KEY) || localStorage.getItem(PLATFORM_REFRESH_KEY),
   );
@@ -92,6 +95,20 @@ const requestNewPlatformAccessToken = async (): Promise<string> => {
 
   return access;
 };
+
+export async function refreshPlatformAccessTokenWithLock(): Promise<string> {
+  const refresh = localStorage.getItem(PLATFORM_REFRESH_KEY);
+  if (!refresh) {
+    throw new Error('No platform refresh token');
+  }
+
+  await acquirePlatformRefreshLock();
+  try {
+    return await requestNewPlatformAccessToken();
+  } finally {
+    releasePlatformRefreshLock();
+  }
+}
 
 export async function ensureValidPlatformAccessToken(): Promise<boolean> {
   const access = localStorage.getItem(PLATFORM_ACCESS_KEY);
@@ -152,21 +169,10 @@ platformApi.interceptors.response.use(
       try {
         if (!isRefreshing) {
           isRefreshing = true;
-          refreshPromise = ensureValidPlatformAccessToken()
-            .then((ok) => {
-              if (!ok) {
-                throw new Error('No valid platform token');
-              }
-              const token = localStorage.getItem(PLATFORM_ACCESS_KEY);
-              if (!token) {
-                throw new Error('No platform access token');
-              }
-              return token;
-            })
-            .finally(() => {
-              isRefreshing = false;
-              refreshPromise = null;
-            });
+          refreshPromise = refreshPlatformAccessTokenWithLock().finally(() => {
+            isRefreshing = false;
+            refreshPromise = null;
+          });
         }
 
         const access = await refreshPromise;
