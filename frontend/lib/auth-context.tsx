@@ -6,8 +6,9 @@ import { User } from './auth';
 import { authApi } from './auth';
 import {
   clearAuthStorage,
-  ensureValidAccessToken,
   hasStoredAuthSession,
+  refreshAccessTokenWithLock,
+  restoreAuthSession,
   TENANT_SCHEMA_KEY,
 } from './api';
 
@@ -30,10 +31,27 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function getErrorStatusCode(error: unknown): number | undefined {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    typeof (error as { statusCode?: number }).statusCode === 'number'
+  ) {
+    return (error as { statusCode: number }).statusCode;
+  }
+  return undefined;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+
+  const loadProfile = useCallback(async (): Promise<void> => {
+    const userData = await authApi.getProfile();
+    setUser(userData);
+  }, []);
 
   const checkAuth = useCallback(async () => {
     if (!hasStoredAuthSession()) {
@@ -42,29 +60,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      try {
-        const sessionOk = await ensureValidAccessToken();
-        if (!sessionOk) {
-          clearAuthStorage();
-          return;
-        }
-      } catch {
-        // Network failure during refresh — keep stored tokens for a later retry.
+      const sessionOk = await restoreAuthSession();
+      if (!sessionOk) {
+        clearAuthStorage();
         return;
       }
 
       try {
-        const userData = await authApi.getProfile();
-        setUser(userData);
+        await loadProfile();
       } catch (error: unknown) {
-        const statusCode =
-          typeof error === 'object' &&
-          error !== null &&
-          'statusCode' in error &&
-          typeof (error as { statusCode?: number }).statusCode === 'number'
-            ? (error as { statusCode: number }).statusCode
-            : undefined;
-        // Keep tokens on temporary/network/server issues; only clear on explicit auth failures.
+        const statusCode = getErrorStatusCode(error);
+        if (
+          (statusCode === 401 || statusCode === 403) &&
+          localStorage.getItem('refresh_token')
+        ) {
+          try {
+            await refreshAccessTokenWithLock();
+            await loadProfile();
+            return;
+          } catch (retryError: unknown) {
+            const retryStatus = getErrorStatusCode(retryError);
+            if (retryStatus === 401 || retryStatus === 403) {
+              clearAuthStorage();
+            }
+            return;
+          }
+        }
         if (statusCode === 401 || statusCode === 403) {
           clearAuthStorage();
         }
@@ -72,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [loadProfile]);
 
   useEffect(() => {
     checkAuth();
@@ -102,11 +123,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('refresh_token', response.refresh);
       localStorage.setItem(TENANT_SCHEMA_KEY, response.tenant.schema_name);
       setUser(response.user);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Login error:', error);
-      console.error('Error response:', error.response);
-      console.error('Error data:', error.response?.data);
-      console.error('Error status:', error.response?.status);
       throw error;
     }
   };
@@ -124,11 +142,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('access_token', response.access);
       localStorage.setItem('refresh_token', response.refresh);
       setUser(response.user);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Registration error:', error);
-      console.error('Error response:', error.response);
-      console.error('Error data:', error.response?.data);
-      console.error('Error status:', error.response?.status);
       throw error;
     }
   };
@@ -141,8 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = async () => {
     if (!user) return;
-    const userData = await authApi.getProfile();
-    setUser(userData);
+    await loadProfile();
   };
 
   return (
