@@ -6,6 +6,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
@@ -16,6 +17,7 @@ from .serializers import (
     CustomTokenObtainPairSerializer,
     RegisterSerializer,
     TenantOrganizationSerializer,
+    TenantRefreshToken,
     TenantTokenRefreshSerializer,
     UserProfileSerializer,
     UserSerializer,
@@ -169,6 +171,23 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
         if tenant is not None:
             unregister_login_account(client=tenant, tenant_user_id=instance.pk)
         return response
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def logout_view(request):
+    """Blacklist refresh token on logout; access token expires naturally."""
+    refresh = request.data.get('refresh')
+    if not refresh:
+        return Response({'detail': 'Logged out.'}, status=status.HTTP_200_OK)
+
+    try:
+        token = TenantRefreshToken(refresh)
+        token.blacklist()
+    except TokenError:
+        pass
+
+    return Response({'detail': 'Logged out.'}, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])

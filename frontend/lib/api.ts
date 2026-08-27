@@ -73,18 +73,18 @@ function syncTenantSchemaFromStoredTokens(): void {
 }
 
 export function resetAuthSessionBootstrap(): void {
-  sessionBootstrapPromise = null;
+  sessionBootstrapInFlight = null;
 }
 
-let sessionBootstrapPromise: Promise<boolean> | null = null;
+let sessionBootstrapInFlight: Promise<boolean> | null = null;
 
-/** Restore tokens on cold load; deduped across React Strict Mode double-mount. */
+/** Restore tokens on cold load; dedupes concurrent calls only (not failed retries). */
 export async function restoreAuthSession(): Promise<boolean> {
-  if (sessionBootstrapPromise) {
-    return sessionBootstrapPromise;
+  if (sessionBootstrapInFlight) {
+    return sessionBootstrapInFlight;
   }
 
-  sessionBootstrapPromise = (async () => {
+  sessionBootstrapInFlight = (async () => {
     if (!hasStoredAuthSession()) {
       return false;
     }
@@ -97,7 +97,26 @@ export async function restoreAuthSession(): Promise<boolean> {
     }
   })();
 
-  return sessionBootstrapPromise;
+  try {
+    return await sessionBootstrapInFlight;
+  } finally {
+    sessionBootstrapInFlight = null;
+  }
+}
+
+export function getApiErrorStatusCode(error: unknown): number | undefined {
+  if (axios.isAxiosError(error)) {
+    return error.response?.status;
+  }
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    typeof (error as { statusCode?: number }).statusCode === 'number'
+  ) {
+    return (error as { statusCode: number }).statusCode;
+  }
+  return undefined;
 }
 
 export function hasStoredAuthSession(): boolean {
