@@ -113,6 +113,23 @@ class AuthenticationTestCase(TestCase):
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('access', response.data)
+
+    def test_logout_blacklists_refresh_token(self):
+        login_response = self.client.post('/api/auth/login/', {
+            'username': 'admin@test.local',
+            'password': 'adminpass123'
+        }, format='json')
+        refresh_token = login_response.data['refresh']
+
+        logout_response = self.client.post('/api/auth/logout/', {
+            'refresh': refresh_token
+        }, format='json')
+        self.assertEqual(logout_response.status_code, status.HTTP_200_OK)
+
+        refresh_response = self.client.post('/api/auth/token/refresh/', {
+            'refresh': refresh_token
+        }, format='json')
+        self.assertEqual(refresh_response.status_code, status.HTTP_401_UNAUTHORIZED)
     
     def test_get_user_profile_authenticated(self):
         self.client.force_authenticate(user=self.employee_user)
