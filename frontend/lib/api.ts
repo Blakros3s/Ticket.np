@@ -230,6 +230,15 @@ export async function ensureValidAccessToken(): Promise<boolean> {
 
 api.interceptors.request.use(
   (config) => {
+    if (config.data instanceof FormData) {
+      // Let the browser set multipart boundary; a preset Content-Type breaks file uploads.
+      if (config.headers && typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type');
+      } else if (config.headers) {
+        delete config.headers['Content-Type'];
+      }
+    }
+
     const tenantSchema = localStorage.getItem(TENANT_SCHEMA_KEY);
     if (tenantSchema) {
       config.headers['X-Tenant-Schema'] = tenantSchema;

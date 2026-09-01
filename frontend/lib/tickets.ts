@@ -222,7 +222,6 @@ export const ticketsApi = {
     const response = await api.post<TicketMedia>(
       `/tickets/tickets/${ticketId}/media/`,
       formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
     );
     return response.data;
   },
@@ -244,7 +243,6 @@ export const ticketsApi = {
       const response = await api.post<TicketComment>(
         `/tickets/tickets/${ticketId}/comments/`,
         formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } },
       );
       return response.data;
     }

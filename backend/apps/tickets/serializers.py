@@ -2,6 +2,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 import json
 import re
+from django.core.files.uploadedfile import UploadedFile
 from django.utils import timezone
 from django.utils.html import strip_tags
 from apps.core.media_utils import build_protected_media_url
@@ -85,14 +86,40 @@ def _normalize_multipart_list_value(data):
     return [data]
 
 
+def _normalize_multipart_file_list_value(data):
+    """Coerce multipart uploads into a flat list of UploadedFile instances."""
+    items = _normalize_multipart_list_value(data)
+    files: list[UploadedFile] = []
+    for item in items:
+        if isinstance(item, UploadedFile):
+            files.append(item)
+        elif isinstance(item, (list, tuple)):
+            files.extend(f for f in item if isinstance(f, UploadedFile))
+    return files
+
+
 class MultipartIntegerListField(serializers.ListField):
+    def get_value(self, dictionary):
+        if hasattr(dictionary, 'getlist'):
+            values = dictionary.getlist(self.field_name)
+            if values:
+                return values
+        return super().get_value(dictionary)
+
     def to_internal_value(self, data):
         return super().to_internal_value(_normalize_multipart_list_value(data))
 
 
 class MultipartFileListField(serializers.ListField):
+    def get_value(self, dictionary):
+        if hasattr(dictionary, 'getlist'):
+            values = dictionary.getlist(self.field_name)
+            if values:
+                return values
+        return super().get_value(dictionary)
+
     def to_internal_value(self, data):
-        return super().to_internal_value(_normalize_multipart_list_value(data))
+        return super().to_internal_value(_normalize_multipart_file_list_value(data))
 
 
 def _build_assignee_dict(user) -> dict:
