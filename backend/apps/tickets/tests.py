@@ -1,3 +1,6 @@
+import json
+
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -100,6 +103,30 @@ class TicketAPITestCase(TestCase):
         self.assertEqual(response.data['priority'], 'critical')
         self.assertIn('ticket_id', response.data)
         self.assertRegex(response.data['ticket_id'], r'^TKT-\d{4}$')
+
+    def test_create_ticket_multipart_with_assignees_and_media(self):
+        """Multipart create accepts JSON assignees and file list (browser FormData shape)."""
+        self.client.force_authenticate(user=self.employee_user)
+        upload = SimpleUploadedFile(
+            'screenshot.png',
+            b'\x89PNG\r\n\x1a\n',
+            content_type='image/png',
+        )
+        response = self.client.post(
+            '/api/tickets/tickets/',
+            {
+                'title': 'Multipart Ticket',
+                'description': 'Created with attachment',
+                'type': 'bug',
+                'priority': 'high',
+                'project': self.project.id,
+                'assignees': json.dumps([self.assignee_user.id]),
+                'media_files': upload,
+            },
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn(self.assignee_user.id, response.data['assignees'])
     
     def test_ticket_ids_are_sequential(self):
         """New tickets receive sequential TKT-0001 style ticket_id values."""
