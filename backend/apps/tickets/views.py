@@ -192,7 +192,14 @@ class TicketViewSet(viewsets.ModelViewSet):
     # ------------------------------------------------------------------
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
+        payload = request.data
+        if hasattr(request.data, 'copy'):
+            payload = request.data.copy()
+        media_files = request.FILES.getlist('media_files')
+        if media_files:
+            payload['media_files'] = media_files
+
+        serializer = self.get_serializer(data=payload)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         ticket = serializer.instance
