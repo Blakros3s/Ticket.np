@@ -95,6 +95,7 @@ class MultipartFileListField(serializers.ListField):
         return super().to_internal_value(_normalize_multipart_list_value(data))
 
 
+def _build_assignee_dict(user) -> dict:
     """Return a consistent assignee representation dict for a User instance."""
     first = user.first_name or ''
     last  = user.last_name or ''
