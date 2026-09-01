@@ -127,6 +127,24 @@ class TicketAPITestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn(self.assignee_user.id, response.data['assignees'])
         self.assertEqual(len(response.data['media_files']), 2)
+
+    def test_create_ticket_multipart_assignees_as_repeated_fields(self):
+        """Multipart create accepts repeated assignees fields (browser FormData shape)."""
+        self.client.force_authenticate(user=self.employee_user)
+        response = self.client.post(
+            '/api/tickets/tickets/',
+            {
+                'title': 'Repeated assignees',
+                'description': 'Assignee field repeated in multipart body',
+                'type': 'task',
+                'priority': 'medium',
+                'project': self.project.id,
+                'assignees': [str(self.assignee_user.id)],
+            },
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn(self.assignee_user.id, response.data['assignees'])
     
     def test_ticket_ids_are_sequential(self):
         """New tickets receive sequential TKT-0001 style ticket_id values."""

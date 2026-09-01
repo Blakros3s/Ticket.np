@@ -98,6 +98,30 @@ def _normalize_multipart_file_list_value(data):
     return files
 
 
+def _normalize_multipart_integer_list_value(data):
+    """Coerce multipart assignee values into a list of integer IDs."""
+    items = _normalize_multipart_list_value(data)
+    ids: list[int] = []
+    for item in items:
+        if isinstance(item, int):
+            ids.append(item)
+            continue
+        if isinstance(item, str):
+            stripped = item.strip()
+            if stripped.startswith('['):
+                try:
+                    parsed = json.loads(stripped)
+                    if isinstance(parsed, list):
+                        ids.extend(int(entry) for entry in parsed)
+                        continue
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    pass
+            ids.append(int(stripped))
+            continue
+        ids.append(int(item))
+    return ids
+
+
 class MultipartIntegerListField(serializers.ListField):
     def get_value(self, dictionary):
         if hasattr(dictionary, 'getlist'):
@@ -107,7 +131,7 @@ class MultipartIntegerListField(serializers.ListField):
         return super().get_value(dictionary)
 
     def to_internal_value(self, data):
-        return super().to_internal_value(_normalize_multipart_list_value(data))
+        return super().to_internal_value(_normalize_multipart_integer_list_value(data))
 
 
 class MultipartFileListField(serializers.ListField):
