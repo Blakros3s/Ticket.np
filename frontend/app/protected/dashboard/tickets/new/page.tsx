@@ -455,7 +455,7 @@ function CreateTicketForm() {
                 });
               }}
               multiple
-              accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md"
+              accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.markdown,text/markdown,text/plain"
               className="bg-slate-700/30"
             />
 

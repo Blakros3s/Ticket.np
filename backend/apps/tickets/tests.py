@@ -105,13 +105,12 @@ class TicketAPITestCase(TestCase):
         self.assertRegex(response.data['ticket_id'], r'^TKT-\d{4}$')
 
     def test_create_ticket_multipart_with_assignees_and_media(self):
-        """Multipart create accepts JSON assignees and file list (browser FormData shape)."""
+        """Multipart create accepts JSON assignees and multiple file uploads."""
         self.client.force_authenticate(user=self.employee_user)
-        upload = SimpleUploadedFile(
-            'screenshot.png',
-            b'\x89PNG\r\n\x1a\n',
-            content_type='image/png',
-        )
+        uploads = [
+            SimpleUploadedFile('screenshot.png', b'\x89PNG\r\n\x1a\n', content_type='image/png'),
+            SimpleUploadedFile('notes.md', b'# Notes', content_type='text/markdown'),
+        ]
         response = self.client.post(
             '/api/tickets/tickets/',
             {
@@ -121,12 +120,13 @@ class TicketAPITestCase(TestCase):
                 'priority': 'high',
                 'project': self.project.id,
                 'assignees': json.dumps([self.assignee_user.id]),
-                'media_files': upload,
+                'media_files': uploads,
             },
             format='multipart',
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn(self.assignee_user.id, response.data['assignees'])
+        self.assertEqual(len(response.data['media_files']), 2)
     
     def test_ticket_ids_are_sequential(self):
         """New tickets receive sequential TKT-0001 style ticket_id values."""
