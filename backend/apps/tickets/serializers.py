@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
+import json
 import re
 from django.utils import timezone
 from django.utils.html import strip_tags
@@ -64,7 +65,36 @@ def get_file_type(filename: str) -> str:
     return 'other'
 
 
-def _build_assignee_dict(user) -> dict:
+def _normalize_multipart_list_value(data):
+    """Coerce multipart form values into a list for ListField children."""
+    if data is None:
+        return []
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return list(data.values())
+    if isinstance(data, str):
+        stripped = data.strip()
+        if stripped.startswith('['):
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError:
+                return [data]
+            return parsed if isinstance(parsed, list) else [parsed]
+        return [data]
+    return [data]
+
+
+class MultipartIntegerListField(serializers.ListField):
+    def to_internal_value(self, data):
+        return super().to_internal_value(_normalize_multipart_list_value(data))
+
+
+class MultipartFileListField(serializers.ListField):
+    def to_internal_value(self, data):
+        return super().to_internal_value(_normalize_multipart_list_value(data))
+
+
     """Return a consistent assignee representation dict for a User instance."""
     first = user.first_name or ''
     last  = user.last_name or ''
@@ -211,12 +241,12 @@ class TicketSerializer(_TicketCoreSerializer):
 
 
 class TicketCreateSerializer(serializers.ModelSerializer):
-    media_files = serializers.ListField(
+    media_files = MultipartFileListField(
         child=serializers.FileField(),
         required=False,
         write_only=True,
     )
-    assignees = serializers.ListField(
+    assignees = MultipartIntegerListField(
         child=serializers.IntegerField(),
         required=False,
         write_only=True,

@@ -158,7 +158,7 @@ export const ticketsApi = {
         formData.append('module', data.module);
       }
       if (data.assignees && data.assignees.length > 0) {
-        data.assignees.forEach(id => formData.append('assignees', id.toString()));
+        formData.append('assignees', JSON.stringify(data.assignees));
       }
       data.media_files.forEach((file) => {
         formData.append('media_files', file);
