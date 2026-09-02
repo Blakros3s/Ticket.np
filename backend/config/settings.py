@@ -52,6 +52,7 @@ TENANT_APPS = [
     'apps.todos',
     'apps.core',
     'apps.attendance',
+    'apps.payroll',
     'apps.notifications',
     'apps.workspace_docs',
     'apps.workspace_whiteboards',
