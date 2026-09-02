@@ -6,12 +6,18 @@ import { ReactNode, useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { PaymentStatus, PayrollEmployeeStatus } from '@/lib/payroll';
 
-const PAYROLL_NAV = [
+type PayrollNavItem = {
+  href: string;
+  label: string;
+  exact?: boolean;
+};
+
+const PAYROLL_NAV: PayrollNavItem[] = [
   { href: '/protected/dashboard/payroll', label: 'Overview', exact: true },
   { href: '/protected/dashboard/payroll/employees', label: 'Employees' },
   { href: '/protected/dashboard/payroll/run', label: 'Run payroll' },
   { href: '/protected/dashboard/payroll/payments', label: 'Payments' },
-] as const;
+];
 
 export const MONTH_OPTIONS = [
   { value: 1, label: 'January' },
