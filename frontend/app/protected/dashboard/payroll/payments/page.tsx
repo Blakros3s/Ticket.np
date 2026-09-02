@@ -1,8 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   formatCurrency,
   monthLabel,
@@ -10,6 +8,25 @@ import {
   payrollApi,
   SalaryPayment,
 } from '@/lib/payroll';
+import {
+  EmployeeAvatar,
+  PaymentStatusBadge,
+  PayrollAccessDenied,
+  PayrollActionButton,
+  PayrollEmptyState,
+  PayrollField,
+  PayrollLoading,
+  PayrollPanel,
+  PayrollShell,
+  PayrollTable,
+  PayrollTableBody,
+  PayrollTableHead,
+  PayrollToast,
+  PayrollToolbar,
+  PeriodFields,
+  usePayrollAdmin,
+  usePayrollToast,
+} from '../payroll-ui';
 
 function currentPeriod() {
   const now = new Date();
@@ -17,8 +34,8 @@ function currentPeriod() {
 }
 
 export default function PayrollPaymentsPage() {
-  const { user, isLoading: authLoading } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const { isAdmin, isLoading } = usePayrollAdmin();
+  const { toast, showToast } = usePayrollToast();
   const initial = currentPeriod();
 
   const [periodYear, setPeriodYear] = useState(initial.year);
@@ -27,12 +44,6 @@ export default function PayrollPaymentsPage() {
   const [payments, setPayments] = useState<SalaryPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-
-  const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
 
   const fetchPayments = useCallback(async () => {
     try {
@@ -49,12 +60,25 @@ export default function PayrollPaymentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [periodYear, periodMonth, statusFilter]);
+  }, [periodYear, periodMonth, statusFilter, showToast]);
 
   useEffect(() => {
-    if (authLoading || !isAdmin) return;
+    if (isLoading || !isAdmin) return;
     fetchPayments();
-  }, [authLoading, isAdmin, fetchPayments]);
+  }, [isLoading, isAdmin, fetchPayments]);
+
+  const totals = useMemo(() => {
+    const paid = payments.filter((payment) => payment.payment_status === 'paid');
+    const draft = payments.filter((payment) => payment.payment_status === 'draft');
+    const sum = (items: SalaryPayment[]) =>
+      items.reduce((total, payment) => total + Number(payment.net_amount), 0);
+    return {
+      paidCount: paid.length,
+      draftCount: draft.length,
+      paidTotal: sum(paid),
+      draftTotal: sum(draft),
+    };
+  }, [payments]);
 
   const handleMarkPaid = async (payment: SalaryPayment) => {
     try {
@@ -90,107 +114,124 @@ export default function PayrollPaymentsPage() {
     }
   };
 
-  if (authLoading) {
-    return <div className="flex items-center justify-center min-h-[50vh]"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-sky-400" /></div>;
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-white mb-4">Access Denied</h1>
-          <Link href="/protected/dashboard" className="btn-primary">Back to Dashboard</Link>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading) return <PayrollLoading />;
+  if (!isAdmin) return <PayrollAccessDenied />;
 
   return (
-    <div className="dashboard-page">
-      <div className="dashboard-header">
-        <div>
-          <p className="text-sm text-slate-400 mb-1"><Link href="/protected/dashboard/payroll">Payroll</Link> / Payments</p>
-          <h1 className="dashboard-title">Payment history</h1>
-          <p className="dashboard-subtitle">{monthLabel(periodYear, periodMonth)}</p>
-        </div>
+    <PayrollShell
+      title="Payment history"
+      subtitle={monthLabel(periodYear, periodMonth)}
+      breadcrumb={[{ label: 'Payments' }]}
+      actions={
         <button type="button" className="btn-secondary" disabled={exporting} onClick={handleExport}>
-          Export CSV
+          {exporting ? 'Exporting…' : 'Export CSV'}
         </button>
-      </div>
-
-      <div className="glass-card p-4 mb-6 grid grid-cols-1 md:grid-cols-4 gap-3">
-        <label className="block">
-          <span className="text-sm text-slate-400">Year</span>
-          <input className="input-field" type="number" value={periodYear} onChange={(e) => setPeriodYear(Number(e.target.value))} />
-        </label>
-        <label className="block">
-          <span className="text-sm text-slate-400">Month</span>
-          <input className="input-field" type="number" min={1} max={12} value={periodMonth} onChange={(e) => setPeriodMonth(Number(e.target.value))} />
-        </label>
-        <label className="block md:col-span-2">
-          <span className="text-sm text-slate-400">Status</span>
-          <select className="input-field" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}>
+      }
+    >
+      <PayrollToolbar>
+        <PeriodFields
+          year={periodYear}
+          month={periodMonth}
+          onYearChange={setPeriodYear}
+          onMonthChange={setPeriodMonth}
+        />
+        <PayrollField label="Status" className="md:max-w-[200px]">
+          <select
+            className="input-field"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+          >
             <option value="all">All statuses</option>
             <option value="draft">Draft</option>
             <option value="paid">Paid</option>
             <option value="cancelled">Cancelled</option>
           </select>
-        </label>
+        </PayrollField>
+      </PayrollToolbar>
+
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="stat-card">
+          <p className="stat-card-label">Paid</p>
+          <p className="stat-card-value dashboard-stat-accent-green">{totals.paidCount}</p>
+        </div>
+        <div className="stat-card">
+          <p className="stat-card-label">Paid total</p>
+          <p className="stat-card-value dashboard-stat-accent-green">{formatCurrency(totals.paidTotal.toFixed(2))}</p>
+        </div>
+        <div className="stat-card">
+          <p className="stat-card-label">Drafts</p>
+          <p className="stat-card-value dashboard-stat-accent-amber">{totals.draftCount}</p>
+        </div>
+        <div className="stat-card">
+          <p className="stat-card-label">Draft total</p>
+          <p className="stat-card-value dashboard-stat-accent-amber">{formatCurrency(totals.draftTotal.toFixed(2))}</p>
+        </div>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-sky-400" /></div>
-      ) : (
-        <div className="glass-card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-slate-400 border-b border-white/10">
-                <th className="p-4">Employee</th>
-                <th className="p-4">Period</th>
-                <th className="p-4">Payment date</th>
-                <th className="p-4">Gross</th>
-                <th className="p-4">Net</th>
-                <th className="p-4">Method</th>
-                <th className="p-4">Status</th>
-                <th className="p-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+      <PayrollPanel title="Payments" description="Filter by period and status. Export includes paid rows only.">
+        {loading ? (
+          <PayrollLoading label="Loading payments…" />
+        ) : payments.length === 0 ? (
+          <PayrollEmptyState
+            title="No payments for this period"
+            description="Run payroll for the selected month or adjust your filters."
+          />
+        ) : (
+          <PayrollTable>
+            <PayrollTableHead>
+              <th className="px-4 py-3">Employee</th>
+              <th className="px-4 py-3">Period</th>
+              <th className="px-4 py-3">Payment date</th>
+              <th className="px-4 py-3">Gross</th>
+              <th className="px-4 py-3">Net</th>
+              <th className="px-4 py-3">Method</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </PayrollTableHead>
+            <PayrollTableBody>
               {payments.map((payment) => (
-                <tr key={payment.id} className="border-b border-white/5">
-                  <td className="p-4">
-                    <div className="text-white">{payment.employee_name}</div>
-                    <div className="text-xs text-slate-400">{payment.employee_code}</div>
+                <tr key={payment.id} className="transition-colors hover:bg-slate-700/20">
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <EmployeeAvatar name={payment.employee_name} />
+                      <div>
+                        <p className="font-medium text-white">{payment.employee_name}</p>
+                        <p className="font-mono text-xs text-sky-300">{payment.employee_code}</p>
+                      </div>
+                    </div>
                   </td>
-                  <td className="p-4">{payment.period_year}-{String(payment.period_month).padStart(2, '0')}</td>
-                  <td className="p-4">{payment.payment_date}</td>
-                  <td className="p-4">{formatCurrency(payment.gross_amount)}</td>
-                  <td className="p-4 font-medium text-white">{formatCurrency(payment.net_amount)}</td>
-                  <td className="p-4">{payment.payment_method_display}</td>
-                  <td className="p-4 capitalize">{payment.payment_status_display}</td>
-                  <td className="p-4 space-x-2">
-                    {payment.payment_status === 'draft' && (
-                      <button type="button" className="btn-secondary text-xs" onClick={() => handleMarkPaid(payment)}>Mark paid</button>
-                    )}
-                    {payment.payment_status !== 'cancelled' && (
-                      <button type="button" className="btn-secondary text-xs" onClick={() => handleCancel(payment)}>Cancel</button>
-                    )}
+                  <td className="px-4 py-4 text-slate-300">
+                    {payment.period_year}-{String(payment.period_month).padStart(2, '0')}
+                  </td>
+                  <td className="px-4 py-4 text-slate-300">{payment.payment_date}</td>
+                  <td className="px-4 py-4 text-slate-300">{formatCurrency(payment.gross_amount)}</td>
+                  <td className="px-4 py-4 font-semibold text-white">{formatCurrency(payment.net_amount)}</td>
+                  <td className="px-4 py-4 text-slate-300">{payment.payment_method_display}</td>
+                  <td className="px-4 py-4">
+                    <PaymentStatusBadge status={payment.payment_status} />
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex justify-end gap-2">
+                      {payment.payment_status === 'draft' && (
+                        <PayrollActionButton variant="success" onClick={() => handleMarkPaid(payment)}>
+                          Mark paid
+                        </PayrollActionButton>
+                      )}
+                      {payment.payment_status !== 'cancelled' && (
+                        <PayrollActionButton variant="danger" onClick={() => handleCancel(payment)}>
+                          Cancel
+                        </PayrollActionButton>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
-              {payments.length === 0 && (
-                <tr><td colSpan={8} className="p-8 text-center text-slate-400">No payments for this period.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </PayrollTableBody>
+          </PayrollTable>
+        )}
+      </PayrollPanel>
 
-      {toast && (
-        <div className={`fixed bottom-6 right-6 px-4 py-3 rounded-lg shadow-lg ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'} text-white`}>
-          {toast.message}
-        </div>
-      )}
-    </div>
+      {toast && <PayrollToast message={toast.message} type={toast.type} />}
+    </PayrollShell>
   );
 }

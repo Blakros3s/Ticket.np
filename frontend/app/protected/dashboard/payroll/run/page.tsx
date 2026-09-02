@@ -1,8 +1,6 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
 import {
   formatCurrency,
   monthLabel,
@@ -10,6 +8,24 @@ import {
   payrollApi,
   PeriodStatusRow,
 } from '@/lib/payroll';
+import {
+  EmployeeAvatar,
+  PaymentStatusBadge,
+  PayrollAccessDenied,
+  PayrollEmptyState,
+  PayrollField,
+  PayrollLoading,
+  PayrollPanel,
+  PayrollShell,
+  PayrollTable,
+  PayrollTableBody,
+  PayrollTableHead,
+  PayrollToast,
+  PayrollToolbar,
+  PeriodFields,
+  usePayrollAdmin,
+  usePayrollToast,
+} from '../payroll-ui';
 
 interface EditableRow extends PeriodStatusRow {
   selected: boolean;
@@ -21,8 +37,8 @@ function currentPeriod() {
 }
 
 export default function RunPayrollPage() {
-  const { user, isLoading: authLoading } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const { isAdmin, isLoading } = usePayrollAdmin();
+  const { toast, showToast } = usePayrollToast();
   const initial = currentPeriod();
 
   const [periodYear, setPeriodYear] = useState(initial.year);
@@ -32,12 +48,6 @@ export default function RunPayrollPage() {
   const [rows, setRows] = useState<EditableRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-
-  const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
 
   const loadPeriod = useCallback(async () => {
     try {
@@ -54,14 +64,16 @@ export default function RunPayrollPage() {
     } finally {
       setLoading(false);
     }
-  }, [periodYear, periodMonth]);
+  }, [periodYear, periodMonth, showToast]);
 
   useEffect(() => {
-    if (authLoading || !isAdmin) return;
+    if (isLoading || !isAdmin) return;
     loadPeriod();
-  }, [authLoading, isAdmin, loadPeriod]);
+  }, [isLoading, isAdmin, loadPeriod]);
 
   const selectedRows = useMemo(() => rows.filter((row) => row.selected), [rows]);
+  const payableRows = useMemo(() => rows.filter((row) => row.payment_status !== 'paid'), [rows]);
+  const allSelected = payableRows.length > 0 && payableRows.every((row) => row.selected);
   const selectedTotal = useMemo(
     () => selectedRows.reduce((sum, row) => sum + Number(row.net_amount), 0),
     [selectedRows],
@@ -89,6 +101,15 @@ export default function RunPayrollPage() {
           net_amount: net.toFixed(2),
         };
       }),
+    );
+  };
+
+  const toggleSelectAll = () => {
+    const nextSelected = !allSelected;
+    setRows((current) =>
+      current.map((row) =>
+        row.payment_status === 'paid' ? row : { ...row, selected: nextSelected },
+      ),
     );
   };
 
@@ -132,146 +153,155 @@ export default function RunPayrollPage() {
     }
   };
 
-  if (authLoading) {
-    return <div className="flex items-center justify-center min-h-[50vh]"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-sky-400" /></div>;
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-white mb-4">Access Denied</h1>
-          <Link href="/protected/dashboard" className="btn-primary">Back to Dashboard</Link>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading) return <PayrollLoading />;
+  if (!isAdmin) return <PayrollAccessDenied />;
 
   return (
-    <div className="dashboard-page">
-      <div className="dashboard-header">
-        <div>
-          <p className="text-sm text-slate-400 mb-1"><Link href="/protected/dashboard/payroll">Payroll</Link> / Run</p>
-          <h1 className="dashboard-title">Run payroll</h1>
-          <p className="dashboard-subtitle">{monthLabel(periodYear, periodMonth)}</p>
-        </div>
-        <div className="flex gap-2">
+    <PayrollShell
+      title="Run payroll"
+      subtitle={monthLabel(periodYear, periodMonth)}
+      breadcrumb={[{ label: 'Run payroll' }]}
+      actions={
+        <>
           <button type="button" className="btn-secondary" disabled={submitting} onClick={() => submit(false)}>
             Save draft
           </button>
           <button type="button" className="btn-primary" disabled={submitting} onClick={() => submit(true)}>
-            Pay selected
+            {submitting ? 'Processing…' : 'Pay selected'}
           </button>
-        </div>
-      </div>
-
-      <div className="glass-card p-4 mb-6 grid grid-cols-1 md:grid-cols-4 gap-3">
-        <label className="block">
-          <span className="text-sm text-slate-400">Year</span>
-          <input className="input-field" type="number" value={periodYear} onChange={(e) => setPeriodYear(Number(e.target.value))} />
-        </label>
-        <label className="block">
-          <span className="text-sm text-slate-400">Month</span>
-          <input className="input-field" type="number" min={1} max={12} value={periodMonth} onChange={(e) => setPeriodMonth(Number(e.target.value))} />
-        </label>
-        <label className="block">
-          <span className="text-sm text-slate-400">Payment date</span>
+        </>
+      }
+    >
+      <PayrollToolbar>
+        <PeriodFields
+          year={periodYear}
+          month={periodMonth}
+          onYearChange={setPeriodYear}
+          onMonthChange={setPeriodMonth}
+        />
+        <PayrollField label="Payment date">
           <input className="input-field" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
-        </label>
-        <label className="block">
-          <span className="text-sm text-slate-400">Payment method</span>
+        </PayrollField>
+        <PayrollField label="Payment method" className="md:max-w-[200px]">
           <select className="input-field" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}>
             <option value="bank_transfer">Bank transfer</option>
             <option value="cash">Cash</option>
             <option value="cheque">Cheque</option>
             <option value="qr">QR</option>
           </select>
-        </label>
+        </PayrollField>
+      </PayrollToolbar>
+
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="stat-card">
+          <p className="stat-card-label">Selected employees</p>
+          <p className="stat-card-value dashboard-stat-accent-blue">{selectedRows.length}</p>
+        </div>
+        <div className="stat-card">
+          <p className="stat-card-label">Total net payout</p>
+          <p className="stat-card-value dashboard-stat-accent-green">{formatCurrency(selectedTotal.toFixed(2))}</p>
+        </div>
+        <div className="stat-card">
+          <p className="stat-card-label">Active roster</p>
+          <p className="stat-card-value dashboard-stat-accent-violet">{rows.length}</p>
+        </div>
       </div>
 
-      <div className="glass-card p-4 mb-4 flex justify-between items-center">
-        <p className="text-slate-300">{selectedRows.length} selected</p>
-        <p className="text-white font-semibold">Total net: {formatCurrency(selectedTotal.toFixed(2))}</p>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-sky-400" /></div>
-      ) : (
-        <div className="glass-card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-slate-400 border-b border-white/10">
-                <th className="p-3">Select</th>
-                <th className="p-3">Employee</th>
-                <th className="p-3">Hours</th>
-                <th className="p-3">Allowances</th>
-                <th className="p-3">Overtime</th>
-                <th className="p-3">Bonus</th>
-                <th className="p-3">Deductions</th>
-                <th className="p-3">Net</th>
-                <th className="p-3">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.employee.id} className="border-b border-white/5">
-                  <td className="p-3">
-                    <input
-                      type="checkbox"
-                      checked={row.selected}
-                      disabled={row.payment_status === 'paid'}
-                      onChange={(e) => updateRow(row.employee.id, { selected: e.target.checked })}
-                    />
-                  </td>
-                  <td className="p-3">
-                    <div className="text-white">{row.employee.full_name}</div>
-                    <div className="text-xs text-slate-400">{row.employee.employee_code}</div>
-                  </td>
-                  <td className="p-3">
-                    {row.employee.pay_type === 'hourly' ? (
+      <PayrollPanel
+        title="Pay run grid"
+        description="Adjust hours and line items per employee. Paid rows are locked."
+      >
+        {loading ? (
+          <PayrollLoading label="Loading pay run…" />
+        ) : rows.length === 0 ? (
+          <PayrollEmptyState
+            title="No active employees"
+            description="Add active employees to the payroll roster before running this month's salaries."
+          />
+        ) : (
+          <PayrollTable>
+            <PayrollTableHead>
+              <th className="px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  aria-label="Select all payable employees"
+                />
+              </th>
+              <th className="px-4 py-3">Employee</th>
+              <th className="px-4 py-3">Hours</th>
+              <th className="px-4 py-3">Allowances</th>
+              <th className="px-4 py-3">Overtime</th>
+              <th className="px-4 py-3">Bonus</th>
+              <th className="px-4 py-3">Deductions</th>
+              <th className="px-4 py-3">Net</th>
+              <th className="px-4 py-3">Status</th>
+            </PayrollTableHead>
+            <PayrollTableBody>
+              {rows.map((row) => {
+                const locked = row.payment_status === 'paid';
+                return (
+                  <tr key={row.employee.id} className={`transition-colors ${row.selected ? 'bg-sky-500/5' : ''} hover:bg-slate-700/20`}>
+                    <td className="px-4 py-3">
                       <input
-                        className="input-field w-24"
-                        type="number"
-                        min="0"
-                        step="0.25"
-                        value={row.units_worked ?? ''}
-                        disabled={row.payment_status === 'paid'}
-                        onChange={(e) => updateRow(row.employee.id, { units_worked: e.target.value })}
-                      />
-                    ) : (
-                      <span className="text-slate-500">—</span>
-                    )}
-                  </td>
-                  {(['allowances', 'overtime', 'bonus', 'deductions'] as const).map((field) => (
-                    <td className="p-3" key={field}>
-                      <input
-                        className="input-field w-24"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={row[field]}
-                        disabled={row.payment_status === 'paid'}
-                        onChange={(e) => updateRow(row.employee.id, { [field]: e.target.value })}
+                        type="checkbox"
+                        checked={row.selected}
+                        disabled={locked}
+                        onChange={(e) => updateRow(row.employee.id, { selected: e.target.checked })}
                       />
                     </td>
-                  ))}
-                  <td className="p-3 text-white font-medium">{formatCurrency(row.net_amount)}</td>
-                  <td className="p-3 capitalize text-slate-300">{row.payment_status || 'pending'}</td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr><td colSpan={9} className="p-8 text-center text-slate-400">No active employees for this period.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <EmployeeAvatar name={row.employee.full_name} />
+                        <div>
+                          <p className="font-medium text-white">{row.employee.full_name}</p>
+                          <p className="font-mono text-xs text-sky-300">{row.employee.employee_code}</p>
+                          <p className="meta-text text-xs">{row.employee.pay_type_display}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.employee.pay_type === 'hourly' ? (
+                        <input
+                          className="input-field w-24"
+                          type="number"
+                          min="0"
+                          step="0.25"
+                          value={row.units_worked ?? ''}
+                          disabled={locked}
+                          onChange={(e) => updateRow(row.employee.id, { units_worked: e.target.value })}
+                        />
+                      ) : (
+                        <span className="meta-text">—</span>
+                      )}
+                    </td>
+                    {(['allowances', 'overtime', 'bonus', 'deductions'] as const).map((field) => (
+                      <td className="px-4 py-3" key={field}>
+                        <input
+                          className="input-field w-24"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={row[field]}
+                          disabled={locked}
+                          onChange={(e) => updateRow(row.employee.id, { [field]: e.target.value })}
+                        />
+                      </td>
+                    ))}
+                    <td className="px-4 py-3 font-semibold text-white">{formatCurrency(row.net_amount)}</td>
+                    <td className="px-4 py-3">
+                      <PaymentStatusBadge status={row.payment_status} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </PayrollTableBody>
+          </PayrollTable>
+        )}
+      </PayrollPanel>
 
-      {toast && (
-        <div className={`fixed bottom-6 right-6 px-4 py-3 rounded-lg shadow-lg ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'} text-white`}>
-          {toast.message}
-        </div>
-      )}
-    </div>
+      {toast && <PayrollToast message={toast.message} type={toast.type} />}
+    </PayrollShell>
   );
 }
