@@ -28,6 +28,7 @@ urlpatterns = [
     path('api/public/share/whiteboards/<uuid:token>/', public_shared_whiteboard, name='public-shared-whiteboard'),
     *github_public_urlpatterns,
     path('api/attendance/', include('apps.attendance.urls')),
+    path('api/payroll/', include('apps.payroll.urls')),
     path('api/integrations/', include('apps.integrations.urls')),
     path('api/', include('apps.notifications.urls')),
     path('api/', include('apps.core.urls')),
