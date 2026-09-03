@@ -1,6 +1,100 @@
 import api from './api';
 import { buildQueryString, normalizeListResponse, normalizePaginatedResponse, PaginatedResponse } from './http-utils';
 
+const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '');
+
+export const resolveMediaUrl = (url: string) => {
+  if (!url) return '';
+
+  let resolved = url;
+  if (resolved.startsWith('http://backend:') || resolved.startsWith('http://backend/')) {
+    resolved = resolved.replace(/^http:\/\/backend(?::\d+)?/, API_ORIGIN);
+  }
+
+  if (resolved.startsWith('http')) {
+    return resolved;
+  }
+
+  const normalized = resolved.startsWith('/') ? resolved : `/${resolved}`;
+  if (normalized.startsWith('/api/')) {
+    return `${API_ORIGIN}${normalized}`;
+  }
+  if (normalized.startsWith('/media/')) {
+    return `${API_ORIGIN}/api${normalized}`;
+  }
+  return `${API_ORIGIN}/api/media/${resolved.replace(/^\//, '')}`;
+};
+
+const toMediaFetchPath = (fileValue: string) => {
+  if (!fileValue) return '';
+
+  if (fileValue.startsWith('http')) {
+    const parsed = new URL(resolveMediaUrl(fileValue));
+    return `${parsed.pathname.replace(/^\/api/, '')}${parsed.search}`;
+  }
+
+  if (fileValue.startsWith('/api/')) {
+    return `${fileValue.slice('/api'.length)}`;
+  }
+  if (fileValue.startsWith('/media/')) {
+    return fileValue;
+  }
+  if (fileValue.startsWith('media/')) {
+    return `/${fileValue}`;
+  }
+  return `/media/${fileValue.replace(/^\//, '')}`;
+};
+
+export const fetchMediaBlobUrl = async (fileValue: string): Promise<string> => {
+  const path = toMediaFetchPath(fileValue);
+  const response = await api.get(path, { responseType: 'blob' });
+  return URL.createObjectURL(response.data);
+};
+
+export const isImageMedia = (media: TicketMedia) => {
+  if (media.file_type === 'image') return true;
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(media.file_name);
+};
+
+export type TicketMediaKind = 'image' | 'pdf' | 'video' | 'file';
+
+export const resolveMediaKind = (media: TicketMedia): TicketMediaKind => {
+  if (isImageMedia(media)) return 'image';
+  if (media.file_type === 'video') return 'video';
+  if (media.file_name.toLowerCase().endsWith('.pdf')) return 'pdf';
+  return 'file';
+};
+
+export type ConversationTimelineItem =
+  | { kind: 'comment'; key: string; createdAt: number; comment: TicketComment }
+  | { kind: 'attachment'; key: string; createdAt: number; media: TicketMedia };
+
+export function buildConversationTimeline(
+  ticket: Pick<Ticket, 'comments' | 'media_files'>,
+): ConversationTimelineItem[] {
+  const items: ConversationTimelineItem[] = [];
+
+  for (const comment of ticket.comments ?? []) {
+    items.push({
+      kind: 'comment',
+      key: `comment-${comment.id}`,
+      createdAt: Date.parse(comment.created_at),
+      comment,
+    });
+  }
+
+  for (const media of ticket.media_files ?? []) {
+    items.push({
+      kind: 'attachment',
+      key: `attachment-${media.id}`,
+      createdAt: Date.parse(media.created_at),
+      media,
+    });
+  }
+
+  return items.sort((a, b) => a.createdAt - b.createdAt);
+}
+
 export type TicketType = 'bug' | 'task' | 'feature';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
 export type TicketStatus = 'new' | 'in_progress' | 'qa' | 'closed' | 'reopened';
