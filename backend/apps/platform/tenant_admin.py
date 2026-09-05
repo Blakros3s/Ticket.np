@@ -10,6 +10,7 @@ from apps.platform.tenant_context import get_active_tenants, get_selected_tenant
 class TenantSchemaModelAdminMixin:
     """Run tenant model admin views inside the selected tenant PostgreSQL schema."""
 
+    tenant_scoped = True
     show_full_result_count = False
 
     def _merge_admin_context(self, request, extra_context=None):

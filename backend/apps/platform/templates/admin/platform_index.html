@@ -5,30 +5,43 @@
 {% block content %}
 <div class="platform-tenant-banner">
   <div>
-    <strong>Tenant workspace</strong>
-    <p>Select a client tenant to browse and manage users, tickets, attendance, payroll, and other tenant data.</p>
-  </div>
-  <form method="get" class="platform-tenant-form">
-    <label for="platform-tenant-select">Active tenant</label>
-    <select id="platform-tenant-select" name="tenant" onchange="this.form.submit()">
-      <option value="">Choose tenant…</option>
-      {% for tenant in platform_tenants %}
-        <option value="{{ tenant.schema_name }}" {% if platform_admin_tenant and platform_admin_tenant.schema_name == tenant.schema_name %}selected{% endif %}>
-          {{ tenant.name }} ({{ tenant.schema_name }})
-        </option>
-      {% endfor %}
-    </select>
-    {% if platform_admin_tenant %}
-      <a class="button" href="?tenant=">Clear</a>
+    {% if platform_admin_mode == 'tenant' and platform_admin_tenant %}
+      <strong>Tenant workspace</strong>
+      <p>
+        Managing <strong>{{ platform_admin_tenant.name }}</strong>
+        ({{ platform_admin_tenant.schema_name }}). Users, tickets, attendance, and payroll below.
+      </p>
+    {% else %}
+      <strong>Platform workspace</strong>
+      <p>Manage organizations, domains, plans, subscriptions, and platform users.</p>
+      <p class="help">Switch to <strong>Tenant data</strong> in the header to manage a client&apos;s application data.</p>
     {% endif %}
-  </form>
+  </div>
+  <div class="platform-mode-switch">
+    <a
+      class="platform-mode-button {% if platform_admin_mode == 'platform' %}is-active{% endif %}"
+      href="{% url 'admin:index' %}?tenant="
+    >
+      Platform
+    </a>
+    <form method="get" class="platform-tenant-form">
+      <label class="platform-mode-button {% if platform_admin_mode == 'tenant' %}is-active{% endif %}" for="platform-tenant-select">
+        Tenant data
+      </label>
+      <select id="platform-tenant-select" name="tenant" onchange="this.form.submit()">
+        <option value="">Select tenant…</option>
+        {% for tenant in platform_tenants %}
+          <option value="{{ tenant.schema_name }}" {% if platform_admin_tenant and platform_admin_tenant.schema_name == tenant.schema_name %}selected{% endif %}>
+            {{ tenant.name }} ({{ tenant.schema_name }})
+          </option>
+        {% endfor %}
+      </select>
+      {% if platform_admin_tenant %}
+        <a class="button" href="{% url 'admin:index' %}?tenant=">Back to platform</a>
+      {% endif %}
+    </form>
+  </div>
 </div>
-
-{% if platform_admin_tenant %}
-  <p class="help">Managing <strong>{{ platform_admin_tenant.name }}</strong> ({{ platform_admin_tenant.schema_name }}).</p>
-{% else %}
-  <p class="help">Tenant apps are listed below. You will be asked to confirm the tenant before viewing records.</p>
-{% endif %}
 
 {{ block.super }}
 {% endblock %}
