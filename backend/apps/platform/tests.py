@@ -179,5 +179,31 @@ class PlatformTenantAdminTests(TestCase):
         response = self.client.get(f'/admin/?tenant={self.tenant.schema_name}')
         self.assertEqual(response.status_code, 200)
 
+    @override_settings(
+        STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage',
+    )
+    def test_platform_mode_hides_tenant_apps_on_index(self):
+        from apps.customers.models import Client
+        from apps.users.models import User
+
+        self.client.login(username='tenant_admin_tester', password='testpass123')
+        response = self.client.get('/admin/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, Client._meta.verbose_name_plural)
+        self.assertNotContains(response, User._meta.verbose_name_plural)
+
+    @override_settings(
+        STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage',
+    )
+    def test_tenant_mode_hides_platform_apps_on_index(self):
+        from apps.customers.models import Client
+        from apps.users.models import User
+
+        self.client.login(username='tenant_admin_tester', password='testpass123')
+        response = self.client.get(f'/admin/?tenant={self.tenant.schema_name}')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, User._meta.verbose_name_plural)
+        self.assertNotContains(response, Client._meta.verbose_name_plural)
+
     def test_tenant_models_registered_on_platform_admin_site(self):
         self.assertIn(User, platform_admin_site._registry)
