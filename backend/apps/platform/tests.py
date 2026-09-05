@@ -209,5 +209,29 @@ class PlatformTenantAdminTests(TestCase):
         self.assertNotContains(response, 'Not available for global schema')
         self.assertContains(response, self.tenant.schema_name)
 
+    @override_settings(
+        STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage',
+    )
+    def test_tenant_attendance_admin_changelist_uses_tenant_schema(self):
+        self.client.login(username='tenant_admin_tester', password='testpass123')
+        session = self.client.session
+        session['platform_admin_tenant_schema'] = self.tenant.schema_name
+        session.save()
+
+        response = self.client.get('/admin/attendance/attendance/')
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(
+        STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage',
+    )
+    def test_tenant_leave_request_admin_changelist_uses_tenant_schema(self):
+        self.client.login(username='tenant_admin_tester', password='testpass123')
+        session = self.client.session
+        session['platform_admin_tenant_schema'] = self.tenant.schema_name
+        session.save()
+
+        response = self.client.get('/admin/attendance/leaverequest/')
+        self.assertEqual(response.status_code, 200)
+
     def test_tenant_models_registered_on_platform_admin_site(self):
         self.assertIn(User, platform_admin_site._registry)

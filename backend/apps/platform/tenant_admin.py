@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.shortcuts import render
 from django_tenants.utils import schema_context
 
+from apps.customers.tenant_resolution import set_tenant
 from apps.platform.tenant_context import get_active_tenants, get_selected_tenant
 
 
@@ -19,15 +20,23 @@ class TenantSchemaModelAdminMixin:
         context['platform_tenants'] = get_active_tenants()
         return context
 
+    def _run_with_tenant_schema(self, tenant, callback):
+        with schema_context(tenant.schema_name):
+            set_tenant(tenant)
+            return callback()
+
     def _call_parent_permission(self, request, method_name, default=False, obj=None):
         tenant = get_selected_tenant(request)
         if tenant is None:
             return default
-        with schema_context(tenant.schema_name):
+
+        def check_permission():
             parent_method = getattr(super(), method_name)
             if obj is not None:
                 return parent_method(request, obj)
             return parent_method(request)
+
+        return self._run_with_tenant_schema(tenant, check_permission)
 
     def has_view_permission(self, request, obj=None):
         return self._call_parent_permission(request, 'has_view_permission', obj=obj)
@@ -47,8 +56,10 @@ class TenantSchemaModelAdminMixin:
         tenant = get_selected_tenant(request)
         if tenant is None:
             return False
-        with schema_context(tenant.schema_name):
-            return super().has_module_permission(request)
+        return self._run_with_tenant_schema(
+            tenant,
+            lambda: super().has_module_permission(request),
+        )
 
     def _render_tenant_required(self, request, extra_context=None):
         context = self._merge_admin_context(request, extra_context)
@@ -66,8 +77,10 @@ class TenantSchemaModelAdminMixin:
 
         kwargs['extra_context'] = self._merge_admin_context(request, kwargs.get('extra_context'))
 
-        with schema_context(tenant.schema_name):
-            return view(request, *args, **kwargs)
+        return self._run_with_tenant_schema(
+            tenant,
+            lambda: view(request, *args, **kwargs),
+        )
 
     def changelist_view(self, request, extra_context=None):
         return self._run_in_tenant_schema(
