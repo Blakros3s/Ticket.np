@@ -2,20 +2,7 @@
 
 {% block content %}
 <div class="platform-tenant-banner">
-  <div>
-    <strong>Select a tenant</strong>
-    <p>Choose which client schema to manage for {{ opts.verbose_name_plural|default:opts.verbose_name }}.</p>
-  </div>
-  <form method="get" class="platform-tenant-form">
-    <label for="platform-tenant-select">Active tenant</label>
-    <select id="platform-tenant-select" name="tenant" onchange="this.form.submit()">
-      <option value="">Choose tenant…</option>
-      {% for tenant in platform_tenants %}
-        <option value="{{ tenant.schema_name }}" {% if platform_admin_tenant and platform_admin_tenant.schema_name == tenant.schema_name %}selected{% endif %}>
-          {{ tenant.name }} ({{ tenant.schema_name }})
-        </option>
-      {% endfor %}
-    </select>
-  </form>
+  <strong>Select a tenant</strong>
+  <p>Choose a tenant from the header to manage {{ opts.verbose_name_plural|default:opts.verbose_name }}.</p>
 </div>
 {% endblock %}

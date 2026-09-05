@@ -46,8 +46,7 @@ class TenantSchemaModelAdminMixin:
             return False
         tenant = get_selected_tenant(request)
         if tenant is None:
-            # Keep tenant apps visible on the index without querying tenant tables.
-            return True
+            return False
         with schema_context(tenant.schema_name):
             return super().has_module_permission(request)
 
