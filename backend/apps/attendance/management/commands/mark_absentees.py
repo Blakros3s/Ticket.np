@@ -17,7 +17,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'Skipped. {today} is not a working day.'))
             return
             
-        users = User.objects.filter(is_active=True, is_staff=False, is_superuser=False)
+        users = User.attendance_trackable_queryset(for_date=today).filter(is_staff=False, is_superuser=False)
         absent_count = 0
         
         for user in users:

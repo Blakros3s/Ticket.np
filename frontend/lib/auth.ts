@@ -18,6 +18,8 @@ export interface User {
   department_roles: UserRole[];
   login_address?: string | null;
   is_active: boolean;
+  date_of_joining?: string | null;
+  date_of_leaving?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -109,6 +111,7 @@ export const authApi = {
     last_name?: string;
     role?: 'admin' | 'employee' | 'manager';
     department_role_ids?: number[];
+    date_of_joining?: string;
     password: string;
     confirm_password?: string;
   }): Promise<AuthResponse> => {
@@ -127,6 +130,8 @@ export const authApi = {
       role: 'admin' | 'employee' | 'manager';
       department_role_ids: number[];
       is_active: boolean;
+      date_of_joining?: string | null;
+      date_of_leaving?: string | null;
     }>
   ): Promise<any> => {
     const response = await api.patch(`/auth/users/${userId}/`, data);

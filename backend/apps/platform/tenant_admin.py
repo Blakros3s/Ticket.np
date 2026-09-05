@@ -18,6 +18,51 @@ class TenantSchemaModelAdminMixin:
         context['platform_tenants'] = get_active_tenants()
         return context
 
+    def _execute_in_tenant_schema(self, request, callback, default=False):
+        tenant = get_selected_tenant(request)
+        if tenant is None:
+            return default
+        with schema_context(tenant.schema_name):
+            return callback()
+
+    def has_view_permission(self, request, obj=None):
+        return self._execute_in_tenant_schema(
+            request,
+            lambda: super().has_view_permission(request, obj),
+            default=False,
+        )
+
+    def has_add_permission(self, request):
+        return self._execute_in_tenant_schema(
+            request,
+            lambda: super().has_add_permission(request),
+            default=False,
+        )
+
+    def has_change_permission(self, request, obj=None):
+        return self._execute_in_tenant_schema(
+            request,
+            lambda: super().has_change_permission(request, obj),
+            default=False,
+        )
+
+    def has_delete_permission(self, request, obj=None):
+        return self._execute_in_tenant_schema(
+            request,
+            lambda: super().has_delete_permission(request, obj),
+            default=False,
+        )
+
+    def has_module_permission(self, request):
+        if not request.user.is_active or not request.user.is_staff:
+            return False
+        tenant = get_selected_tenant(request)
+        if tenant is None:
+            # Keep tenant apps visible on the index without querying tenant tables.
+            return True
+        with schema_context(tenant.schema_name):
+            return super().has_module_permission(request)
+
     def _render_tenant_required(self, request, extra_context=None):
         context = self._merge_admin_context(request, extra_context)
         context.update({

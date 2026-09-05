@@ -32,7 +32,7 @@ class CustomUserAdmin(BaseUserAdmin):
             'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')
         }),
         (_('Dates'), {
-            'fields': ('last_login', 'date_joined')
+            'fields': ('last_login', 'date_joined', 'date_of_joining', 'date_of_leaving')
         }),
         (_('Role'), {
             'fields': ('role', 'department_roles')
@@ -43,11 +43,11 @@ class CustomUserAdmin(BaseUserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('username', 'email', 'role', 'password1', 'password2'),
+            'fields': ('username', 'email', 'role', 'date_of_joining', 'password1', 'password2'),
         }),
     )
 
-    list_display = ['username', 'email', 'role', 'is_active', 'date_joined']
+    list_display = ['username', 'email', 'role', 'date_of_joining', 'date_of_leaving', 'is_active', 'date_joined']
     list_filter = ['role', 'is_active', 'department_roles', 'date_joined']
     search_fields = ['username', 'email']
     ordering = ['-date_joined']

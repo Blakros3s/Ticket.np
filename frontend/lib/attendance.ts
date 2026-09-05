@@ -20,6 +20,7 @@ export interface AttendanceCalendarDay {
   day: number;
   weekday: number;
   is_working_day: boolean;
+  is_employment_day?: boolean;
   status: AttendanceDayStatus;
   first_available_time?: string | null;
 }
@@ -89,6 +90,7 @@ export interface Attendance {
   formatted_summary?: string;
   created_at?: string;
   is_working_day?: boolean;
+  is_employment_day?: boolean;
   message?: string;
 }
 

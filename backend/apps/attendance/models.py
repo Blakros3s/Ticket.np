@@ -294,6 +294,9 @@ class Attendance(models.Model):
         """Count working days in a date range (excludes weekends and public holidays)."""
         from datetime import timedelta
 
+        if start_date > end_date:
+            return 0
+
         current = start_date
         count = 0
         while current <= end_date:
@@ -302,6 +305,14 @@ class Attendance(models.Model):
             current += timedelta(days=1)
         return count
 
+    @staticmethod
+    def get_employment_window(employee, start_date, end_date):
+        employment_start = employee.get_employment_start()
+        employment_end = employee.date_of_leaving or end_date
+        effective_start = max(start_date, employment_start)
+        effective_end = min(end_date, employment_end)
+        return effective_start, effective_end
+
     @classmethod
     def aggregate_stats_for_employee(cls, employee, start_date, end_date):
         """Compute present/absent/leave counts for an employee in a date range."""
@@ -309,19 +320,30 @@ class Attendance(models.Model):
 
         today = timezone.localdate()
         settings = OfficeSettings.get_settings()
-        total_working_days = cls.count_working_days_in_range(start_date, end_date)
+        effective_start, effective_end = cls.get_employment_window(employee, start_date, end_date)
+
+        if effective_start > effective_end:
+            return {
+                'total_working_days': 0,
+                'present_days': 0,
+                'absent_days': 0,
+                'leave_days': 0,
+                'percentage': 0,
+            }
+
+        total_working_days = cls.count_working_days_in_range(effective_start, effective_end)
 
         records = {
             record.date: record
             for record in cls.objects.filter(
                 employee=employee,
-                date__range=[start_date, end_date]
+                date__range=[effective_start, effective_end]
             )
         }
 
         present = absent = leave = 0
-        current = start_date
-        while current <= end_date:
+        current = effective_start
+        while current <= effective_end:
             if not cls.is_working_day(current):
                 current += timedelta(days=1)
                 continue
@@ -371,16 +393,24 @@ class Attendance(models.Model):
         }
 
         days = []
+        employment_start = employee.get_employment_start()
+        employment_end = employee.date_of_leaving
         current = start_date
         while current <= end_date:
             is_working = cls.is_working_day(current)
+            is_employment_day = (
+                employment_start <= current
+                and (employment_end is None or current <= employment_end)
+            )
             record = records.get(current)
             day_complete = (
                 current < today
                 or (current == today and settings.has_office_hours_ended)
             )
 
-            if not is_working:
+            if not is_employment_day:
+                status = 'none'
+            elif not is_working:
                 status = 'off'
             elif record:
                 if record.status == 'present':
@@ -403,6 +433,7 @@ class Attendance(models.Model):
                 'day': current.day,
                 'weekday': current.weekday(),
                 'is_working_day': is_working,
+                'is_employment_day': is_employment_day,
                 'status': status,
                 'first_available_time': (
                     timezone.localtime(record.first_available_at).strftime('%I:%M %p')

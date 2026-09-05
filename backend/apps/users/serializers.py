@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate
+from django.utils import timezone
 from django_tenants.utils import schema_context
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
@@ -26,8 +27,8 @@ class UserSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'login_address', 'is_active', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'login_address', 'is_active', 'created_at', 'updated_at']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'login_address', 'date_of_joining', 'date_of_leaving', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'login_address', 'date_of_joining', 'date_of_leaving', 'is_active', 'created_at', 'updated_at']
 
     def get_login_address(self, obj: User) -> str | None:
         from apps.customers.services.login_accounts import login_address_for_user
@@ -45,8 +46,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'login_address', 'is_active', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'username', 'role', 'login_address', 'is_active', 'created_at', 'updated_at']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'login_address', 'date_of_joining', 'date_of_leaving', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'username', 'role', 'login_address', 'date_of_joining', 'date_of_leaving', 'is_active', 'created_at', 'updated_at']
 
     def get_login_address(self, obj: User) -> str | None:
         from apps.customers.services.login_accounts import login_address_for_user
@@ -76,8 +77,25 @@ class AdminUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'login_address', 'is_active', 'created_at', 'updated_at']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'login_address', 'date_of_joining', 'date_of_leaving', 'is_active', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at', 'login_address']
+
+    def validate(self, attrs):
+        instance = getattr(self, 'instance', None)
+        joining = attrs.get('date_of_joining', getattr(instance, 'date_of_joining', None))
+        leaving = attrs.get('date_of_leaving', getattr(instance, 'date_of_leaving', None))
+        if joining and leaving and leaving < joining:
+            raise serializers.ValidationError({
+                'date_of_leaving': 'Date of leaving cannot be before date of joining.',
+            })
+        return attrs
+
+    def _apply_employment_status_rules(self, instance, validated_data):
+        is_active = validated_data.get('is_active')
+        if is_active is True:
+            validated_data['date_of_leaving'] = None
+        elif is_active is False and not validated_data.get('date_of_leaving') and not instance.date_of_leaving:
+            validated_data['date_of_leaving'] = timezone.localdate()
 
     def get_login_address(self, obj: User) -> str | None:
         from apps.customers.services.login_accounts import login_address_for_user
@@ -111,6 +129,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
 
         previous_username = instance.username
         department_roles = validated_data.pop('department_roles', None)
+        self._apply_employment_status_rules(instance, validated_data)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -279,7 +298,16 @@ class TenantTokenRefreshSerializer(TokenRefreshSerializer):
 
         with schema_context(client.schema_name):
             set_tenant(client)
-            return super().validate(attrs)
+            validated = super().validate(attrs)
+            user_id = refresh.get('user_id')
+            if user_id:
+                try:
+                    tenant_user = User.objects.get(pk=user_id)
+                except User.DoesNotExist:
+                    raise serializers.ValidationError('User account not found.')
+                if not tenant_user.is_active:
+                    raise serializers.ValidationError('Your account is inactive. Please contact your administrator.')
+            return validated
 
 
 class TenantOrganizationSerializer(serializers.Serializer):
@@ -314,7 +342,7 @@ class AdminUserCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'password', 'confirm_password', 'is_active']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'department_roles', 'department_role_ids', 'password', 'confirm_password', 'date_of_joining', 'is_active']
         read_only_fields = ['id', 'is_active']
 
     def validate(self, attrs):
@@ -348,6 +376,8 @@ class AdminUserCreateSerializer(serializers.ModelSerializer):
         validated_data.pop('confirm_password')
         password = validated_data.pop('password')
         department_roles = validated_data.pop('department_roles', [])
+        if not validated_data.get('date_of_joining'):
+            validated_data['date_of_joining'] = timezone.localdate()
         user = User.objects.create(**validated_data)
         user.set_password(password)
         user.save()

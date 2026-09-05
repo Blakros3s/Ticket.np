@@ -29,6 +29,7 @@ interface CalendarCell {
   label: number;
   status: AttendanceCalendarDay['status'];
   isWorkingDay: boolean;
+  isEmploymentDay: boolean;
   subtitle?: string | null;
 }
 
@@ -81,7 +82,7 @@ export function AttendanceMonthCalendar() {
       const grid: CalendarCell[] = [];
 
       for (let i = 0; i < firstWeekday; i += 1) {
-        grid.push({ key: `pad-${i}`, label: 0, status: 'off', isWorkingDay: false });
+        grid.push({ key: `pad-${i}`, label: 0, status: 'off', isWorkingDay: false, isEmploymentDay: true });
       }
 
       for (let day = 1; day <= range.daysInMonth; day += 1) {
@@ -92,6 +93,7 @@ export function AttendanceMonthCalendar() {
           label: day,
           status: record?.status ?? 'none',
           isWorkingDay: record?.is_working_day ?? true,
+          isEmploymentDay: record?.is_employment_day ?? true,
           subtitle: record?.first_available_time,
         });
       }
@@ -104,7 +106,7 @@ export function AttendanceMonthCalendar() {
     const grid: CalendarCell[] = [];
 
     for (let i = 0; i < firstWeekday; i += 1) {
-      grid.push({ key: `pad-${i}`, label: 0, status: 'off', isWorkingDay: false });
+      grid.push({ key: `pad-${i}`, label: 0, status: 'off', isWorkingDay: false, isEmploymentDay: true });
     }
 
     bsDays.forEach(({ bsDay, adDate }) => {
@@ -114,6 +116,7 @@ export function AttendanceMonthCalendar() {
         label: bsDay,
         status: record?.status ?? 'none',
         isWorkingDay: record?.is_working_day ?? true,
+        isEmploymentDay: record?.is_employment_day ?? true,
         subtitle: record?.first_available_time,
       });
     });
@@ -190,19 +193,24 @@ export function AttendanceMonthCalendar() {
               return <div key={cell.key} className="aspect-square" />;
             }
 
+            const cellClass = !cell.isEmploymentDay
+              ? 'bg-slate-800/40 border-slate-700/30 text-slate-500'
+              : statusStyles[cell.status];
+
             return (
               <div
                 key={cell.key}
-                title={cell.status}
-                className={`aspect-square rounded-lg border p-2 flex flex-col items-center justify-center ${statusStyles[cell.status]}`}
+                title={!cell.isEmploymentDay ? 'Not employed' : cell.status}
+                className={`aspect-square rounded-lg border p-2 flex flex-col items-center justify-center ${cellClass}`}
               >
                 <span className="text-sm font-bold">{cell.label}</span>
-                {cell.status === 'present' && cell.subtitle && (
+                {!cell.isEmploymentDay ? (
+                  <span className="text-[9px] mt-0.5 opacity-70">N/A</span>
+                ) : cell.status === 'present' && cell.subtitle ? (
                   <span className="text-[9px] mt-0.5 opacity-80">{cell.subtitle}</span>
-                )}
-                {cell.status === 'off' && (
+                ) : cell.status === 'off' ? (
                   <span className="text-[9px] mt-0.5 opacity-70">Off</span>
-                )}
+                ) : null}
               </div>
             );
           })}
