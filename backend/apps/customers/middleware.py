@@ -32,7 +32,13 @@ class TenantResolutionMiddleware:
         request.urlconf = settings.ROOT_URLCONF
 
         if request.path.startswith('/admin/'):
-            set_public_schema()
+            from apps.platform.tenant_context import get_selected_tenant
+
+            tenant = get_selected_tenant(request)
+            if tenant is not None:
+                set_tenant(tenant)
+            else:
+                set_public_schema()
             return self.get_response(request)
 
         if is_public_api_path(request.path):
