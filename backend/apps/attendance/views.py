@@ -201,6 +201,12 @@ class AttendanceListView(generics.ListCreateAPIView):
                 {'detail': 'Cannot mark attendance on non-working days (weekend or public holiday).'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        if not request.user.is_employed_on(target_date):
+            return Response(
+                {'detail': 'Attendance is not tracked for this date based on your employment period.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # Get or create attendance record
         attendance, created = Attendance.objects.get_or_create(
@@ -246,9 +252,8 @@ def get_team_attendance(request):
     
     settings = OfficeSettings.get_settings()
     
-    # Get all employees
     from apps.users.models import User
-    employees = User.objects.filter(is_active=True).exclude(role='admin')
+    employees = User.attendance_trackable_queryset(for_date=today)
     
     # Get or create attendance records for today
     attendance_records = []
@@ -305,6 +310,18 @@ def get_my_attendance(request):
             'date': today.isoformat(),
             'is_working_day': False,
             'message': 'Today is a non-working day (weekend or public holiday).',
+            'status': 'neutral',
+            'current_availability': 'none',
+            'can_toggle_status': False,
+            'daily_logs': []
+        })
+
+    if not request.user.is_employed_on(today):
+        return Response({
+            'date': today.isoformat(),
+            'is_employment_day': False,
+            'is_working_day': True,
+            'message': 'Attendance tracking starts from your date of joining.',
             'status': 'neutral',
             'current_availability': 'none',
             'can_toggle_status': False,
@@ -382,9 +399,8 @@ def get_daily_attendance_logs(request):
             'records': []
         })
 
-    # Get all active employees (excluding admins)
     from apps.users.models import User
-    employees = User.objects.filter(is_active=True).exclude(role='admin')
+    employees = User.attendance_trackable_queryset(for_date=target_date)
     
     settings = OfficeSettings.get_settings()
     attendance_records = []
@@ -463,7 +479,7 @@ def get_attendance_stats(request):
 
     if user.role in ['admin', 'manager'] and request.query_params.get('all_employees') == 'true':
         from apps.users.models import User as AppUser
-        employees = AppUser.objects.filter(is_active=True).exclude(role='admin')
+        employees = AppUser.attendance_report_queryset(start_date, end_date)
         stats = []
         for emp in employees:
             emp_stats = Attendance.aggregate_stats_for_employee(emp, start_date, end_date)

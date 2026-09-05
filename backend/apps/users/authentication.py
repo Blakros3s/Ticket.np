@@ -28,4 +28,7 @@ class TenantJWTAuthentication(JWTAuthentication):
     def get_user(self, validated_token):
         if validated_token.get('auth_type') == 'platform':
             raise InvalidToken('Platform token cannot be used on tenant routes.')
-        return super().get_user(validated_token)
+        user = super().get_user(validated_token)
+        if user is not None and not user.is_active:
+            raise InvalidToken('User account is inactive.')
+        return user

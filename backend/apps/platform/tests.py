@@ -73,6 +73,18 @@ class PlatformDjangoAdminTests(TestCase):
     @override_settings(
         STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage',
     )
+    def test_django_admin_index_does_not_query_tenant_tables_without_selection(self):
+        """OfficeSettings.has_add_permission uses exists(); must not run on public schema."""
+        from apps.attendance.models import OfficeSettings
+
+        self.assertIn(OfficeSettings, platform_admin_site._registry)
+        self.client.login(username='django_admin_test', password='testpass123')
+        response = self.client.get('/admin/')
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(
+        STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage',
+    )
     def test_django_admin_login_with_platform_user(self):
         response = self.client.post(
             '/admin/login/',

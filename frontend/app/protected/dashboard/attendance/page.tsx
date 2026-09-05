@@ -161,6 +161,8 @@ export default function AttendancePage() {
   const isUnavailable = myAttendance?.current_availability === 'unavailable';
   const officeHoursEnded = officeSettings?.has_office_hours_ended;
   const isNonWorkingDay = myAttendance?.is_working_day === false;
+  const isEmploymentDayOff = myAttendance?.is_employment_day === false;
+  const showLiveAttendanceSections = !isNonWorkingDay && !isEmploymentDayOff;
 
   // Team availability groups
   const teamGroups = [
@@ -260,7 +262,25 @@ export default function AttendancePage() {
             </div>
           )}
 
-          {!isNonWorkingDay && (
+          {isEmploymentDayOff && (
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 mb-8">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full bg-slate-600/50 flex items-center justify-center shrink-0">
+                  <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-white mb-1">Attendance Not Applicable</h2>
+                  <p className="text-slate-400">
+                    {myAttendance?.message || 'Attendance tracking starts from your date of joining.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showLiveAttendanceSections && (
             <>
           {/* 1. My Status Today - TOP */}
           <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6 mb-8">
