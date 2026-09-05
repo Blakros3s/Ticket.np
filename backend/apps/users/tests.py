@@ -182,3 +182,32 @@ class AuthenticationTestCase(TestCase):
         self.client.force_authenticate(user=self.employee_user)
         response = self.client.post(f'/api/auth/users/{self.manager_user.id}/deactivate/')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_create_user_includes_date_of_joining(self):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.post(
+            '/api/auth/users/',
+            {
+                'username': 'joined_user',
+                'email': 'joined@test.com',
+                'password': 'password123',
+                'confirm_password': 'password123',
+                'role': 'employee',
+                'date_of_joining': '2026-01-15',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['date_of_joining'], '2026-01-15')
+
+    def test_deactivating_user_sets_leaving_date(self):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.patch(
+            f'/api/auth/users/{self.employee_user.id}/',
+            {'is_active': False},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.employee_user.refresh_from_db()
+        self.assertFalse(self.employee_user.is_active)
+        self.assertIsNotNone(self.employee_user.date_of_leaving)

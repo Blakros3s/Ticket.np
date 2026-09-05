@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { authApi } from '@/lib/auth';
 import { useSettings } from '@/lib/settings-context';
+import { toLocalDateString } from '@/lib/date-utils';
 
 type UserSystemRole = 'admin' | 'manager' | 'employee';
 
@@ -25,6 +26,8 @@ interface User {
   department_roles: UserRole[];
   login_address?: string | null;
   is_active: boolean;
+  date_of_joining?: string | null;
+  date_of_leaving?: string | null;
 }
 
 export default function UsersManagementPage() {
@@ -60,6 +63,7 @@ export default function UsersManagementPage() {
     last_name: '',
     role: 'employee' as UserSystemRole,
     department_role_ids: [] as number[],
+    date_of_joining: toLocalDateString(),
     password: '',
     confirm_password: ''
   });
@@ -310,6 +314,7 @@ export default function UsersManagementPage() {
         last_name: '',
         role: 'employee',
         department_role_ids: [],
+        date_of_joining: toLocalDateString(),
         password: '',
         confirm_password: ''
       });
@@ -335,7 +340,10 @@ export default function UsersManagementPage() {
         first_name: selectedUser.first_name,
         last_name: selectedUser.last_name,
         role: selectedUser.role,
-        department_role_ids: selectedUser.department_roles?.map(r => r.id) || []
+        department_role_ids: selectedUser.department_roles?.map(r => r.id) || [],
+        date_of_joining: selectedUser.date_of_joining || undefined,
+        date_of_leaving: selectedUser.date_of_leaving || null,
+        is_active: selectedUser.is_active,
       };
       await authApi.updateUser(selectedUser.id, updateData);
       showToastMessage('User updated successfully', 'success');
@@ -347,6 +355,24 @@ export default function UsersManagementPage() {
         error.response?.data?.email?.[0] ||
         'Failed to update user';
       showToastMessage(errorMessage, 'error');
+    }
+  };
+
+  const handleToggleUserStatus = async (user: User) => {
+    if (user.id === currentUser?.id && user.is_active) {
+      showToastMessage('You cannot deactivate your own account', 'error');
+      return;
+    }
+
+    try {
+      await authApi.updateUser(user.id, { is_active: !user.is_active });
+      showToastMessage(
+        user.is_active ? `${user.username} marked inactive` : `${user.username} marked active`,
+        'success',
+      );
+      fetchUsers();
+    } catch (error: any) {
+      showToastMessage(error.response?.data?.detail || 'Failed to update user status', 'error');
     }
   };
 
@@ -764,10 +790,19 @@ export default function UsersManagementPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${user.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                        }`}>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleUserStatus(user)}
+                        disabled={user.id === currentUser?.id && user.is_active}
+                        className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                          user.is_active
+                            ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                            : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                        } ${user.id === currentUser?.id && user.is_active ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                        title={user.id === currentUser?.id && user.is_active ? 'Cannot deactivate yourself' : 'Toggle active status'}
+                      >
                         {user.is_active ? 'Active' : 'Inactive'}
-                      </span>
+                      </button>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -923,6 +958,17 @@ export default function UsersManagementPage() {
                   <option value="manager">Manager</option>
                   <option value="admin">Admin</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Date of Joining *</label>
+                <input
+                  type="date"
+                  required
+                  className="input-field w-full"
+                  value={newUser.date_of_joining}
+                  onChange={(e) => setNewUser({ ...newUser, date_of_joining: e.target.value })}
+                />
+                <p className="text-xs text-slate-500 mt-1">Attendance tracking starts from this date.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Department Roles</label>
@@ -1095,6 +1141,50 @@ export default function UsersManagementPage() {
                   <option value="admin">Admin</option>
                 </select>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">Date of Joining</label>
+                  <input
+                    type="date"
+                    required
+                    className="input-field w-full"
+                    value={selectedUser.date_of_joining || ''}
+                    onChange={(e) => setSelectedUser({ ...selectedUser, date_of_joining: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">Date of Leaving</label>
+                  <input
+                    type="date"
+                    className="input-field w-full"
+                    value={selectedUser.date_of_leaving || ''}
+                    onChange={(e) => setSelectedUser({
+                      ...selectedUser,
+                      date_of_leaving: e.target.value || null,
+                    })}
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Optional. Usually set when marking a user inactive.</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between p-4 rounded-xl border border-slate-700/50 bg-slate-900/40">
+                <div>
+                  <p className="text-sm font-medium text-white">Account Status</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Inactive users cannot sign in and are excluded from attendance.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedUser({ ...selectedUser, is_active: !selectedUser.is_active })}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    selectedUser.is_active
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  }`}
+                >
+                  {selectedUser.is_active ? 'Active' : 'Inactive'}
+                </button>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Department Roles</label>
                 <div className="flex flex-wrap gap-2 min-h-[40px] p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
@@ -1233,6 +1323,22 @@ export default function UsersManagementPage() {
                       <span className="text-slate-500 text-sm">-</span>
                     )}
                   </div>
+                </div>
+                <div className="flex justify-between py-2 border-b border-slate-700">
+                  <span className="text-slate-400">Date of Joining</span>
+                  <span className="text-white">
+                    {selectedUser.date_of_joining
+                      ? new Date(selectedUser.date_of_joining).toLocaleDateString()
+                      : '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-slate-700">
+                  <span className="text-slate-400">Date of Leaving</span>
+                  <span className="text-white">
+                    {selectedUser.date_of_leaving
+                      ? new Date(selectedUser.date_of_leaving).toLocaleDateString()
+                      : '-'}
+                  </span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-slate-700">
                   <span className="text-slate-400">Status</span>
