@@ -13,6 +13,8 @@ import {
 import { useProjects } from '@/lib/data-hooks';
 import { toLocalDateString } from '@/lib/date-utils';
 import { extractErrorMessage } from '@/components/error-modal';
+import { attendanceApi, AttendanceStats } from '@/lib/attendance';
+import { useSettings } from '@/lib/settings-context';
 
 export default function ReportsPage() {
   const { user } = useAuth();
@@ -33,6 +35,22 @@ export default function ReportsPage() {
 
   const isAdmin = user?.role === 'admin';
   const isManager = user?.role === 'manager';
+  const isAdminOrManager = isAdmin || isManager;
+  const { terminology } = useSettings();
+
+  const [attendanceReport, setAttendanceReport] = useState<AttendanceStats | null>(null);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceError, setAttendanceError] = useState<string | null>(null);
+
+  const attendanceRange = useMemo(() => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - (period - 1));
+    return {
+      start_date: toLocalDateString(start),
+      end_date: toLocalDateString(end),
+    };
+  }, [period]);
 
   const activeProjects = useMemo(
     () => projects.filter((project) => project.status === 'active'),
@@ -108,6 +126,56 @@ export default function ReportsPage() {
       fetchReports();
     }
   }, [user, period, isAdmin, isManager]);
+
+  useEffect(() => {
+    if (!user || !isAdminOrManager) {
+      setAttendanceReport(null);
+      return;
+    }
+
+    const fetchAttendanceReport = async () => {
+      setAttendanceLoading(true);
+      setAttendanceError(null);
+      try {
+        const data = await attendanceApi.getAttendanceStats({
+          ...attendanceRange,
+          all_employees: true,
+        });
+        setAttendanceReport(data);
+      } catch (error: unknown) {
+        setAttendanceReport(null);
+        setAttendanceError(extractErrorMessage(error).message || 'Failed to load attendance report');
+      } finally {
+        setAttendanceLoading(false);
+      }
+    };
+
+    fetchAttendanceReport();
+  }, [user, isAdminOrManager, attendanceRange]);
+
+  const sortedAttendanceStats = useMemo(() => {
+    const stats = attendanceReport?.stats ?? [];
+    return [...stats].sort((a, b) => b.percentage - a.percentage);
+  }, [attendanceReport]);
+
+  const attendanceSummary = useMemo(() => {
+    const stats = attendanceReport?.stats ?? [];
+    if (stats.length === 0) return null;
+
+    return {
+      teamSize: stats.length,
+      totalPresent: stats.reduce((sum, employee) => sum + employee.present_days, 0),
+      totalAbsent: stats.reduce((sum, employee) => sum + employee.absent_days, 0),
+      totalLeave: stats.reduce((sum, employee) => sum + employee.leave_days, 0),
+      avgRate: stats.reduce((sum, employee) => sum + employee.percentage, 0) / stats.length,
+    };
+  }, [attendanceReport]);
+
+  const getActivityBarColor = (percentage: number) => {
+    if (percentage > 85) return 'bg-green-500';
+    if (percentage > 60) return 'bg-sky-500';
+    return 'bg-red-500';
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -265,6 +333,146 @@ export default function ReportsPage() {
                 {exportingFormat === 'pdf' ? 'Exporting PDF…' : 'Export PDF'}
               </button>
             </div>
+          </section>
+        )}
+
+        {isAdminOrManager && (
+          <section className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-6">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Attendance Report
+                </h2>
+                <p className="text-sm text-slate-400 mt-1">
+                  {terminology.label} attendance for{' '}
+                  {attendanceReport?.range?.start ?? attendanceRange.start_date}
+                  {' — '}
+                  {attendanceReport?.range?.end ?? attendanceRange.end_date}
+                  {' '}
+                  (matches the period selector above)
+                </p>
+              </div>
+              <Link
+                href="/protected/dashboard/attendance"
+                className="inline-flex items-center gap-2 text-sm font-medium text-sky-400 hover:text-sky-300 transition-colors"
+              >
+                Open Attendance
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
+
+            {attendanceError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                {attendanceError}
+              </div>
+            )}
+
+            {attendanceLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="relative">
+                  <div className="w-12 h-12 border-4 border-slate-700 rounded-full" />
+                  <div className="absolute top-0 left-0 w-12 h-12 border-4 border-transparent border-t-emerald-400 rounded-full animate-spin" />
+                </div>
+              </div>
+            ) : sortedAttendanceStats.length === 0 ? (
+              <div className="text-center py-12">
+                <svg className="w-12 h-12 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <p className="text-slate-400">No attendance records found for this period.</p>
+              </div>
+            ) : (
+              <>
+                {attendanceSummary && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-slate-700/30 rounded-lg p-4 border border-slate-700/40">
+                      <p className="text-slate-400 text-sm">Team members</p>
+                      <p className="text-2xl font-bold text-white mt-1">{attendanceSummary.teamSize}</p>
+                    </div>
+                    <div className="bg-slate-700/30 rounded-lg p-4 border border-slate-700/40">
+                      <p className="text-slate-400 text-sm">Avg activity rate</p>
+                      <p className="text-2xl font-bold text-emerald-400 mt-1">{attendanceSummary.avgRate.toFixed(0)}%</p>
+                    </div>
+                    <div className="bg-slate-700/30 rounded-lg p-4 border border-slate-700/40">
+                      <p className="text-slate-400 text-sm">Total present days</p>
+                      <p className="text-2xl font-bold text-green-400 mt-1">{attendanceSummary.totalPresent}</p>
+                    </div>
+                    <div className="bg-slate-700/30 rounded-lg p-4 border border-slate-700/40">
+                      <p className="text-slate-400 text-sm">Total absent days</p>
+                      <p className="text-2xl font-bold text-red-400 mt-1">{attendanceSummary.totalAbsent}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-slate-700/50">
+                        <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{terminology.label}</th>
+                        <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Working Days</th>
+                        <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Present</th>
+                        <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Absent</th>
+                        <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Leaves</th>
+                        <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Activity Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700/30">
+                      {sortedAttendanceStats.map((employee) => (
+                        <tr key={employee.employee_id} className="hover:bg-slate-700/20 transition-colors group">
+                          <td className="py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
+                                {employee.username.substring(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-medium text-white group-hover:text-sky-400 transition-colors line-clamp-1">
+                                  {employee.full_name || employee.username}
+                                </p>
+                                <p className="text-[10px] text-slate-500 line-clamp-1">@{employee.username}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4">
+                            <span className="text-sm font-semibold text-white">{employee.working_days}</span>
+                            <span className="text-[10px] text-slate-500 ml-1">d</span>
+                          </td>
+                          <td className="py-4">
+                            <span className="text-sm font-semibold text-green-400">{employee.present_days}</span>
+                            <span className="text-[10px] text-slate-500 ml-1">d</span>
+                          </td>
+                          <td className="py-4">
+                            <span className="text-sm font-semibold text-red-500">{employee.absent_days}</span>
+                            <span className="text-[10px] text-slate-500 ml-1">d</span>
+                          </td>
+                          <td className="py-4">
+                            <span className="text-sm font-semibold text-purple-400">{employee.leave_days}</span>
+                            <span className="text-[10px] text-slate-500 ml-1">d</span>
+                          </td>
+                          <td className="py-4 text-right">
+                            <div className="flex items-center justify-end gap-3">
+                              <div className="w-20 bg-slate-700 h-1.5 rounded-full overflow-hidden hidden sm:block">
+                                <div
+                                  className={`h-full rounded-full ${getActivityBarColor(employee.percentage)}`}
+                                  style={{ width: `${employee.percentage}%` }}
+                                />
+                              </div>
+                              <span className="text-sm font-bold text-white tabular-nums">
+                                {employee.percentage.toFixed(0)}%
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </section>
         )}
 

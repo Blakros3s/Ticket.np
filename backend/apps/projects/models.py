@@ -1,5 +1,42 @@
+import re
+
 from django.db import models
 from apps.users.models import User
+
+TICKET_CODE_MAX_LENGTH = 10
+
+
+def derive_ticket_code_from_name(name: str) -> str:
+    """Build a project code from the first character of each word (e.g. RMS)."""
+    words = re.findall(r'[A-Za-z0-9]+', (name or '').strip())
+    if not words:
+        return 'PRJ'
+    code = ''.join(word[0].upper() for word in words)
+    return code[:TICKET_CODE_MAX_LENGTH]
+
+
+def normalize_ticket_code(value: str) -> str:
+    """Normalize user input to an uppercase alphanumeric ticket code."""
+    return re.sub(r'[^A-Za-z0-9]', '', (value or '').upper())[:TICKET_CODE_MAX_LENGTH]
+
+
+def allocate_unique_ticket_code(name: str, exclude_pk: int | None = None) -> str:
+    """Return a unique ticket code for the tenant, appending a suffix on collision."""
+    base = derive_ticket_code_from_name(name) or 'PRJ'
+    candidate = base
+    suffix = 2
+
+    queryset = Project.objects.all()
+    if exclude_pk is not None:
+        queryset = queryset.exclude(pk=exclude_pk)
+
+    while queryset.filter(ticket_code__iexact=candidate).exists():
+        suffix_text = str(suffix)
+        trimmed_base = base[: max(1, TICKET_CODE_MAX_LENGTH - len(suffix_text))]
+        candidate = f'{trimmed_base}{suffix_text}'
+        suffix += 1
+
+    return candidate
 
 
 class Project(models.Model):
@@ -9,6 +46,11 @@ class Project(models.Model):
     ]
     
     name = models.CharField(max_length=255)
+    ticket_code = models.CharField(
+        max_length=TICKET_CODE_MAX_LENGTH,
+        unique=True,
+        help_text='Short code used in ticket IDs, e.g. RMS for Restaurant Management System.',
+    )
     description = models.TextField(blank=True)
     github_repo = models.URLField(max_length=500, blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
@@ -22,6 +64,19 @@ class Project(models.Model):
         verbose_name = 'Project'
         verbose_name_plural = 'Projects'
         ordering = ['-created_at']
+    
+    def save(self, *args, **kwargs):
+        if self.ticket_code:
+            self.ticket_code = normalize_ticket_code(self.ticket_code)
+        else:
+            self.ticket_code = allocate_unique_ticket_code(self.name, exclude_pk=self.pk)
+        super().save(*args, **kwargs)
+
+    @property
+    def ticket_id_example(self) -> str:
+        from apps.tickets.models import format_ticket_id
+
+        return format_ticket_id(self.ticket_code, 1)
     
     def __str__(self):
         return self.name

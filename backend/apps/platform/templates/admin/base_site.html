@@ -1,0 +1,78 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+<div id="site-name">
+  <a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a>
+</div>
+{% if platform_tenants %}
+<div class="platform-tenant-toolbar">
+  <form method="get" class="platform-tenant-form">
+    <label for="platform-tenant-toolbar-select">Tenant</label>
+    <select id="platform-tenant-toolbar-select" name="tenant" onchange="this.form.submit()">
+      <option value="">Platform only</option>
+      {% for tenant in platform_tenants %}
+        <option value="{{ tenant.schema_name }}" {% if platform_admin_tenant and platform_admin_tenant.schema_name == tenant.schema_name %}selected{% endif %}>
+          {{ tenant.name }}
+        </option>
+      {% endfor %}
+    </select>
+    {% if platform_admin_tenant %}
+      <span class="platform-tenant-current">{{ platform_admin_tenant.schema_name }}</span>
+      <a href="?tenant=">Clear</a>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .platform-tenant-toolbar {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    font-size: 0.875rem;
+  }
+  .platform-tenant-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .platform-tenant-form select {
+    min-width: 14rem;
+  }
+  .platform-tenant-current {
+    opacity: 0.8;
+  }
+  .platform-tenant-banner {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--hairline-color, #ddd);
+    border-radius: 0.5rem;
+    background: var(--darkened-bg, #f8f8f8);
+  }
+  .platform-admin-sections {
+    display: grid;
+    gap: 1.5rem;
+  }
+  .platform-admin-app-table {
+    width: 100%;
+    margin-bottom: 1rem;
+  }
+  .platform-admin-app-table caption {
+    text-align: left;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+</style>
+{% endblock %}

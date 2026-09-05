@@ -1,12 +1,10 @@
-{% extends "admin/index.html" %}
-
-{% block sidebar %}{% endblock %}
+{% extends "admin/base_site.html" %}
 
 {% block content %}
 <div class="platform-tenant-banner">
   <div>
-    <strong>Tenant workspace</strong>
-    <p>Select a client tenant to browse and manage users, tickets, attendance, payroll, and other tenant data.</p>
+    <strong>Select a tenant</strong>
+    <p>Choose which client schema to manage for {{ opts.verbose_name_plural|default:opts.verbose_name }}.</p>
   </div>
   <form method="get" class="platform-tenant-form">
     <label for="platform-tenant-select">Active tenant</label>
@@ -18,17 +16,6 @@
         </option>
       {% endfor %}
     </select>
-    {% if platform_admin_tenant %}
-      <a class="button" href="?tenant=">Clear</a>
-    {% endif %}
   </form>
 </div>
-
-{% if platform_admin_tenant %}
-  <p class="help">Managing <strong>{{ platform_admin_tenant.name }}</strong> ({{ platform_admin_tenant.schema_name }}).</p>
-{% else %}
-  <p class="help">Tenant apps are listed below. You will be asked to confirm the tenant before viewing records.</p>
-{% endif %}
-
-{{ block.super }}
 {% endblock %}
