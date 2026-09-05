@@ -18,40 +18,27 @@ class TenantSchemaModelAdminMixin:
         context['platform_tenants'] = get_active_tenants()
         return context
 
-    def _execute_in_tenant_schema(self, request, callback, default=False):
+    def _call_parent_permission(self, request, method_name, default=False, obj=None):
         tenant = get_selected_tenant(request)
         if tenant is None:
             return default
         with schema_context(tenant.schema_name):
-            return callback()
+            parent_method = getattr(super(), method_name)
+            if obj is not None:
+                return parent_method(request, obj)
+            return parent_method(request)
 
     def has_view_permission(self, request, obj=None):
-        return self._execute_in_tenant_schema(
-            request,
-            lambda: super().has_view_permission(request, obj),
-            default=False,
-        )
+        return self._call_parent_permission(request, 'has_view_permission', obj=obj)
 
     def has_add_permission(self, request):
-        return self._execute_in_tenant_schema(
-            request,
-            lambda: super().has_add_permission(request),
-            default=False,
-        )
+        return self._call_parent_permission(request, 'has_add_permission')
 
     def has_change_permission(self, request, obj=None):
-        return self._execute_in_tenant_schema(
-            request,
-            lambda: super().has_change_permission(request, obj),
-            default=False,
-        )
+        return self._call_parent_permission(request, 'has_change_permission', obj=obj)
 
     def has_delete_permission(self, request, obj=None):
-        return self._execute_in_tenant_schema(
-            request,
-            lambda: super().has_delete_permission(request, obj),
-            default=False,
-        )
+        return self._call_parent_permission(request, 'has_delete_permission', obj=obj)
 
     def has_module_permission(self, request):
         if not request.user.is_active or not request.user.is_staff:
