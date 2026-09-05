@@ -30,8 +30,9 @@ class TenantSchemaModelAdminMixin:
         if tenant is None:
             return default
 
+        parent_method = getattr(super(), method_name)
+
         def check_permission():
-            parent_method = getattr(super(), method_name)
             if obj is not None:
                 return parent_method(request, obj)
             return parent_method(request)
@@ -53,13 +54,7 @@ class TenantSchemaModelAdminMixin:
     def has_module_permission(self, request):
         if not request.user.is_active or not request.user.is_staff:
             return False
-        tenant = get_selected_tenant(request)
-        if tenant is None:
-            return False
-        return self._run_with_tenant_schema(
-            tenant,
-            lambda: super().has_module_permission(request),
-        )
+        return self._call_parent_permission(request, 'has_module_permission')
 
     def _render_tenant_required(self, request, extra_context=None):
         context = self._merge_admin_context(request, extra_context)
