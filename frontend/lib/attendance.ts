@@ -68,26 +68,28 @@ export interface AttendanceLog {
 }
 
 export interface Attendance {
-  id: number;
-  employee: {
+  id?: number;
+  employee?: {
     id: number;
     username: string;
     first_name: string;
     last_name: string;
   };
-  date: string;
+  date?: string;
   status: 'neutral' | 'present' | 'leave' | 'absent';
   current_availability: 'available' | 'unavailable' | 'none';
   first_available_at?: string;
   first_available_time?: string;
   last_changed_at?: string;
-  is_available: boolean;
-  visibility_status: 'available' | 'unavailable' | 'hidden';
-  can_toggle_status: boolean;
+  is_available?: boolean;
+  visibility_status?: 'available' | 'unavailable' | 'hidden';
+  can_toggle_status?: boolean;
   toggle_status_message?: string;
-  daily_logs: AttendanceLog[];
-  formatted_summary: string;
-  created_at: string;
+  daily_logs?: AttendanceLog[];
+  formatted_summary?: string;
+  created_at?: string;
+  is_working_day?: boolean;
+  message?: string;
 }
 
 export interface TeamAttendance {

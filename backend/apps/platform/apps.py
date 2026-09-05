@@ -6,3 +6,8 @@ class PlatformConfig(AppConfig):
     name = 'apps.platform'
     label = 'platform'
     verbose_name = 'Platform Administration'
+
+    def ready(self):
+        from apps.platform.tenant_registry import register_tenant_admins
+
+        register_tenant_admins()
