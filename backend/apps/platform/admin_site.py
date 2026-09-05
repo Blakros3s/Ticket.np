@@ -18,6 +18,15 @@ class PlatformAdminSite(AdminSite):
         object_name = model_entry.get('object_name', '')
         return meta.object_name == object_name or meta.model_name == object_name.lower()
 
+    def _get_registered_model_admin(self, app_label: str, model_entry: dict):
+        for registered_model, registered_admin in self._registry.items():
+            if registered_model._meta.app_label == app_label and self._model_entry_matches(
+                registered_model,
+                model_entry,
+            ):
+                return registered_admin
+        return None
+
     def get_app_list(self, request, app_label=None):
         app_list = super().get_app_list(request, app_label)
         tenant_selected = get_selected_tenant(request) is not None
@@ -26,15 +35,7 @@ class PlatformAdminSite(AdminSite):
         for app in app_list:
             visible_models = []
             for model_entry in app['models']:
-                model_admin = None
-                for registered_model, registered_admin in self._registry.items():
-                    if (
-                        registered_model._meta.app_label == app['app_label']
-                        and self._model_entry_matches(registered_model, model_entry)
-                    ):
-                        model_admin = registered_admin
-                        break
-
+                model_admin = self._get_registered_model_admin(app['app_label'], model_entry)
                 if model_admin is None:
                     continue
 
