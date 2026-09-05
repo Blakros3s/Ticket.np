@@ -5,11 +5,14 @@ import { normalizeListResponse } from './http-utils';
 export interface ProjectSummary {
   id: number;
   name: string;
+  ticket_code: string;
 }
 
 export interface Project {
   id: number;
   name: string;
+  ticket_code: string;
+  ticket_id_example: string;
   description: string;
   github_repo: string | null;
   status: 'active' | 'archived';
@@ -60,9 +63,23 @@ export interface ProjectMember {
 
 export interface CreateProjectData {
   name: string;
+  ticket_code?: string;
   description: string;
   github_repo?: string;
   status?: 'active' | 'archived';
+}
+
+export function deriveTicketCodeFromName(name: string): string {
+  const words = name.trim().match(/[A-Za-z0-9]+/g) ?? [];
+  if (words.length === 0) {
+    return 'PRJ';
+  }
+  return words.map((word) => word[0].toUpperCase()).join('').slice(0, 10);
+}
+
+export function formatTicketIdExample(ticketCode: string): string {
+  const normalized = (ticketCode || 'XYZ').replace(/[^A-Za-z0-9]/g, '').toUpperCase() || 'XYZ';
+  return `TKT-${normalized}-0001`;
 }
 
 export const projectsApi = {

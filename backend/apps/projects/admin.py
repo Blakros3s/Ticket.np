@@ -4,9 +4,9 @@ from .models import Project, ProjectMember
 
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ['name', 'status', 'created_by', 'created_at']
+    list_display = ['name', 'ticket_code', 'status', 'created_by', 'created_at']
     list_filter = ['status', 'created_at']
-    search_fields = ['name', 'description', 'created_by__username']
+    search_fields = ['name', 'ticket_code', 'description', 'created_by__username']
     ordering = ['-created_at']
 
 

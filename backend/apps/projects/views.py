@@ -26,7 +26,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_serializer_class(self):
-        if self.action == 'create':
+        if self.action in ['create', 'update', 'partial_update']:
             return ProjectCreateSerializer
         return ProjectSerializer
     
@@ -55,7 +55,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
             queryset = Project.objects.all()
         else:
             queryset = Project.objects.filter(Q(created_by=user) | Q(members=user)).distinct()
-        serializer = ProjectSummarySerializer(queryset.only('id', 'name').order_by('name'), many=True)
+        serializer = ProjectSummarySerializer(
+            queryset.only('id', 'name', 'ticket_code').order_by('name'),
+            many=True,
+        )
         return Response(serializer.data)
     
     def get_permissions(self):

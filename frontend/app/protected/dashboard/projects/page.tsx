@@ -3,7 +3,7 @@
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { projectsApi, Project } from '@/lib/projects';
+import { projectsApi, Project, deriveTicketCodeFromName, formatTicketIdExample } from '@/lib/projects';
 
 export default function ProjectsPage() {
   const { user } = useAuth();
@@ -15,10 +15,12 @@ export default function ProjectsPage() {
 
   const [newProject, setNewProject] = useState({
     name: '',
+    ticket_code: '',
     description: '',
     github_repo: '',
     status: 'active' as 'active' | 'archived',
   });
+  const [ticketCodeTouched, setTicketCodeTouched] = useState(false);
 
   const isManager = user?.role === 'manager' || user?.role === 'admin';
 
@@ -47,10 +49,14 @@ export default function ProjectsPage() {
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await projectsApi.createProject(newProject);
+      await projectsApi.createProject({
+        ...newProject,
+        ticket_code: newProject.ticket_code || undefined,
+      });
       showToastMessage('Project created successfully', 'success');
       setShowAddModal(false);
-      setNewProject({ name: '', description: '', github_repo: '', status: 'active' });
+      setTicketCodeTouched(false);
+      setNewProject({ name: '', ticket_code: '', description: '', github_repo: '', status: 'active' });
       fetchProjects();
     } catch {
       showToastMessage('Failed to create project', 'error');
@@ -214,7 +220,7 @@ export default function ProjectsPage() {
           <div className="modal-panel">
             <div className="modal-header">
               <h2 className="modal-title">Create New Project</h2>
-              <button onClick={() => setShowAddModal(false)} className="icon-btn" type="button">
+              <button onClick={() => { setShowAddModal(false); setTicketCodeTouched(false); }} className="icon-btn" type="button">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -228,9 +234,35 @@ export default function ProjectsPage() {
                   required
                   className="input-field"
                   value={newProject.name}
-                  onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    setNewProject((prev) => ({
+                      ...prev,
+                      name,
+                      ticket_code: ticketCodeTouched ? prev.ticket_code : deriveTicketCodeFromName(name),
+                    }));
+                  }}
                   placeholder="Enter project name"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>Ticket Code</label>
+                <input
+                  type="text"
+                  className="input-field uppercase"
+                  value={newProject.ticket_code}
+                  onChange={(e) => {
+                    setTicketCodeTouched(true);
+                    setNewProject({
+                      ...newProject,
+                      ticket_code: e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 10),
+                    });
+                  }}
+                  placeholder="Auto-generated from project name"
+                />
+                <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                  Example ticket ID: {formatTicketIdExample(newProject.ticket_code || 'XYZ')}
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>Description</label>

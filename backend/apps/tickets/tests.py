@@ -102,7 +102,7 @@ class TicketAPITestCase(TestCase):
         self.assertEqual(response.data['type'], 'feature')
         self.assertEqual(response.data['priority'], 'critical')
         self.assertIn('ticket_id', response.data)
-        self.assertRegex(response.data['ticket_id'], r'^TKT-\d{4}$')
+        self.assertRegex(response.data['ticket_id'], r'^TKT-TP-\d{4}$')
 
     def test_create_ticket_multipart_with_assignees_and_media(self):
         """Multipart create accepts JSON assignees and multiple file uploads."""
@@ -147,7 +147,7 @@ class TicketAPITestCase(TestCase):
         self.assertIn(self.assignee_user.id, response.data['assignees'])
     
     def test_ticket_ids_are_sequential(self):
-        """New tickets receive sequential TKT-0001 style ticket_id values."""
+        """New tickets receive sequential project-scoped ticket_id values."""
         self.client.force_authenticate(user=self.employee_user)
         created_ids = []
         for i in range(3):
@@ -165,10 +165,49 @@ class TicketAPITestCase(TestCase):
             self.assertEqual(response.status_code, status.HTTP_201_CREATED)
             created_ids.append(response.data['ticket_id'])
 
-        self.assertTrue(all(ticket_id.startswith('TKT-') for ticket_id in created_ids))
-        numbers = [int(ticket_id.split('-', 1)[1]) for ticket_id in created_ids]
+        self.assertTrue(all(ticket_id.startswith('TKT-TP-') for ticket_id in created_ids))
+        numbers = [int(ticket_id.rsplit('-', 1)[1]) for ticket_id in created_ids]
         self.assertEqual(numbers, sorted(numbers))
         self.assertEqual(len(set(numbers)), len(numbers))
+
+    def test_ticket_ids_are_scoped_per_project(self):
+        """Each project maintains its own ticket sequence."""
+        other_project = Project.objects.create(
+            name='Sales Support Module',
+            description='Second project',
+            created_by=self.manager_user,
+            status='active',
+        )
+        other_project.members.add(self.employee_user)
+
+        self.client.force_authenticate(user=self.employee_user)
+        first_response = self.client.post(
+            '/api/tickets/',
+            {
+                'title': 'Project A Ticket',
+                'description': 'First project ticket',
+                'type': 'task',
+                'priority': 'low',
+                'project': self.project.id,
+            },
+            format='json',
+        )
+        second_response = self.client.post(
+            '/api/tickets/',
+            {
+                'title': 'Project B Ticket',
+                'description': 'Second project ticket',
+                'type': 'task',
+                'priority': 'low',
+                'project': other_project.id,
+            },
+            format='json',
+        )
+
+        self.assertEqual(first_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second_response.status_code, status.HTTP_201_CREATED)
+        self.assertRegex(first_response.data['ticket_id'], r'^TKT-TP-\d{4}$')
+        self.assertRegex(second_response.data['ticket_id'], r'^TKT-SSM-\d{4}$')
     
     def test_list_tickets(self):
         """Test listing tickets"""
