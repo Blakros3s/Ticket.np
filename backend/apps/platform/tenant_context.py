@@ -19,11 +19,16 @@ def get_selected_tenant_schema(request: HttpRequest) -> str | None:
     if 'tenant' in request.GET:
         schema_name = request.GET.get('tenant', '').strip()
         if schema_name:
-            persist_tenant_selection(request, schema_name)
+            if hasattr(request, 'session'):
+                persist_tenant_selection(request, schema_name)
             return schema_name
-        clear_tenant_selection(request)
+        if hasattr(request, 'session'):
+            clear_tenant_selection(request)
         return None
-    return request.session.get(SESSION_KEY)
+    session = getattr(request, 'session', None)
+    if session is None:
+        return None
+    return session.get(SESSION_KEY)
 
 
 def get_selected_tenant(request: HttpRequest):
@@ -37,7 +42,8 @@ def get_selected_tenant(request: HttpRequest):
         try:
             return Client.objects.get(schema_name=schema_name, is_active=True)
         except Client.DoesNotExist:
-            clear_tenant_selection(request)
+            if hasattr(request, 'session'):
+                clear_tenant_selection(request)
             return None
 
 
