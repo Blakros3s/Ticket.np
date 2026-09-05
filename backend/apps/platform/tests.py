@@ -1,8 +1,13 @@
 from django.test import Client, TestCase, override_settings
+from django_tenants.utils import get_tenant_model, schema_context
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.customers.models import Domain
+from apps.customers.tenant_resolution import internal_domain_for
+from apps.platform.admin_site import platform_admin_site
 from apps.platform.models import PlatformUser
+from apps.users.models import User
 
 
 class PlatformAuthTests(TestCase):
@@ -94,3 +99,65 @@ class PlatformDjangoAdminTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Please enter the correct')
+
+
+class PlatformTenantAdminTests(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        Tenant = get_tenant_model()
+        cls.tenant = Tenant.objects.filter(schema_name='admin_tenant').first()
+        if cls.tenant is None:
+            cls.tenant = Tenant(
+                schema_name='admin_tenant',
+                name='Admin Tenant',
+                slug='admin-tenant',
+                login_domain='admin-tenant.local',
+                is_active=True,
+            )
+            cls.tenant.save()
+            Domain.objects.create(
+                domain=internal_domain_for('admin_tenant'),
+                tenant=cls.tenant,
+                is_primary=True,
+            )
+
+    def setUp(self):
+        self.client = Client()
+        self.platform_user = PlatformUser.objects.create_user(
+            username='tenant_admin_tester',
+            password='testpass123',
+            email='tenant-admin@test.local',
+        )
+        with schema_context(self.tenant.schema_name):
+            User.objects.create_user(
+                username='tenant-user-1',
+                email='tenant-user-1@test.com',
+                password='testpass123',
+                role='employee',
+            )
+
+    @override_settings(
+        STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage',
+    )
+    def test_tenant_user_admin_requires_tenant_selection(self):
+        self.client.login(username='tenant_admin_tester', password='testpass123')
+        response = self.client.get('/admin/users/user/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Select a tenant')
+
+    @override_settings(
+        STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage',
+    )
+    def test_tenant_user_admin_lists_users_for_selected_tenant(self):
+        self.client.login(username='tenant_admin_tester', password='testpass123')
+        session = self.client.session
+        session['platform_admin_tenant_schema'] = self.tenant.schema_name
+        session.save()
+
+        response = self.client.get('/admin/users/user/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'tenant-user-1')
+
+    def test_tenant_models_registered_on_platform_admin_site(self):
+        self.assertIn(User, platform_admin_site._registry)

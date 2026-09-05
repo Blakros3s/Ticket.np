@@ -1,3 +1,5 @@
+import re
+
 from django.db import models, transaction
 from apps.users.models import User
 from apps.projects.models import Project
@@ -5,22 +7,38 @@ from apps.projects.models import Project
 
 TICKET_ID_PREFIX = 'TKT-'
 TICKET_ID_PAD_WIDTH = 4
+TICKET_ID_PATTERN = re.compile(
+    rf'^{TICKET_ID_PREFIX}(?P<code>[A-Z0-9]+)-(?P<sequence>\d+)$',
+    re.IGNORECASE,
+)
 
 
-def format_ticket_number(number: int) -> str:
-    """Format a ticket sequence number as TKT-0001, TKT-0002, …"""
-    return f'{TICKET_ID_PREFIX}{str(number).zfill(TICKET_ID_PAD_WIDTH)}'
+def format_ticket_id(project_code: str, number: int) -> str:
+    """Format a project-scoped ticket ID, e.g. TKT-RMS-0001."""
+    normalized_code = re.sub(r'[^A-Za-z0-9]', '', (project_code or '').upper())
+    return f'{TICKET_ID_PREFIX}{normalized_code}-{str(number).zfill(TICKET_ID_PAD_WIDTH)}'
 
 
-def parse_ticket_sequence(ticket_id: str | None) -> int | None:
-    """Extract the numeric sequence from ticket_id (supports TKT-0001 and legacy 0001)."""
+def format_ticket_number(number: int, project_code: str = 'PRJ') -> str:
+    """Backward-compatible helper for callers that still pass only a sequence number."""
+    return format_ticket_id(project_code, number)
+
+
+def parse_ticket_sequence(ticket_id: str | None, project_code: str | None = None) -> int | None:
+    """Extract the numeric sequence from ticket_id (supports project-scoped and legacy formats)."""
     if not ticket_id:
         return None
 
     value = ticket_id.strip()
-    prefix = TICKET_ID_PREFIX
-    if value.upper().startswith(prefix):
-        suffix = value[len(prefix):]
+    match = TICKET_ID_PATTERN.match(value)
+    if match:
+        if project_code and match.group('code').upper() != project_code.upper():
+            return None
+        return int(match.group('sequence'))
+
+    legacy_prefix = TICKET_ID_PREFIX
+    if value.upper().startswith(legacy_prefix):
+        suffix = value[len(legacy_prefix):]
         if suffix.isdigit():
             return int(suffix)
 
@@ -30,16 +48,17 @@ def parse_ticket_sequence(ticket_id: str | None) -> int | None:
     return None
 
 
-def allocate_next_ticket_id() -> str:
-    """Return the next sequential ticket_id for this tenant schema (thread-safe)."""
+def allocate_next_ticket_id(project: Project) -> str:
+    """Return the next sequential ticket_id for a project (thread-safe per project)."""
+    project_code = project.ticket_code
     with transaction.atomic():
         counter, _ = TicketIdCounter.objects.select_for_update().get_or_create(
-            pk=1,
+            project=project,
             defaults={'last_number': 0},
         )
         counter.last_number += 1
         counter.save(update_fields=['last_number'])
-        return format_ticket_number(counter.last_number)
+        return format_ticket_id(project_code, counter.last_number)
 
 
 from apps.core.media_paths import tenant_scoped_upload_path
@@ -50,19 +69,21 @@ def ticket_media_upload_path(instance, filename):
 
 
 class TicketIdCounter(models.Model):
-    """Singleton row tracking the last issued ticket number per tenant schema."""
+    """Tracks the last issued ticket number for each project within a tenant schema."""
 
-    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    project = models.OneToOneField(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='ticket_id_counter',
+        primary_key=True,
+    )
     last_number = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = 'ticket_id_counter'
-        constraints = [
-            models.CheckConstraint(check=models.Q(id=1), name='ticket_id_counter_singleton'),
-        ]
 
     def __str__(self) -> str:
-        return f'Ticket counter (last={self.last_number})'
+        return f'Ticket counter for {self.project.ticket_code} (last={self.last_number})'
 
 
 class Ticket(models.Model):
@@ -87,7 +108,7 @@ class Ticket(models.Model):
         ('reopened', 'Reopened'),
     ]
     
-    ticket_id = models.CharField(max_length=20, unique=True, editable=False)
+    ticket_id = models.CharField(max_length=32, unique=True, editable=False)
     title = models.CharField(max_length=255)
     description = models.TextField()
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='task')
@@ -123,7 +144,12 @@ class Ticket(models.Model):
     
     def save(self, *args, **kwargs):
         if not self.ticket_id:
-            self.ticket_id = allocate_next_ticket_id()
+            project = self.project
+            if project.pk is None:
+                project.save()
+            elif not getattr(project, 'ticket_code', None):
+                project.refresh_from_db(fields=['ticket_code'])
+            self.ticket_id = allocate_next_ticket_id(project)
         super().save(*args, **kwargs)
     
     def __str__(self):

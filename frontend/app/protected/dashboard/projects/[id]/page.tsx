@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { projectsApi, Project, ProjectDocument } from '@/lib/projects';
+import { projectsApi, Project, ProjectDocument, formatTicketIdExample } from '@/lib/projects';
 import { authApi, User } from '@/lib/auth';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -35,7 +35,13 @@ export default function ProjectDetailPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [editForm, setEditForm] = useState({ name: '', description: '', github_repo: '', status: 'active' as 'active' | 'archived' });
+  const [editForm, setEditForm] = useState({
+    name: '',
+    ticket_code: '',
+    description: '',
+    github_repo: '',
+    status: 'active' as 'active' | 'archived',
+  });
   const [isSaving, setIsSaving] = useState(false);
 
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
@@ -92,7 +98,13 @@ export default function ProjectDetailPage() {
       setLoading(true);
       const data = await projectsApi.getProject(projectId);
       setProject(data);
-      setEditForm({ name: data.name, description: data.description, github_repo: data.github_repo || '', status: data.status });
+      setEditForm({
+        name: data.name,
+        ticket_code: data.ticket_code,
+        description: data.description,
+        github_repo: data.github_repo || '',
+        status: data.status,
+      });
 
       const docs = await projectsApi.getDocuments(projectId);
       setDocuments(docs);
@@ -343,6 +355,11 @@ export default function ProjectDetailPage() {
                 </div>
                 <p className="project-hero-desc mb-4">
                   {project.description || 'No description provided.'}
+                </p>
+                <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+                  Ticket code <span className="font-semibold text-white">{project.ticket_code}</span>
+                  <span className="mx-2">·</span>
+                  Example ID <span className="font-medium" style={{ color: 'var(--accent)' }}>{project.ticket_id_example}</span>
                 </p>
                 {project.github_repo && (
                   <a
@@ -836,6 +853,22 @@ export default function ProjectDetailPage() {
                     value={editForm.name}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Ticket Code</label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full bg-slate-700 border border-slate-600 rounded-xl py-2.5 px-4 text-white text-sm uppercase focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                    value={editForm.ticket_code}
+                    onChange={(e) => setEditForm({
+                      ...editForm,
+                      ticket_code: e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 10),
+                    })}
+                  />
+                  <p className="text-xs text-slate-500 mt-1.5">
+                    Example: {formatTicketIdExample(editForm.ticket_code || 'XYZ')}. Changing the code affects new tickets only.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1.5">Description</label>

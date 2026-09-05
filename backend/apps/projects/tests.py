@@ -2,7 +2,7 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
-from apps.projects.models import Project, ProjectMember
+from apps.projects.models import Project, ProjectMember, derive_ticket_code_from_name, allocate_unique_ticket_code
 from apps.users.models import User
 
 
@@ -156,6 +156,50 @@ class ProjectAPITestCase(TestCase):
         self.assertIn('members', response.data)
         member_ids = [m['id'] for m in response.data['members']]
         self.assertIn(self.employee_user.id, member_ids)
+
+
+class ProjectTicketCodeTestCase(TestCase):
+    def test_derive_ticket_code_from_name(self):
+        self.assertEqual(derive_ticket_code_from_name('Restaurant Management System'), 'RMS')
+        self.assertEqual(derive_ticket_code_from_name('Sales Support Module'), 'SSM')
+
+    def test_allocate_unique_ticket_code_handles_collisions(self):
+        user = User.objects.create_user(
+            username='code_admin',
+            email='code_admin@test.com',
+            password='adminpass123',
+            role='admin',
+        )
+        Project.objects.create(
+            name='Team Product',
+            description='First',
+            created_by=user,
+            status='active',
+        )
+        self.assertEqual(allocate_unique_ticket_code('Test Project'), 'TP2')
+        self.assertEqual(allocate_unique_ticket_code('Team Platform'), 'TP3')
+
+    def test_create_project_returns_ticket_code_and_example(self):
+        client = APIClient()
+        manager = User.objects.create_user(
+            username='code_manager',
+            email='code_manager@test.com',
+            password='managerpass123',
+            role='manager',
+        )
+        client.force_authenticate(user=manager)
+        response = client.post(
+            '/api/projects/',
+            {
+                'name': 'Restaurant Management System',
+                'description': 'Restaurant platform',
+                'status': 'active',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['ticket_code'], 'RMS')
+        self.assertEqual(response.data['ticket_id_example'], 'TKT-RMS-0001')
 
 
 class ProjectPermissionsTestCase(TestCase):
