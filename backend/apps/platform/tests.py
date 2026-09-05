@@ -171,5 +171,13 @@ class PlatformTenantAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'tenant-user-1')
 
+    @override_settings(
+        STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage',
+    )
+    def test_django_admin_index_with_tenant_query_param(self):
+        self.client.login(username='tenant_admin_tester', password='testpass123')
+        response = self.client.get(f'/admin/?tenant={self.tenant.schema_name}')
+        self.assertEqual(response.status_code, 200)
+
     def test_tenant_models_registered_on_platform_admin_site(self):
         self.assertIn(User, platform_admin_site._registry)
